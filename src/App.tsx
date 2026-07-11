@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Layout } from './app/layout/Layout'
 import { LandingPage } from './pages/landing/LandingPage'
+import { CatalogPage } from './pages/catalog/CatalogPage'
 import { ProductPage } from './pages/product/ProductPage'
 import { PricingPage } from './pages/pricing/PricingPage'
 import { CabinetPage } from './pages/cabinet/CabinetPage'
@@ -12,6 +13,7 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { path: '/', element: <LandingPage /> },
+      { path: '/catalog', element: <CatalogPage /> },
       { path: '/product/:productId', element: <ProductPage /> },
       { path: '/pricing', element: <PricingPage /> },
       { path: '/app', element: <CabinetPage /> },

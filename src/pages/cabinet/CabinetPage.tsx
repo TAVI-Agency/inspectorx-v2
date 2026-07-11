@@ -146,7 +146,7 @@ function EmptyPortfolio() {
       <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
         {ru.cabinet.portfolioEmpty.text}
       </p>
-      <Button className="mt-5" size="sm" nativeButton={false} render={<Link to="/" />}>
+      <Button className="mt-5" size="sm" nativeButton={false} render={<Link to="/catalog" />}>
         <Search />
         {ru.cabinet.portfolioEmpty.cta}
       </Button>

@@ -36,7 +36,7 @@ export function ProductPage() {
         <h1 className="text-2xl font-semibold tracking-tight">
           {isError ? ru.common.error : 'Товар не найден'}
         </h1>
-        <Button nativeButton={false} render={<Link to="/" />} variant="outline" className="mt-4">
+        <Button nativeButton={false} render={<Link to="/catalog" />} variant="outline" className="mt-4">
           {ru.common.back}
         </Button>
       </div>

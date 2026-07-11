@@ -32,6 +32,9 @@ export function SiteHeader() {
           <TelemetryLine className="hidden min-w-0 flex-1 justify-center md:flex" />
         )}
         <nav className="ml-auto flex shrink-0 items-center gap-1 md:ml-0">
+          <NavLink to="/catalog" className={navLinkClass}>
+            {ru.common.registry}
+          </NavLink>
           <NavLink to="/pricing" className={navLinkClass}>
             {ru.common.pricing}
           </NavLink>
