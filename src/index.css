@@ -4,6 +4,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/lora";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -138,6 +139,76 @@
     --sidebar-accent-foreground: #e8e2da;
     --sidebar-border: #2c2924;
     --sidebar-ring: #e05a3a;
+}
+
+/*
+ * ── Дизайн Б ───────────────────────────────────────────────────────
+ * Прохладный современный SaaS-«кокпит»: индиго + изумруд, крупные скругления,
+ * шрифт Geist. Полностью изолирован: токены переопределяются только внутри
+ * .theme-b, поэтому дизайны не протекают друг в друга (легко удалить).
+ * Работает, потому что тема — @theme inline через var(): переопределив
+ * --background / --primary / --radius, перекрашиваем все утилиты в поддереве.
+ */
+.theme-b {
+    color-scheme: light;
+    font-family: 'Geist Variable', system-ui, sans-serif;
+    --background: #f6f7fb;
+    --foreground: #101828;
+    --card: #ffffff;
+    --card-foreground: #101828;
+    --paper: #ffffff;
+    --popover: #ffffff;
+    --popover-foreground: #101828;
+    --primary: #4f46e5;
+    --primary-foreground: #ffffff;
+    --secondary: #eef1f8;
+    --secondary-foreground: #1e2939;
+    --muted: #eef1f8;
+    --muted-foreground: #667085;
+    --accent: #eef2ff;
+    --accent-foreground: #3730a3;
+    --destructive: #e11d48;
+    --sanction: #e11d48;
+    --positive: #059669;
+    --border: #e4e7ec;
+    --input: #d0d5dd;
+    --ring: #4f46e5;
+    --chart-1: #4f46e5;
+    --chart-2: #06b6d4;
+    --chart-3: #059669;
+    --chart-4: #e11d48;
+    --chart-5: #f59e0b;
+    --radius: 0.9rem;
+}
+
+.dark .theme-b {
+    color-scheme: dark;
+    --background: #0b1020;
+    --foreground: #e6e9f2;
+    --card: #141b2e;
+    --card-foreground: #e6e9f2;
+    --paper: #141b2e;
+    --popover: #161e33;
+    --popover-foreground: #e6e9f2;
+    --primary: #818cf8;
+    --primary-foreground: #0b1020;
+    --secondary: #1c2438;
+    --secondary-foreground: #e6e9f2;
+    --muted: #1c2438;
+    --muted-foreground: #94a3b8;
+    --accent: #1e2745;
+    --accent-foreground: #c7d2fe;
+    --destructive: #fb7185;
+    --sanction: #fb7185;
+    --positive: #34d399;
+    --border: #26304a;
+    --input: #2e3a57;
+    --ring: #818cf8;
+    --chart-1: #818cf8;
+    --chart-2: #22d3ee;
+    --chart-3: #34d399;
+    --chart-4: #fb7185;
+    --chart-5: #fbbf24;
 }
 
 @layer base {
