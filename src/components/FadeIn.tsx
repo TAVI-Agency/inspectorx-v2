@@ -16,6 +16,12 @@ export function FadeIn({
   useEffect(() => {
     const el = ref.current
     if (!el) return
+    // Уже в вьюпорте на маунте (above-the-fold) — показываем сразу, не дожидаясь
+    // асинхронного колбэка IO: иначе первый экран может «залипнуть» скрытым.
+    if (el.getBoundingClientRect().top < window.innerHeight) {
+      el.classList.add('is-visible')
+      return
+    }
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {

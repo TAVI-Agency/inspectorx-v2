@@ -1,57 +1,54 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FadeIn } from '@/components/FadeIn'
 import { useSubscriptionRequest } from '@/data/hooks'
 import { useAuth } from '@/app/auth'
-import { PRICE } from '@/config'
 import { ru } from '@/i18n/ru'
 
-export function PricingPage() {
+/**
+ * Финальный экран лендинга: уверенный заголовок + реассуранс + СВОЯ форма
+ * заявки (пишет в subscription_requests) + прямой контакт. Паттерн — секция
+ * контактов radicalloop, но в тёплом «досье»-языке InspectorX.
+ */
+export function ContactSection() {
+  const m = ru.marketing.cta
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-      <div className="mx-auto grid max-w-4xl gap-10 lg:grid-cols-[1.2fr_1fr]">
+    <section id="early-access" className="border-t border-border/70 bg-secondary/40">
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-20 sm:px-6 sm:py-28 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
         <FadeIn>
-          <TariffCard />
+          <p className="stamp text-primary">{m.eyebrow}</p>
+          <h2 className="mt-5 max-w-md font-serif text-4xl leading-[1.05] font-medium tracking-tight text-balance sm:text-5xl">
+            {m.title}
+          </h2>
+          <p className="mt-5 max-w-md text-lg text-muted-foreground">{m.lead}</p>
+
+          <div className="mt-8">
+            <p className="font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
+              {m.altLabel}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <a href="mailto:hello@inspectorx.uz" className="hover:text-primary hover:underline">
+                {ru.footer.email}
+              </a>
+              <a
+                href="https://t.me/inspectorx_uz"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-primary hover:underline"
+              >
+                {ru.footer.telegram}
+              </a>
+            </div>
+          </div>
         </FadeIn>
+
         <FadeIn delayMs={90}>
           <RequestForm />
         </FadeIn>
       </div>
-    </div>
-  )
-}
-
-function TariffCard() {
-  return (
-    <div>
-      <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-        Тариф
-      </p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-        {ru.pricing.title}
-      </h1>
-      <p className="mt-3 max-w-md text-muted-foreground">{ru.pricing.subtitle}</p>
-
-      <p className="mt-6 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="text-4xl font-semibold tracking-tight whitespace-nowrap">
-          {PRICE.formatted}
-        </span>
-        <span className="text-sm text-muted-foreground">{ru.pricing.per}</span>
-      </p>
-
-      <ul className="mt-8 space-y-3">
-        {ru.pricing.benefits.map((benefit) => (
-          <li key={benefit} className="flex items-start gap-2.5 text-sm leading-relaxed">
-            <Check className="mt-0.5 size-4 shrink-0 text-positive" />
-            {benefit}
-          </li>
-        ))}
-      </ul>
-    </div>
+    </section>
   )
 }
 
@@ -69,23 +66,14 @@ function RequestForm() {
 
   if (request.isSuccess) {
     return (
-      <div className="flex flex-col justify-center rounded-lg border bg-paper p-6 text-center">
+      <div className="flex h-full flex-col justify-center rounded-xl border bg-paper p-8 text-center shadow-sm">
         <p className="stamp mx-auto text-positive">заявка принята</p>
-        <h2 className="mt-4 text-xl font-semibold tracking-tight">
+        <h3 className="mt-4 font-serif text-2xl font-medium tracking-tight">
           {ru.pricing.thanksTitle}
-        </h2>
+        </h3>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {ru.pricing.thanksText}
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mx-auto mt-5"
-          nativeButton={false}
-          render={<Link to="/catalog" />}
-        >
-          {ru.pricing.thanksCta}
-        </Button>
       </div>
     )
   }
@@ -102,15 +90,19 @@ function RequestForm() {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-lg border bg-paper p-6" noValidate>
-      <h2 className="text-lg font-semibold tracking-tight">{ru.pricing.formTitle}</h2>
+    <form
+      onSubmit={submit}
+      className="rounded-xl border bg-paper p-6 shadow-[0_20px_50px_-30px_rgba(28,27,25,0.35)] sm:p-7"
+      noValidate
+    >
+      <h3 className="font-serif text-xl font-medium tracking-tight">{ru.pricing.formTitle}</h3>
       <p className="mt-1 text-sm text-muted-foreground">{ru.pricing.formSubtitle}</p>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-6 space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="req-name">{ru.pricing.nameLabel}</Label>
+          <Label htmlFor="cta-name">{ru.pricing.nameLabel}</Label>
           <Input
-            id="req-name"
+            id="cta-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={ru.pricing.namePlaceholder}
@@ -120,9 +112,9 @@ function RequestForm() {
           {nameError && <p className="text-xs text-destructive">{nameError}</p>}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="req-contact">{ru.pricing.contactLabel}</Label>
+          <Label htmlFor="cta-contact">{ru.pricing.contactLabel}</Label>
           <Input
-            id="req-contact"
+            id="cta-contact"
             value={contact}
             onChange={(e) => setContact(e.target.value)}
             placeholder={ru.pricing.contactPlaceholder}
@@ -132,9 +124,9 @@ function RequestForm() {
           {contactError && <p className="text-xs text-destructive">{contactError}</p>}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="req-company">{ru.pricing.companyLabel}</Label>
+          <Label htmlFor="cta-company">{ru.pricing.companyLabel}</Label>
           <Input
-            id="req-company"
+            id="cta-company"
             value={company}
             onChange={(e) => setCompany(e.target.value)}
             placeholder={ru.pricing.companyPlaceholder}
@@ -147,12 +139,12 @@ function RequestForm() {
         <p className="mt-3 text-sm text-destructive">{ru.common.error}</p>
       )}
 
-      <Button type="submit" className="mt-5 w-full" disabled={request.isPending}>
+      <Button type="submit" className="mt-6 h-12 w-full text-[15px]" disabled={request.isPending}>
         {request.isPending ? ru.common.sending : ru.pricing.submit}
       </Button>
       {!session && (
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Вход не нужен — просто оставьте контакт.
+          {ru.marketing.cta.reassurance}
         </p>
       )}
     </form>
