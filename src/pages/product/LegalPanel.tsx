@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ExternalLink } from 'lucide-react'
-import { PaywallGate } from '@/components/PaywallGate'
+import { PaywallPanel } from '@/components/PaywallGate'
 import type { Citation, Gated, HistoryEntry } from '@/data/types'
 import { ru } from '@/i18n/ru'
 import { formatDate } from '@/lib/format'
@@ -23,7 +23,7 @@ export function LegalPanel({
       </p>
 
       {citations.state === 'locked' ? (
-        <PaywallGate compact />
+        <PaywallPanel />
       ) : (
         citations.value.map((c, i) => <CitationBlock key={i} citation={c} />)
       )}

@@ -65,12 +65,15 @@ export function ProductPage() {
             />
           </div>
           <div className="mt-6">
+            {/* Без диплинка раскрываем первую строку: аноним сразу видит,
+                как выглядит карточка и что именно за пейволлом */}
             <RequirementList
               rows={rows}
               stages={stages}
               activeStage={activeStage}
               productId={passport.id}
-              initialRequirementId={searchParams.get('req') ?? undefined}
+              initialRequirementId={searchParams.get('req') ?? rows[0]?.id}
+              scrollToInitial={searchParams.has('req')}
             />
           </div>
         </>

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { useContentRequest, useSearchQuery } from '@/data/hooks'
@@ -8,6 +8,17 @@ import { formatHsCode } from '@/lib/format'
 import { useDebounced } from '@/lib/use-debounced'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+
+const narrowQuery = window.matchMedia('(max-width: 639px)')
+function useIsNarrow(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      narrowQuery.addEventListener('change', cb)
+      return () => narrowQuery.removeEventListener('change', cb)
+    },
+    () => narrowQuery.matches,
+  )
+}
 
 /**
  * Поисковая строка с автоподсказками — входная дверь продукта (§3b).
@@ -35,6 +46,16 @@ export function SearchBox({
   const debounced = useDebounced(query)
   const { data: hits, isFetching } = useSearchQuery(debounced, kind)
   const contentRequest = useContentRequest()
+  const isNarrow = useIsNarrow()
+
+  const placeholder =
+    kind === 'product'
+      ? isNarrow
+        ? ru.landing.searchPlaceholderShort
+        : ru.landing.searchPlaceholder
+      : isNarrow
+        ? ru.landing.searchPlaceholderServiceShort
+        : ru.landing.searchPlaceholderService
 
   const showEmpty =
     open &&
@@ -107,11 +128,7 @@ export function SearchBox({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder={
-            kind === 'product'
-              ? ru.landing.searchPlaceholder
-              : ru.landing.searchPlaceholderService
-          }
+          placeholder={placeholder}
           className={cn(
             'min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground',
             hero ? 'text-lg' : 'text-sm',
@@ -133,7 +150,8 @@ export function SearchBox({
               aria-checked={kind === k}
               onClick={() => setKind(k)}
               className={cn(
-                'rounded-[5px] px-2.5 py-1 text-xs font-medium transition-colors',
+                'rounded-[5px] px-3 text-xs font-medium transition-colors',
+                hero ? 'py-2.5' : 'py-1',
                 kind === k
                   ? 'bg-paper text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
