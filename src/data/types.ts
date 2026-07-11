@@ -19,6 +19,8 @@ export type Operation =
   | 'transit'
   | 're_export'
   | 're_import'
+/** Вид транспорта — только у трансграничных процедур (иначе не задан) */
+export type TransportType = 'avto' | 'train' | 'avia'
 export type TrustLabel = 'ai_draft' | 'lawyer_verified' | 'official_answer'
 export type Importance = 'high' | 'medium' | 'low'
 export type SearchKind = 'product' | 'service'
@@ -88,6 +90,7 @@ export interface RequirementRow {
   deontic: Deontic
   roles: PartyRole[]
   operation: Operation
+  transport?: TransportType
   authorityName?: string
   sanctionSummary?: string
   status: RequirementStatus

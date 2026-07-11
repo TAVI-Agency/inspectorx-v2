@@ -259,7 +259,7 @@ export async function fetchRequirementsReal(
   const { data, error } = await supabase
     .from('requirements')
     .select(
-      `id, deontic, operation, addressee_roles, trust_label, review_flag, reviewed_at, published_at,
+      `id, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at,
        lifecycle_stages(id, name_ru, sort_order),
        authorities(name_ru),
        requirement_contents(lang, title, sanction_summary),
@@ -288,6 +288,7 @@ export async function fetchRequirementsReal(
       r.deontic,
       [...r.addressee_roles].sort().join(','),
       r.operation,
+      r.transport_type ?? '',
     ].join('|')
     if (seen.has(dedupeKey)) continue
     seen.add(dedupeKey)
@@ -298,6 +299,7 @@ export async function fetchRequirementsReal(
       deontic: r.deontic,
       roles: r.addressee_roles,
       operation: r.operation,
+      transport: r.transport_type ?? undefined,
       authorityName: r.authorities?.name_ru ?? undefined,
       sanctionSummary: content.sanction_summary ?? undefined,
       status: { kind: 'active' },
