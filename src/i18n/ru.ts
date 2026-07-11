@@ -48,8 +48,8 @@ export const ru = {
     heroTitle: 'Все требования закона к вашему товару. На одной странице.',
     heroSubtitle:
       'Что делать, к какому сроку, какими документами — и что будет, если не сделать.',
-    searchPlaceholder: 'Название товара или код ТН ВЭД…',
-    searchPlaceholderService: 'Название услуги или код ИКПУ…',
+    searchPlaceholder: 'Товар или код ТН ВЭД…',
+    searchPlaceholderService: 'Услуга или код ИКПУ…',
     kindProduct: 'Товар',
     kindService: 'Услуга',
     examplesLabel: 'Посмотрите на примере:',

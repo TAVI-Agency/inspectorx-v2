@@ -38,7 +38,16 @@ for (const theme of ['light', 'dark']) {
     await page.addInitScript((t) => localStorage.setItem('ix-theme', t), theme)
     await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' })
     if (steps) await steps(page, { theme, width })
-    await page.waitForTimeout(400)
+    // Прокрутить страницу, чтобы сработали scroll-fade появления
+    await page.evaluate(async () => {
+      const step = window.innerHeight / 2
+      for (let y = 0; y <= document.body.scrollHeight; y += step) {
+        window.scrollTo(0, y)
+        await new Promise((r) => setTimeout(r, 60))
+      }
+      window.scrollTo(0, 0)
+    })
+    await page.waitForTimeout(700)
     await page.screenshot({
       path: `shots/${name}-${theme}-${width}.png`,
       fullPage: true,
