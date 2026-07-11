@@ -1,0 +1,163 @@
+/**
+ * React-Query-хуки — единственная дверь компонентов в слой данных.
+ */
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import { useAuth } from '@/app/auth'
+import { useAppMode } from '@/app/app-mode'
+import type { RequirementRow, SearchKind } from './types'
+import {
+  buildPortfolio,
+  demoPortfolioIds,
+  fetchCard,
+  fetchChangeFeed,
+  fetchProductBundle,
+  fetchTelemetry,
+  search,
+  type DataCtx,
+} from './index'
+import {
+  addChosenReal,
+  fetchChosenReal,
+  removeChosenReal,
+  submitContentRequest,
+  submitSubscriptionRequest,
+} from './real'
+import { markChangeRead } from './mock/read-store'
+
+export function useDataCtx(): DataCtx {
+  const { realSubscriber } = useAuth()
+  const { mockSubscriber } = useAppMode()
+  return { realSubscriber, mockSubscriber }
+}
+
+export function useTelemetry() {
+  return useQuery({
+    queryKey: ['telemetry'],
+    queryFn: fetchTelemetry,
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useSearchQuery(query: string, kind: SearchKind) {
+  return useQuery({
+    queryKey: ['search', kind, query],
+    queryFn: () => search(query, kind),
+    enabled: query.trim().length >= 2,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  })
+}
+
+export function useProductBundle(productId: string | undefined) {
+  const ctx = useDataCtx()
+  return useQuery({
+    queryKey: ['product', productId, ctx.realSubscriber, ctx.mockSubscriber],
+    queryFn: () => fetchProductBundle(productId!, ctx),
+    enabled: Boolean(productId),
+    staleTime: 60_000,
+  })
+}
+
+export function useRequirementCard(row: RequirementRow | null) {
+  const ctx = useDataCtx()
+  return useQuery({
+    queryKey: ['card', row?.id, ctx.realSubscriber, ctx.mockSubscriber],
+    queryFn: () => fetchCard(row!.id, ctx, row!),
+    enabled: Boolean(row),
+    staleTime: 60_000,
+  })
+}
+
+// ── Кабинет ────────────────────────────────────────────────────────
+
+export function usePortfolioIds() {
+  const { session } = useAuth()
+  const { mockSubscriber } = useAppMode()
+  return useQuery({
+    queryKey: ['portfolio-ids', session?.user.id ?? 'anon', mockSubscriber],
+    queryFn: async () => {
+      if (session) {
+        const chosen = await fetchChosenReal()
+        return {
+          chosen,
+          ids: chosen.map((c) => c.productId),
+        }
+      }
+      // Демо-портфель: кабинет показываем и без входа в мок-режиме
+      return {
+        chosen: [] as { id: string; productId: string }[],
+        ids: mockSubscriber ? demoPortfolioIds : [],
+      }
+    },
+  })
+}
+
+export function useChangeFeed(productIds: string[] | undefined) {
+  return useQuery({
+    queryKey: ['feed', productIds],
+    queryFn: async () => {
+      const feed = await fetchChangeFeed(productIds!)
+      return { ...feed, portfolio: buildPortfolio(productIds!, feed.items) }
+    },
+    enabled: Boolean(productIds),
+  })
+}
+
+export function useMarkChangeRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (changeId: string) => {
+      markChangeRead(changeId)
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['feed'] })
+      void qc.invalidateQueries({ queryKey: ['product'] })
+    },
+  })
+}
+
+export function useFollowProduct() {
+  const qc = useQueryClient()
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: async (productId: string) => {
+      if (!session) throw new Error('auth-required')
+      await addChosenReal(session.user.id, productId)
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['portfolio-ids'] }),
+  })
+}
+
+export function useUnfollowProduct() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (chosenId: string) => removeChosenReal(chosenId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['portfolio-ids'] }),
+  })
+}
+
+// ── Формы ──────────────────────────────────────────────────────────
+
+export function useSubscriptionRequest() {
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: (input: { fullName: string; contact: string; company?: string }) =>
+      submitSubscriptionRequest({ ...input, userId: session?.user.id }),
+  })
+}
+
+export function useContentRequest() {
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: (input: {
+      kind: 'fill_product' | 'missing_product' | 'missing_section'
+      queryText?: string
+      productId?: string
+      comment?: string
+    }) => submitContentRequest({ ...input, userId: session?.user.id }),
+  })
+}

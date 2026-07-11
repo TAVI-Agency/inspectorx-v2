@@ -1,10 +1,11 @@
+!.env.example
+*.local
+*.log
+.DS_Store
 .env
 .env.*
-!.env.example
-node_modules/
-dist/
 .idea/
-.DS_Store
-*.local
+dist/
 logs
-*.log
+node_modules/
+shots/
