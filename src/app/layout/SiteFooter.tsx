@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { ru } from '@/i18n/ru'
 import { DevMenu } from './DevMenu'
 
@@ -43,7 +44,15 @@ export function SiteFooter() {
           <p className="font-mono text-[11px] text-muted-foreground">
             {ru.footer.rights}
           </p>
-          <DevMenu />
+          <div className="flex items-center gap-4">
+            <Link
+              to="/b"
+              className="text-xs text-muted-foreground transition-colors hover:text-primary"
+            >
+              Дизайн Б →
+            </Link>
+            <DevMenu />
+          </div>
         </div>
       </div>
     </footer>

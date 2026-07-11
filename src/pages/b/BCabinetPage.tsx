@@ -54,7 +54,7 @@ export function BCabinetPage() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         {/* Портфель */}
-        <section>
+        <section className="min-w-0">
           <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
             Портфель
           </h2>
@@ -72,7 +72,7 @@ export function BCabinetPage() {
         </section>
 
         {/* Лента изменений */}
-        <section>
+        <section className="min-w-0">
           <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
             {ru.cabinet.feedTitle}
           </h2>
@@ -122,11 +122,11 @@ function FeedCard({ card }: { card: ChangeCard }) {
   return (
     <BCard className={cn('p-4', card.isDraftNpa && 'opacity-70')}>
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-medium text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
           {card.productName}
           {card.stageName ? ` · ${card.stageName}` : ''}
         </span>
-        <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', importanceTone[card.importance])}>
+        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', importanceTone[card.importance])}>
           {card.isDraftNpa ? ru.cabinet.draftNpa : ru.cabinet.importance[card.importance]}
         </span>
       </div>
