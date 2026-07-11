@@ -272,15 +272,29 @@ export async function fetchRequirementsReal(
   if (error) throw error
 
   const rows: RequirementRow[] = []
+  const seen = new Set<string>()
   for (const r of data ?? []) {
     const content =
       r.requirement_contents.find((c) => c.lang === 'ru') ??
       r.requirement_contents[0]
     if (!content) continue
+    // Мусор миграции v1: строки-заглушки не показываем (правило «пустое не рендерится»)
+    const title = content.title.trim()
+    if (!title || ['none', 'null', '-', '—'].includes(title.toLowerCase())) continue
+    // Дубли переноса: одинаковые (заголовок+этап+тип+роли) неотличимы для пользователя
+    const dedupeKey = [
+      title.toLowerCase().replace(/\s+/g, ' '),
+      r.lifecycle_stages?.id ?? '',
+      r.deontic,
+      [...r.addressee_roles].sort().join(','),
+      r.operation,
+    ].join('|')
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
     const stage = r.lifecycle_stages
     rows.push({
       id: r.id,
-      title: content.title,
+      title,
       deontic: r.deontic,
       roles: r.addressee_roles,
       operation: r.operation,

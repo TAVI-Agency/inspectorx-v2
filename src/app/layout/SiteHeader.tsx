@@ -1,6 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/app/auth'
+import { useAppMode } from '@/app/app-mode'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { TelemetryLine } from './TelemetryLine'
@@ -15,22 +16,30 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
 
 export function SiteHeader() {
   const { session, signOut } = useAuth()
-  // На лендинге телеметрия крупно в hero — мобильную полоску шапки не дублируем
+  const { mockSubscriber } = useAppMode()
+  // На лендинге телеметрия живёт в hero у поиска — в шапке не дублируем
   const isLanding = useLocation().pathname === '/'
+  // «Кабинет» показываем тем, у кого он не упрётся в логин-стену
+  const showCabinet = Boolean(session) || mockSubscriber
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-12 max-w-6xl items-center gap-4 px-4 sm:px-6">
         <Link to="/" className="shrink-0 text-[15px] font-semibold tracking-tight">
           Inspector<span className="text-primary">X</span>
         </Link>
-        <TelemetryLine className="hidden min-w-0 flex-1 justify-center md:flex" />
+        {!isLanding && (
+          <TelemetryLine className="hidden min-w-0 flex-1 justify-center md:flex" />
+        )}
         <nav className="ml-auto flex shrink-0 items-center gap-1 md:ml-0">
           <NavLink to="/pricing" className={navLinkClass}>
             {ru.common.pricing}
           </NavLink>
-          <NavLink to="/app" className={navLinkClass}>
-            {ru.common.cabinet}
-          </NavLink>
+          {showCabinet && (
+            <NavLink to="/app" className={navLinkClass}>
+              {ru.common.cabinet}
+            </NavLink>
+          )}
           {session ? (
             <Button
               variant="ghost"

@@ -84,7 +84,8 @@ export async function search(query: string, kind: SearchKind): Promise<SearchHit
   return hits.slice(0, 8)
 }
 
-/** Три примера на лендинге. Счётчики статичны для витрины (203 — живое число из базы). */
+/** Три примера на лендинге. Счётчики статичны для витрины
+ *  (177 = published-строки сигарет после фильтра мусора/дублей переноса v1). */
 export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
   {
     id: CIGARETTES_PRODUCT_ID,
@@ -95,7 +96,7 @@ export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
     code: '2404110001',
     codeKind: 'hs',
     categoryName: 'Табак и промышленные заменители табака',
-    requirementsCount: 203,
+    requirementsCount: 177,
   },
   {
     id: MILK_PRODUCT_ID,
@@ -156,6 +157,17 @@ function changes30dFor(productId: string): number {
   ).length
 }
 
+/** Макс. санкция из ОТКРЫТЫХ строк уровня 0 — то, что аноним и так видит.
+ *  Закрывать метрику, когда суммы напечатаны в списке, — ложь интерфейса. */
+function maxSanctionFromRows(rows: RequirementRow[]): string | null {
+  let max = 0
+  for (const r of rows) {
+    const m = r.sanctionSummary?.match(/до\s+(\d+)\s*БРВ/i)
+    if (m) max = Math.max(max, Number(m[1]))
+  }
+  return max > 0 ? `до ${max} БРВ` : null
+}
+
 function metricsFor(
   productId: string,
   rows: RequirementRow[],
@@ -164,11 +176,15 @@ function metricsFor(
   const subscriber = effectiveSubscriber(ctx)
   const mock = mockMetrics[productId]
   let documents: Gated<number> = locked
-  let maxSanction: Gated<string> = locked
-  if (subscriber && mock) {
-    documents = ok(mock.documents)
-    maxSanction = ok(mock.maxSanction)
-  }
+  if (subscriber && mock) documents = ok(mock.documents)
+
+  const openMax = maxSanctionFromRows(rows)
+  let maxSanction: Gated<string> = openMax
+    ? ok(openMax)
+    : subscriber && mock
+      ? ok(mock.maxSanction)
+      : locked
+
   return {
     requirements: rows.length,
     documents,

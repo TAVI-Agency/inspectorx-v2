@@ -26,8 +26,9 @@ export const ru = {
   },
 
   header: {
-    telemetry: (acts: string, updated: string, changes: string) =>
-      `${acts} на мониторинге · обновлено ${updated} · ${changes} за неделю`,
+    monitoring: (acts: string) => `${acts} на мониторинге`,
+    updated: (time: string) => `обновлено ${time}`,
+    weekly: (changes: string) => `${changes} за неделю`,
     actsUnit: ['акт', 'акта', 'актов'] as const,
     changesUnit: ['изменение', 'изменения', 'изменений'] as const,
     themeToggle: 'Переключить тему',
@@ -50,6 +51,8 @@ export const ru = {
       'Что делать, к какому сроку, какими документами — и что будет, если не сделать.',
     searchPlaceholder: 'Товар или код ТН ВЭД…',
     searchPlaceholderService: 'Услуга или код ИКПУ…',
+    searchPlaceholderShort: 'Товар или код…',
+    searchPlaceholderServiceShort: 'Услуга или код…',
     kindProduct: 'Товар',
     kindService: 'Услуга',
     examplesLabel: 'Посмотрите на примере:',

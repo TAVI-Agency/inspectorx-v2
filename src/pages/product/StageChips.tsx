@@ -16,7 +16,7 @@ export function StageChips({
 }) {
   return (
     <div
-      className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0"
+      className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 max-sm:[mask-image:linear-gradient(to_right,black_90%,transparent)] sm:mx-0 sm:flex-wrap sm:px-0"
       role="tablist"
       aria-label={ru.product.listTitle}
     >
@@ -72,7 +72,7 @@ function Chip({
           aria-label="есть непрочитанные изменения"
         />
       )}
-      <span className="max-w-56 truncate">{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
       <span
         className={cn(
           'font-mono text-[11px]',

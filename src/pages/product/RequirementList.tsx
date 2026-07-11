@@ -18,12 +18,15 @@ export function RequirementList({
   activeStage,
   productId,
   initialRequirementId,
+  scrollToInitial,
 }: {
   rows: RequirementRow[]
   stages: StageInfo[]
   activeStage: string | null
   productId: string
   initialRequirementId?: string
+  /** Скроллим только при явном диплинке (?req=), не при дефолтном раскрытии */
+  scrollToInitial?: boolean
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(
     initialRequirementId ?? null,
@@ -50,13 +53,13 @@ export function RequirementList({
 
   // Диплинк ?req= — проскроллить к требованию после загрузки
   useEffect(() => {
-    if (!initialRequirementId || scrolledRef.current) return
+    if (!scrollToInitial || !initialRequirementId || scrolledRef.current) return
     const el = document.getElementById(`req-${initialRequirementId}`)
     if (el) {
       scrolledRef.current = true
       el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
-  }, [initialRequirementId, rows])
+  }, [scrollToInitial, initialRequirementId, rows])
 
   function toggle(row: RequirementRow) {
     const opening = expandedId !== row.id
@@ -68,14 +71,14 @@ export function RequirementList({
     <div className="space-y-8">
       {visibleStages.map(({ stage, items }, gi) => (
         <section key={stage.id} aria-label={stage.name}>
-          <header className="flex items-baseline gap-3 border-b pb-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
+          <header className="flex items-start gap-3 border-b pb-2">
+            <span className="font-mono text-[11px] leading-4 text-muted-foreground">
               {String(gi + 1).padStart(2, '0')}
             </span>
-            <h3 className="min-w-0 flex-1 truncate font-mono text-[11px] tracking-[0.1em] uppercase">
+            <h3 className="min-w-0 flex-1 font-mono text-[11px] leading-4 tracking-[0.06em] uppercase sm:tracking-[0.1em]">
               {stage.name}
             </h3>
-            <span className="font-mono text-[11px] text-muted-foreground">
+            <span className="shrink-0 font-mono text-[11px] leading-4 text-muted-foreground">
               {items.length}
             </span>
           </header>
