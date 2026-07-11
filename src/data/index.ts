@@ -84,8 +84,8 @@ export async function search(query: string, kind: SearchKind): Promise<SearchHit
   return hits.slice(0, 8)
 }
 
-/** Три примера на лендинге */
-export const exampleHits: SearchHit[] = [
+/** Три примера на лендинге. Счётчики статичны для витрины (203 — живое число из базы). */
+export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
   {
     id: CIGARETTES_PRODUCT_ID,
     kind: 'product',
@@ -95,6 +95,7 @@ export const exampleHits: SearchHit[] = [
     code: '2404110001',
     codeKind: 'hs',
     categoryName: 'Табак и промышленные заменители табака',
+    requirementsCount: 203,
   },
   {
     id: MILK_PRODUCT_ID,
@@ -104,8 +105,9 @@ export const exampleHits: SearchHit[] = [
     code: '0401201100',
     codeKind: 'hs',
     categoryName: 'Молочная продукция',
+    requirementsCount: 7,
   },
-  paracetamolHit,
+  { ...paracetamolHit, requirementsCount: 6 },
 ]
 
 // ── Страница товара ────────────────────────────────────────────────

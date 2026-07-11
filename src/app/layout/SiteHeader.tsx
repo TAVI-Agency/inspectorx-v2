@@ -1,4 +1,4 @@
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/app/auth'
 import { ru } from '@/i18n/ru'
@@ -15,6 +15,8 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
 
 export function SiteHeader() {
   const { session, signOut } = useAuth()
+  // На лендинге телеметрия крупно в hero — мобильную полоску шапки не дублируем
+  const isLanding = useLocation().pathname === '/'
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-12 max-w-6xl items-center gap-4 px-4 sm:px-6">
@@ -46,9 +48,11 @@ export function SiteHeader() {
           <ThemeToggle />
         </nav>
       </div>
-      <div className="border-t border-border/60 px-4 py-1 md:hidden">
-        <TelemetryLine />
-      </div>
+      {!isLanding && (
+        <div className="border-t border-border/60 px-4 py-1 md:hidden">
+          <TelemetryLine />
+        </div>
+      )}
     </header>
   )
 }
