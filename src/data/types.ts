@@ -99,6 +99,8 @@ export interface RequirementRow {
   trustDate?: string
   /** review_flag = flagged_by_change → значок «проверяется обновление» */
   underReview: boolean
+  /** id карточки изменения (мок-лента) — для сброса непрочитанности при раскрытии */
+  changeId?: string
 }
 
 // ── Требование: уровень 1 (карточка) ───────────────────────────────
