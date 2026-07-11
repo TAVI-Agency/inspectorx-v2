@@ -36,6 +36,15 @@ for (const theme of ['light', 'dark']) {
       errors.push(`[${theme}/${width}] PAGEERROR ${err.message}`),
     )
     await page.addInitScript((t) => localStorage.setItem('ix-theme', t), theme)
+    // Доп. localStorage: SHOT_LS="ix-mock-subscriber=1;foo=bar"
+    if (process.env.SHOT_LS) {
+      await page.addInitScript((pairs) => {
+        for (const p of pairs.split(';')) {
+          const idx = p.indexOf('=')
+          if (idx > 0) localStorage.setItem(p.slice(0, idx), p.slice(idx + 1))
+        }
+      }, process.env.SHOT_LS)
+    }
     await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' })
     if (steps) await steps(page, { theme, width })
     // Прокрутить страницу, чтобы сработали scroll-fade появления

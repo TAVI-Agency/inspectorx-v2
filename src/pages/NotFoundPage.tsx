@@ -10,7 +10,7 @@ export function NotFoundPage() {
       <h1 className="text-2xl font-semibold tracking-tight">
         Такой страницы нет
       </h1>
-      <Button render={<Link to="/" />} variant="outline">
+      <Button nativeButton={false} render={<Link to="/" />} variant="outline">
         На главную
       </Button>
     </div>

@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query'
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
+import { supabase } from '@/lib/supabase'
 import type { RequirementRow, SearchKind } from './types'
 import {
   buildPortfolio,
@@ -147,6 +148,38 @@ export function useSubscriptionRequest() {
   return useMutation({
     mutationFn: (input: { fullName: string; contact: string; company?: string }) =>
       submitSubscriptionRequest({ ...input, userId: session?.user.id }),
+  })
+}
+
+export function useAskQuestion() {
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: async (input: {
+      questionText: string
+      requirementId?: string
+      productId?: string
+      legalReviewOnly: boolean
+      allowOfficialRequest: boolean
+      isUrgent: boolean
+    }) => {
+      if (!session) throw new Error('auth-required')
+      const { error } = await supabase.from('user_questions').insert({
+        user_id: session.user.id,
+        question_text: input.questionText,
+        requirement_id:
+          input.requirementId && !input.requirementId.startsWith('mock-')
+            ? input.requirementId
+            : null,
+        product_id:
+          input.productId && !input.productId.startsWith('mock-')
+            ? input.productId
+            : null,
+        legal_review_only: input.legalReviewOnly,
+        allow_official_request: input.allowOfficialRequest,
+        is_urgent: input.isUrgent,
+      })
+      if (error) throw error
+    },
   })
 }
 

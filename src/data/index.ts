@@ -131,6 +131,7 @@ function applyChangeOverlay(productId: string, rows: RequirementRow[]): Requirem
       if (row) {
         row.status = slot.status
         row.unread = !read.has(slot.changeId)
+        row.changeId = slot.changeId
       }
     }
     return rows
@@ -140,7 +141,10 @@ function applyChangeOverlay(productId: string, rows: RequirementRow[]): Requirem
   for (const fx of changeFixtures) {
     if (fx.productId !== productId || fx.isDraftNpa || !fx.requirementId) continue
     const row = rows.find((r) => r.id === fx.requirementId)
-    if (row) row.unread = !read.has(fx.id)
+    if (row) {
+      row.unread = !read.has(fx.id)
+      row.changeId = fx.id
+    }
   }
   return rows
 }
