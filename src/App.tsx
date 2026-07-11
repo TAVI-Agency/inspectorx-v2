@@ -7,6 +7,13 @@ import { PricingPage } from './pages/pricing/PricingPage'
 import { CabinetPage } from './pages/cabinet/CabinetPage'
 import { AuthPage } from './pages/auth/AuthPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { BLayout } from './pages/b/BLayout'
+import { BCatalogPage } from './pages/b/BCatalogPage'
+import { BProductPage } from './pages/b/BProductPage'
+import { BPricingPage } from './pages/b/BPricingPage'
+import { BCabinetPage } from './pages/b/BCabinetPage'
+import { BAuthPage } from './pages/b/BAuthPage'
+import { BAdminPage } from './pages/b/BAdminPage'
 
 const router = createBrowserRouter([
   {
@@ -20,6 +27,19 @@ const router = createBrowserRouter([
       { path: '/login', element: <AuthPage mode="login" /> },
       { path: '/register', element: <AuthPage mode="register" /> },
       { path: '*', element: <NotFoundPage /> },
+    ],
+  },
+  {
+    path: '/b',
+    element: <BLayout />,
+    children: [
+      { index: true, element: <BCatalogPage /> },
+      { path: 'product/:productId', element: <BProductPage /> },
+      { path: 'pricing', element: <BPricingPage /> },
+      { path: 'cabinet', element: <BCabinetPage /> },
+      { path: 'admin', element: <BAdminPage /> },
+      { path: 'login', element: <BAuthPage mode="login" /> },
+      { path: 'register', element: <BAuthPage mode="register" /> },
     ],
   },
 ])

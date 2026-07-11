@@ -23,6 +23,8 @@ import {
 import {
   addChosenReal,
   fetchChosenReal,
+  fetchContentRequests,
+  fetchSubscriptionRequests,
   removeChosenReal,
   submitContentRequest,
   submitSubscriptionRequest,
@@ -180,6 +182,24 @@ export function useAskQuestion() {
       })
       if (error) throw error
     },
+  })
+}
+
+// ── Админка ────────────────────────────────────────────────────────
+
+export function useSubscriptionRequests() {
+  return useQuery({
+    queryKey: ['admin-subscription-requests'],
+    queryFn: fetchSubscriptionRequests,
+    staleTime: 30_000,
+  })
+}
+
+export function useContentRequests() {
+  return useQuery({
+    queryKey: ['admin-content-requests'],
+    queryFn: fetchContentRequests,
+    staleTime: 30_000,
   })
 }
 

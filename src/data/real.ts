@@ -491,6 +491,60 @@ export async function submitContentRequest(input: {
   if (error) throw error
 }
 
+// ── Админка: входящие заявки (чтение по RLS admin) ────────────────
+
+export interface SubscriptionRequestRow {
+  id: string
+  fullName: string
+  contact: string
+  company: string | null
+  status: string
+  note: string | null
+  createdAt: string
+}
+
+export async function fetchSubscriptionRequests(): Promise<SubscriptionRequestRow[]> {
+  const { data } = await supabase
+    .from('subscription_requests')
+    .select('id, full_name, contact, company, status, note, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100)
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    fullName: r.full_name,
+    contact: r.contact,
+    company: r.company,
+    status: r.status,
+    note: r.note,
+    createdAt: r.created_at,
+  }))
+}
+
+export interface ContentRequestRow {
+  id: string
+  kind: string
+  queryText: string | null
+  status: string
+  comment: string | null
+  createdAt: string
+}
+
+export async function fetchContentRequests(): Promise<ContentRequestRow[]> {
+  const { data } = await supabase
+    .from('content_requests')
+    .select('id, kind, query_text, status, comment, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100)
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    queryText: r.query_text,
+    status: r.status,
+    comment: r.comment,
+    createdAt: r.created_at,
+  }))
+}
+
 // ── Портфель (chosen_products, только для залогиненных) ────────────
 
 export async function fetchChosenReal(): Promise<

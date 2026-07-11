@@ -29,10 +29,13 @@ export function SearchBox({
   size = 'compact',
   autoFocus,
   className,
+  basePath = '/product',
 }: {
   size?: 'hero' | 'compact'
   autoFocus?: boolean
   className?: string
+  /** Куда вести по выбору товара — «/product» (дизайн A) или «/b/product» (дизайн Б) */
+  basePath?: string
 }) {
   const navigate = useNavigate()
   const listboxId = useId()
@@ -81,7 +84,7 @@ export function SearchBox({
 
   function go(hit: SearchHit) {
     setOpen(false)
-    navigate(`/product/${hit.id}`)
+    navigate(`${basePath}/${hit.id}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
