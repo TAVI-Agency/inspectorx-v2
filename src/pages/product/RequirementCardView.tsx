@@ -1,4 +1,11 @@
-import { FileText, Globe, MessageCircleQuestion, Phone, Scale } from 'lucide-react'
+import {
+  ChevronDown,
+  FileText,
+  Globe,
+  MessageCircleQuestion,
+  Phone,
+  Scale,
+} from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { PaywallGate } from '@/components/PaywallGate'
@@ -181,8 +188,9 @@ export function RequirementCardView({
               <div className="mt-2 divide-y rounded-md border bg-background/50">
                 {faqs.map((f, i) => (
                   <details key={i} className="group px-3 py-2.5">
-                    <summary className="cursor-pointer list-none text-sm font-medium marker:hidden">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium marker:hidden">
                       {f.question}
+                      <ChevronDown className="size-3.5 shrink-0 text-muted-foreground transition-transform duration-300 ease-[var(--ease-brand)] group-open:rotate-180" />
                     </summary>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                       {f.answer}
@@ -205,8 +213,10 @@ export function RequirementCardView({
           </div>
         </div>
 
-        {/* Уровень 2: юридический слой */}
-        <LegalPanel citations={card.citations} history={card.history} />
+        {/* Уровень 2: юридический слой — синхронная панель, липнет при скролле */}
+        <div className="lg:sticky lg:top-16 lg:self-start">
+          <LegalPanel citations={card.citations} history={card.history} />
+        </div>
       </div>
 
       <AskQuestionDialog
