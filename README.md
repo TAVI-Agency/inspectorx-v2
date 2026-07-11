@@ -1,17 +1,32 @@
-# InspectorX v2
+# React + TypeScript + Vite
 
-Приватный репозиторий проекта **InspectorX** (версия 2).
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-> ⚠️ **Временная заглушка.**
-> Этот файл создан только для того, чтобы подключить и проверить
-> CI/CD-трубу: **GitHub → Vercel** (автодеплой при каждом `git push`).
-> При заливке реального проекта этот README нужно заменить или удалить.
+Currently, two official plugins are available:
 
-## Что будет здесь
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-- **Frontend:** Vite + React + TypeScript, Tailwind, shadcn/ui
-- **Backend:** Supabase (Postgres + RLS)
-- **Deploy:** Vercel — автодеплой из ветки `main`
+## React Compiler
 
----
-_Статус: подготовка инфраструктуры. Код проекта заливается отдельно._
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the Oxlint configuration
+
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
+```
+
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
