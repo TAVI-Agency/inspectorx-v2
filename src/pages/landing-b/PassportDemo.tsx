@@ -242,11 +242,14 @@ export function PassportDemo() {
             </div>
           )}
 
-          <div key={viewKey}>
+          <div key={viewKey} className="lb-route">
+            <span className="lb-thread" aria-hidden="true" />
             {view.stages.map((stage) => (
               <div className="lb-stage" key={stage.index}>
                 <div className="lb-stage-name lb-anim-in" style={{ '--d': reqIndex * 60 } as React.CSSProperties}>
-                  <b>{String(stage.index).padStart(2, '0')}</b>
+                  <span className="lb-station" style={{ '--d': reqIndex * 60 } as React.CSSProperties}>
+                    {String(stage.index).padStart(2, '0')}
+                  </span>
                   {stage.name}
                 </div>
                 {stage.reqs.length === 0 && (

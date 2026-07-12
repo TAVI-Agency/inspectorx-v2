@@ -55,7 +55,7 @@ export function RouteCanvas({ className }: { className?: string }) {
 
       for (const r of routes) {
         tracePath(r.y0, r.amp, r.phase, r.speed, time)
-        ctx!.strokeStyle = `rgba(126, 150, 230, ${r.alpha})`
+        ctx!.strokeStyle = `rgba(46, 150, 138, ${r.alpha})`
         ctx!.lineWidth = r.width
         ctx!.stroke()
       }
@@ -63,15 +63,15 @@ export function RouteCanvas({ className }: { className?: string }) {
       // яркий маршрут: широкое свечение + тонкая линия с градиентом
       const heroY = 0.42
       tracePath(heroY, 24, 0.4, 0.22, time)
-      ctx!.strokeStyle = 'rgba(143, 167, 255, 0.18)'
+      ctx!.strokeStyle = 'rgba(46, 196, 174, 0.18)'
       ctx!.lineWidth = 7
       ctx!.stroke()
 
       tracePath(heroY, 24, 0.4, 0.22, time)
       const grad = ctx!.createLinearGradient(0, 0, w, 0)
-      grad.addColorStop(0, 'rgba(88, 120, 255, 0.3)')
-      grad.addColorStop(0.65, '#7c96ff')
-      grad.addColorStop(1, '#e8edff')
+      grad.addColorStop(0, 'rgba(20, 140, 125, 0.3)')
+      grad.addColorStop(0.65, '#2ec4ae')
+      grad.addColorStop(1, '#eafaf6')
       ctx!.strokeStyle = grad
       ctx!.lineWidth = 2
       ctx!.stroke()
@@ -90,7 +90,7 @@ export function RouteCanvas({ className }: { className?: string }) {
       const g = gate()
       ctx!.beginPath()
       ctx!.arc(g.x, g.y, 5.5 + Math.sin(time * 2) * 1.2, 0, Math.PI * 2)
-      ctx!.strokeStyle = '#aebfff'
+      ctx!.strokeStyle = '#9fe8d9'
       ctx!.lineWidth = 1.6
       ctx!.stroke()
       ctx!.beginPath()
@@ -100,7 +100,7 @@ export function RouteCanvas({ className }: { className?: string }) {
       const pt = (time % 2.8) / 2.8
       ctx!.beginPath()
       ctx!.arc(g.x, g.y, 8 + pt * 36, 0, Math.PI * 2)
-      ctx!.strokeStyle = `rgba(174, 191, 255, ${(1 - pt) * 0.45})`
+      ctx!.strokeStyle = `rgba(159, 232, 217, ${(1 - pt) * 0.45})`
       ctx!.lineWidth = 1
       ctx!.stroke()
     }
