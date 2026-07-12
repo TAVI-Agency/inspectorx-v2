@@ -74,11 +74,11 @@ function useNavItems(): { to: string; end?: boolean; label: string; icon: Lucide
   const { mockSubscriber } = useAppMode()
   const showCabinet = Boolean(session) || mockSubscriber
   return [
-    { to: '/c', end: true, label: ru.common.registry, icon: Compass },
+    { to: '/catalog', end: true, label: ru.common.registry, icon: Compass },
     ...(showCabinet
-      ? [{ to: '/c/cabinet', label: ru.common.cabinet, icon: LayoutDashboard }]
+      ? [{ to: '/cabinet', label: ru.common.cabinet, icon: LayoutDashboard }]
       : []),
-    { to: '/c/pricing', label: ru.common.pricing, icon: BadgeCheck },
+    { to: '/pricing', label: ru.common.pricing, icon: BadgeCheck },
   ]
 }
 
@@ -89,7 +89,7 @@ function CRail() {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-border bg-card lg:flex">
       <Link
-        to="/c"
+        to="/catalog"
         className="flex items-center gap-3 px-5 pt-6 pb-5 focus-visible:outline-none"
       >
         <CMark />
@@ -147,18 +147,14 @@ function CRail() {
               {ru.common.signOut}
             </Button>
           ) : (
-            <Button size="sm" nativeButton={false} render={<Link to="/c/login" />}>
+            <Button size="sm" nativeButton={false} render={<Link to="/login" />}>
               <LogIn />
               {ru.common.signIn}
             </Button>
           )}
         </div>
         <p className="text-[11px] text-muted-foreground/70">
-          <Link to="/" className="hover:text-muted-foreground">Дизайн A</Link>
-          {' · '}
-          <Link to="/b" className="hover:text-muted-foreground">Б</Link>
-          {' · '}
-          <span className="text-foreground/60">C</span>
+          <Link to="/" className="hover:text-muted-foreground">inspectorx.uz</Link>
         </p>
       </div>
     </aside>
@@ -192,7 +188,7 @@ function CMobileTop() {
   const { session, signOut } = useAuth()
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-card/85 px-4 backdrop-blur-lg lg:hidden">
-      <Link to="/c" className="flex min-w-0 items-center gap-2.5">
+      <Link to="/catalog" className="flex min-w-0 items-center gap-2.5">
         <CMark className="size-8 rounded-[10px]" />
         <span className="font-display truncate text-sm font-medium tracking-tight">
           InspectorX
@@ -206,7 +202,7 @@ function CMobileTop() {
             {ru.common.signOut}
           </Button>
         ) : (
-          <Button size="sm" nativeButton={false} render={<Link to="/c/login" />}>
+          <Button size="sm" nativeButton={false} render={<Link to="/login" />}>
             {ru.common.signIn}
           </Button>
         )}

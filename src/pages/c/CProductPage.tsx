@@ -69,7 +69,7 @@ export function CProductPage() {
         <h1 className="font-display text-2xl font-medium tracking-tight">
           {isError ? ru.common.error : 'Товар не найден'}
         </h1>
-        <Button nativeButton={false} render={<Link to="/c" />} variant="outline" className="mt-5">
+        <Button nativeButton={false} render={<Link to="/catalog" />} variant="outline" className="mt-5">
           <ArrowLeft />
           {ru.common.back}
         </Button>
@@ -89,7 +89,7 @@ export function CProductPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-7 sm:px-8">
       <Link
-        to="/c"
+        to="/catalog"
         className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-3.5" />
@@ -270,7 +270,7 @@ function FollowButton({ productId }: { productId: string }) {
       disabled={follow.isPending}
       onClick={() => {
         if (!session) {
-          navigate('/c/login')
+          navigate('/login')
           return
         }
         follow.mutate(productId)

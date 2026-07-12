@@ -115,7 +115,7 @@ function RequestForm() {
           variant="outline"
           className="mt-5"
           nativeButton={false}
-          render={<Link to="/c" />}
+          render={<Link to="/catalog" />}
         >
           {ru.pricing.thanksCta}
           <ArrowRight />

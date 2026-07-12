@@ -49,7 +49,7 @@ export function CSearch({ autoFocus }: { autoFocus?: boolean }) {
 
   function go(id: string) {
     setOpen(false)
-    navigate(`/c/product/${id}`)
+    navigate(`/product/${id}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent) {

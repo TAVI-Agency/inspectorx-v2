@@ -142,7 +142,7 @@ export function CStatTile({
 export function CLockedValue() {
   return (
     <Link
-      to="/c/pricing"
+      to="/pricing"
       className="group inline-flex items-baseline gap-1.5 rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       aria-label={ru.paywall.locked}
     >
@@ -255,7 +255,7 @@ export function CPaywallGate({ className }: { className?: string }) {
           {ru.paywall.lockedText}
         </p>
         <Link
-          to="/c/pricing"
+          to="/pricing"
           className="mt-1 inline-flex h-8 items-center rounded-lg bg-primary px-3.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           {ru.paywall.cta}
@@ -269,7 +269,7 @@ export function CPaywallGate({ className }: { className?: string }) {
 export function CPaywallPanel({ className }: { className?: string }) {
   return (
     <Link
-      to="/c/pricing"
+      to="/pricing"
       className={cn(
         'relative block overflow-hidden rounded-lg border border-brass/30 transition-colors hover:border-brass/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
         className,

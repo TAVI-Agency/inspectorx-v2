@@ -39,7 +39,7 @@ export function CCabinetPage() {
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             {ru.cabinet.portfolioEmpty.text}
           </p>
-          <Button className="mt-5" nativeButton={false} render={<Link to="/c/login" />}>
+          <Button className="mt-5" nativeButton={false} render={<Link to="/login" />}>
             {ru.common.signIn}
           </Button>
         </CCard>
@@ -102,7 +102,7 @@ export function CCabinetPage() {
                   variant="outline"
                   className="mt-4"
                   nativeButton={false}
-                  render={<Link to="/c" />}
+                  render={<Link to="/catalog" />}
                 >
                   {ru.cabinet.portfolioEmpty.cta}
                 </Button>
@@ -153,7 +153,7 @@ function CPortfolioCard({ item, index }: { item: PortfolioItem; index: number })
         : ru.cabinet.productStatus.quiet
 
   return (
-    <Link to={`/c/product/${item.productId}`} className="group block focus-visible:outline-none">
+    <Link to={`/product/${item.productId}`} className="group block focus-visible:outline-none">
       <CCard
         className="c-rise flex items-center gap-3.5 p-4 transition-all duration-300 group-hover:-translate-y-0.5 group-hover:border-primary/40 group-focus-visible:ring-2 group-focus-visible:ring-ring"
         style={{ '--i': index } as React.CSSProperties}
@@ -264,7 +264,7 @@ function CFeedCard({ card, index }: { card: ChangeCard; index: number }) {
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           {card.requirementId && (
             <Link
-              to={`/c/product/${card.productId}?req=${card.requirementId}`}
+              to={`/product/${card.productId}?req=${card.requirementId}`}
               className="inline-flex items-center gap-1 text-[13px] font-medium text-primary underline-offset-2 hover:underline"
             >
               {ru.cabinet.toRequirement}
