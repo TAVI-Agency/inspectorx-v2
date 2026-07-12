@@ -51,7 +51,7 @@ export const ru = {
     heroSubtitle:
       'Что делать, к какому сроку, какими документами — и что будет, если не сделать.',
     searchPlaceholder: 'Товар или код ТН ВЭД…',
-    searchPlaceholderService: 'Услуга или код ИКПУ…',
+    searchPlaceholderService: 'Услуга или код ОКЭД…',
     searchPlaceholderShort: 'Товар или код…',
     searchPlaceholderServiceShort: 'Услуга или код…',
     kindProduct: 'Товар',
@@ -107,6 +107,38 @@ export const ru = {
     notifyDone: 'Заявка принята. Сообщим, когда наполним.',
   },
 
+  service: {
+    eyebrow: 'Услуга · вид деятельности',
+    okedLabel: 'ОКЭД',
+    admission: {
+      license: 'Лицензия',
+      permit: 'Разрешение',
+      notification: 'Уведомление',
+      free: 'Свободно',
+    },
+    admissionHint: {
+      license: 'Нельзя начинать, пока государство не разрешило',
+      permit: 'Нужен разовый разрешительный документ',
+      notification: 'Сообщите государству — и работайте',
+      free: 'Специальный допуск не нужен, действуют общие правила',
+    },
+    licensorLabel: 'Лицензиар',
+    routeTitle: 'Маршрут услуги',
+    routeSubtitle: 'Этапы жизни бизнеса',
+    listTitle: 'Требования по этапам',
+    inProgress: 'раздел в работе',
+    notFound: 'Услуга не найдена',
+    noRequirementsTitle: 'По этой услуге требования ещё не наполнены',
+    noRequirementsText: 'Оставьте заявку — наполним и сообщим. Это бесплатно.',
+    crossTitle: (name: string) => `Требования к товару: ${name}`,
+    crossToProductText:
+      'Аптека продаёт товар — у лекарств свой паспорт: маркировка, цены, условия хранения.',
+    crossToServiceTitle: 'Открываете аптеку?',
+    crossToServiceText:
+      'У услуги «Розничная аптека» — свой маршрут: лицензия, СанПиН, кассы и проверки.',
+    crossCta: 'Открыть паспорт',
+  },
+
   requirement: {
     deontic: {
       obligation: 'обязанность',
@@ -119,6 +151,7 @@ export const ru = {
       exporter: 'экспортёр',
       seller: 'продавец',
       carrier: 'перевозчик',
+      service_provider: 'исполнитель услуги',
       all: 'для всех',
     },
     operations: {
@@ -129,6 +162,7 @@ export const ru = {
       transit: 'транзит',
       re_export: 'реэкспорт',
       re_import: 'реимпорт',
+      service: 'услуга',
     },
     status: {
       active: 'действует',

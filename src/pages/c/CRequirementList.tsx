@@ -20,11 +20,15 @@ export function CRequirementList({
   stages,
   productId,
   initialRequirementId,
+  inProgressStageIds,
 }: {
   rows: RequirementRow[]
   stages: StageInfo[]
-  productId: string
+  /** Товар — для формы вопроса; у услуг не передаётся */
+  productId?: string
   initialRequirementId?: string
+  /** Этапы с неопубликованными карточками — пометка «раздел в работе» */
+  inProgressStageIds?: Set<string>
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(initialRequirementId ?? null)
   const markRead = useMarkChangeRead()
@@ -64,7 +68,8 @@ export function CRequirementList({
         {groups.map(({ stage, items }, gi) => (
           <section
             key={stage.id}
-            className="c-rise relative sm:pl-11"
+            id={`stage-${stage.id}`}
+            className="c-rise relative scroll-mt-24 sm:pl-11"
             style={{ '--i': gi } as React.CSSProperties}
           >
             {/* Станция этапа */}
@@ -84,6 +89,11 @@ export function CRequirementList({
               <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
                 {items.length}
               </span>
+              {inProgressStageIds?.has(stage.id) && (
+                <span className="shrink-0 rounded-[6px] bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {ru.service.inProgress}
+                </span>
+              )}
             </header>
             <CCard className="mt-2.5 overflow-hidden">
               <ul className="divide-y divide-border">
@@ -117,7 +127,7 @@ function CRow({
   number: number
   expanded: boolean
   onToggle: () => void
-  productId: string
+  productId?: string
 }) {
   return (
     <li className={cn('transition-colors', expanded && 'bg-accent/25')}>

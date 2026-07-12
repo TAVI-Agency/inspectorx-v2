@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   ArrowLeftRight,
   ArrowUpFromLine,
+  Briefcase,
   Lock,
   Package,
   RotateCcw,
@@ -162,6 +163,7 @@ export const OPERATION_ICON: Record<Operation, LucideIcon> = {
   transit: ArrowLeftRight,
   re_export: RotateCcw,
   re_import: RotateCw,
+  service: Briefcase,
 }
 
 /** Чип деонтики: запрет — кармин, льгота — изумруд, обязанность — нейтраль */

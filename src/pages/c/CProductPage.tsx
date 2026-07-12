@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Check, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Check, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/app/auth'
@@ -16,6 +16,7 @@ import {
   operationMeta,
   stagesOf,
 } from '@/data/taxonomy'
+import { serviceLinkForProduct } from '@/data/cross-links'
 import { formatDate, formatHsCode } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
@@ -165,6 +166,30 @@ export function CProductPage() {
         />
       </div>
 
+      {/* Кросс-ссылка: этот товар продаёт услуга со своим паспортом (аптека) */}
+      {(() => {
+        const link = serviceLinkForProduct(passport.hsCode)
+        if (!link) return null
+        return (
+          <Link to={link.to} className="group mt-5 block focus-visible:outline-none">
+            <CCard className="flex items-center gap-4 p-4 transition-colors group-hover:border-primary/40 group-focus-visible:ring-2 group-focus-visible:ring-ring">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold tracking-tight">
+                  {ru.service.crossToServiceTitle}
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  {ru.service.crossToServiceText}
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
+                {ru.service.crossCta}
+                <ArrowUpRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </span>
+            </CCard>
+          </Link>
+        )
+      })()}
+
       {rows.length === 0 ? (
         <CCard className="mt-9 p-8 text-center">
           <h2 className="text-lg font-semibold tracking-tight">
@@ -222,8 +247,8 @@ export function CProductPage() {
   )
 }
 
-/** Индекс сложности: 10 делений-рисок, как на приборе */
-function ComplexityMeter({ value }: { value: number }) {
+/** Индекс сложности: 10 делений-рисок, как на приборе (общий для товара и услуги) */
+export function ComplexityMeter({ value }: { value: number }) {
   return (
     <span
       className="inline-flex items-center gap-2 rounded-md bg-secondary px-2.5 py-1"

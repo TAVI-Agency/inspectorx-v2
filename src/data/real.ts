@@ -21,6 +21,7 @@ import {
   type SanctionItem,
   type SearchHit,
   type ProductPassport,
+  type ServicePassport,
   type StageInfo,
 } from './types'
 
@@ -245,6 +246,104 @@ export async function fetchPassportReal(
   }
 }
 
+// ── Поиск и паспорт услуги ─────────────────────────────────────────
+
+interface RawService {
+  id: string
+  name_ru: string
+  oked_code: string | null
+  ikpu_code: string | null
+}
+
+function toServiceHit(s: RawService): SearchHit {
+  return {
+    id: s.id,
+    kind: 'service',
+    displayName: s.name_ru,
+    officialName: s.name_ru,
+    code: s.oked_code ?? s.ikpu_code ?? '',
+    codeKind: s.oked_code ? 'oked' : 'ikpu',
+  }
+}
+
+export async function searchServicesReal(query: string): Promise<SearchHit[]> {
+  const q = query.trim()
+  if (q.length < 2) return []
+  const pattern = `%${q.replaceAll('%', '').replaceAll(',', '')}%`
+  const digits = q.replace(/\D/g, '')
+  const codeFilters: string[] = []
+  if (/^[0-9][0-9.]*$/.test(q)) codeFilters.push(`oked_code.like.${q}%`)
+  if (digits.length >= 2) codeFilters.push(`ikpu_code.like.${digits}%`)
+
+  const [aliasRes, nameRes, codeRes] = await Promise.all([
+    supabase
+      .from('search_aliases')
+      .select('service_id, services(id, name_ru, oked_code, ikpu_code)')
+      .ilike('alias', pattern)
+      .not('service_id', 'is', null)
+      .limit(8),
+    supabase
+      .from('services')
+      .select('id, name_ru, oked_code, ikpu_code')
+      .eq('is_active', true)
+      .ilike('name_ru', pattern)
+      .limit(8),
+    codeFilters.length > 0
+      ? supabase
+          .from('services')
+          .select('id, name_ru, oked_code, ikpu_code')
+          .eq('is_active', true)
+          .or(codeFilters.join(','))
+          .limit(8)
+      : Promise.resolve({ data: [] as RawService[] }),
+  ])
+
+  const byId = new Map<string, RawService>()
+  for (const row of aliasRes.data ?? []) {
+    const s = row.services
+    if (s) byId.set(s.id, s)
+  }
+  for (const s of [...(nameRes.data ?? []), ...(codeRes.data ?? [])]) {
+    if (!byId.has(s.id)) byId.set(s.id, s)
+  }
+  return [...byId.values()].slice(0, 8).map(toServiceHit)
+}
+
+export async function fetchServicePassportReal(
+  serviceId: string,
+): Promise<ServicePassport | null> {
+  const { data: s } = await supabase
+    .from('services')
+    .select('id, name_ru, oked_code, ikpu_code, admission_mode, complexity_index, authorities(name_ru)')
+    .eq('id', serviceId)
+    .maybeSingle()
+  if (!s) return null
+  return {
+    id: s.id,
+    displayName: s.name_ru,
+    okedCode: s.oked_code ?? undefined,
+    ikpuCode: s.ikpu_code ?? undefined,
+    admissionMode: s.admission_mode ?? undefined,
+    authorityName: s.authorities?.name_ru ?? undefined,
+    complexity: s.complexity_index ?? undefined,
+  }
+}
+
+/** Метрика «документов собрать»: details закрыты RLS — анониму вернётся 0 строк → null (locked) */
+export async function fetchServiceDocumentsCountReal(
+  requirementIds: string[],
+): Promise<number | null> {
+  if (requirementIds.length === 0) return null
+  const { data } = await supabase
+    .from('requirement_details')
+    .select('documents')
+    .in('requirement_id', requirementIds)
+  if (!data || data.length === 0) return null
+  let count = 0
+  for (const row of data) count += parseDocuments(row.documents).length
+  return count
+}
+
 // ── Список требований (уровень 0) ──────────────────────────────────
 
 export interface RequirementListReal {
@@ -253,27 +352,75 @@ export interface RequirementListReal {
   verifiedAt?: string
 }
 
+const REQUIREMENT_LIST_SELECT = `id, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at,
+       lifecycle_stages(id, name_ru, sort_order),
+       authorities(name_ru),
+       requirement_contents(lang, title, sanction_summary),
+       requirement_applicability!inner(code, scope)`
+
+interface RawListRow {
+  id: string
+  deontic: RequirementRow['deontic']
+  operation: RequirementRow['operation']
+  transport_type: RequirementRow['transport'] | null
+  addressee_roles: RequirementRow['roles']
+  trust_label: RequirementRow['trustLabel']
+  review_flag: 'none' | 'flagged_by_change'
+  reviewed_at: string | null
+  published_at: string | null
+  lifecycle_stages: { id: string; name_ru: string; sort_order: number } | null
+  authorities: { name_ru: string } | null
+  requirement_contents: { lang: string; title: string; sanction_summary: string | null }[]
+}
+
 export async function fetchRequirementsReal(
   hsCode: string,
 ): Promise<RequirementListReal> {
   const { data, error } = await supabase
     .from('requirements')
-    .select(
-      `id, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at,
-       lifecycle_stages(id, name_ru, sort_order),
-       authorities(name_ru),
-       requirement_contents(lang, title, sanction_summary),
-       requirement_applicability!inner(code, scope)`,
-    )
+    .select(REQUIREMENT_LIST_SELECT)
     .eq('status', 'published')
     .or(`code.eq.${hsCode},scope.eq.all_products`, {
       referencedTable: 'requirement_applicability',
     })
   if (error) throw error
+  return listFromData(data ?? [])
+}
 
+/** Требования услуги: точный код ОКЭД + классы-префиксы + общие для всех услуг */
+export async function fetchServiceRequirementsReal(
+  okedCode: string | null,
+): Promise<RequirementListReal> {
+  const filters = ['scope.eq.all_services']
+  if (okedCode) {
+    filters.push(`and(scope.eq.oked_code,code.eq.${okedCode})`)
+    const prefixes = okedPrefixes(okedCode)
+    if (prefixes.length > 0)
+      filters.push(`and(scope.eq.oked_prefix,code.in.(${prefixes.join(',')}))`)
+  }
+  const { data, error } = await supabase
+    .from('requirements')
+    .select(REQUIREMENT_LIST_SELECT)
+    .eq('status', 'published')
+    .or(filters.join(','), { referencedTable: 'requirement_applicability' })
+  if (error) throw error
+  return listFromData(data ?? [])
+}
+
+/** «47.73» → ['47', '47.7', '47.73'] — иерархия классов ОКЭД */
+function okedPrefixes(okedCode: string): string[] {
+  const out: string[] = []
+  for (let len = 2; len <= okedCode.length; len++) {
+    const p = okedCode.slice(0, len)
+    if (/^[0-9]{2}(\.[0-9]{1,2})?$/.test(p)) out.push(p)
+  }
+  return out
+}
+
+function listFromData(data: RawListRow[]): RequirementListReal {
   const rows: RequirementRow[] = []
   const seen = new Set<string>()
-  for (const r of data ?? []) {
+  for (const r of data) {
     const content =
       r.requirement_contents.find((c) => c.lang === 'ru') ??
       r.requirement_contents[0]
@@ -331,7 +478,7 @@ export async function fetchRequirementsReal(
       })
   }
 
-  const published = (data ?? [])
+  const published = data
     .map((r) => r.published_at)
     .filter((d): d is string => Boolean(d))
     .sort()

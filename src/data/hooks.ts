@@ -16,6 +16,7 @@ import {
   fetchCard,
   fetchChangeFeed,
   fetchProductBundle,
+  fetchServiceBundle,
   fetchTelemetry,
   search,
   type DataCtx,
@@ -61,6 +62,17 @@ export function useProductBundle(productId: string | undefined) {
     queryKey: ['product', productId, ctx.realSubscriber, ctx.mockSubscriber],
     queryFn: () => fetchProductBundle(productId!, ctx),
     enabled: Boolean(productId),
+    staleTime: 60_000,
+  })
+}
+
+export function useServiceBundle(serviceId: string | undefined) {
+  // realSubscriber в ключе: метрика документов приходит из закрытых RLS-ом details
+  const { realSubscriber } = useAuth()
+  return useQuery({
+    queryKey: ['service', serviceId, realSubscriber],
+    queryFn: () => fetchServiceBundle(serviceId!),
+    enabled: Boolean(serviceId),
     staleTime: 60_000,
   })
 }

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CornerDownLeft, Search } from 'lucide-react'
 import { useContentRequest, useSearchQuery } from '@/data/hooks'
-import type { SearchKind } from '@/data/types'
+import type { SearchHit, SearchKind } from '@/data/types'
 import { useDebounced } from '@/lib/use-debounced'
 import { formatHsCode } from '@/lib/format'
 import { ru } from '@/i18n/ru'
@@ -47,9 +47,9 @@ export function CSearch({ autoFocus }: { autoFocus?: boolean }) {
     return () => document.removeEventListener('pointerdown', onDown)
   }, [])
 
-  function go(id: string) {
+  function go(hit: SearchHit) {
     setOpen(false)
-    navigate(`/product/${id}`)
+    navigate(hit.kind === 'service' ? `/service/${hit.id}` : `/product/${hit.id}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -66,7 +66,7 @@ export function CSearch({ autoFocus }: { autoFocus?: boolean }) {
     } else if (e.key === 'Enter') {
       e.preventDefault()
       const hit = hits[cursor]
-      if (hit) go(hit.id)
+      if (hit) go(hit)
     } else if (e.key === 'Escape') {
       setOpen(false)
     }
@@ -141,7 +141,7 @@ export function CSearch({ autoFocus }: { autoFocus?: boolean }) {
                 <li key={hit.id} role="option" aria-selected={i === cursor}>
                   <button
                     type="button"
-                    onClick={() => go(hit.id)}
+                    onClick={() => go(hit)}
                     onPointerEnter={() => setCursor(i)}
                     className={cn(
                       'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
@@ -152,12 +152,14 @@ export function CSearch({ autoFocus }: { autoFocus?: boolean }) {
                       <span className="block truncate text-[15px] font-medium">
                         {hit.displayName}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {hit.officialName}
-                      </span>
+                      {hit.officialName !== hit.displayName && (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {hit.officialName}
+                        </span>
+                      )}
                     </span>
                     <span className="shrink-0 rounded-md bg-secondary px-2 py-1 font-mono text-[11px] text-secondary-foreground">
-                      {formatHsCode(hit.code)}
+                      {hit.codeKind === 'hs' ? formatHsCode(hit.code) : hit.code}
                     </span>
                     {i === cursor && (
                       <CornerDownLeft className="size-3.5 shrink-0 text-muted-foreground" />
