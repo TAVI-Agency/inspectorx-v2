@@ -51,6 +51,12 @@ export function SiteFooter() {
             >
               Дизайн Б →
             </Link>
+            <Link
+              to="/c"
+              className="text-xs text-muted-foreground transition-colors hover:text-primary"
+            >
+              Дизайн C →
+            </Link>
             <DevMenu />
           </div>
         </div>
