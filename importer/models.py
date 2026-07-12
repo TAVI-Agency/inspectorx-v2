@@ -34,10 +34,33 @@ class Sanction(_Base):
     url: str | None = None
 
 
+def _clean_hs(value):
+    """«8703 80» → «870380»; «4011 (4011 10 — ...)» → «4011»; мусор → None.
+
+    БД: check (hs_code ~ '^[0-9]{2,10}$'). Берём ведущую цифровую группу
+    (цифры и пробелы до первого постороннего символа), пробелы убираем.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    import re
+    m = re.match(r"\s*(\d[\d ]*)", value)
+    if not m:
+        return None
+    code = m.group(1).replace(" ", "")
+    return code if 2 <= len(code) <= 10 else None
+
+
 class ProductScope(_Base):
     level: Literal["all", "domain", "hs_list", "this_code"]
     codes: list[str] | None = None
     list_row: str | None = None
+
+    @field_validator("codes", mode="before")
+    @classmethod
+    def _clean_codes(cls, v):
+        if isinstance(v, list):
+            return [c for c in (_clean_hs(x) for x in v) if c]
+        return v
 
 
 class _BaseRequirement(_Base):
@@ -82,6 +105,11 @@ class ProductPassport(_Base):
     name: str
     hs_code: str | None = None
     ikpu: list[str] | None = []
+
+    @field_validator("hs_code", mode="before")
+    @classmethod
+    def _normalize_hs(cls, v):
+        return _clean_hs(v)
 
     @field_validator("ikpu", mode="before")
     @classmethod

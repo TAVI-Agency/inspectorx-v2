@@ -14,6 +14,13 @@ def test_map_addressees():
     with pytest.raises(MappingError):
         map_addressees(["alien"])
 
+def test_map_addressees_russian():
+    # реальные отчёты пишут адресатов и по-русски
+    assert map_addressees(["продавец", "импортёр", "производитель"]) == \
+        ["seller", "importer", "producer"]
+    assert map_addressees(["импортер", "перевозчик", "владелец"]) == \
+        ["importer", "carrier", "all"]
+
 
 def test_map_category():
     assert map_category("Налоги и платежи") == "fiscal"
