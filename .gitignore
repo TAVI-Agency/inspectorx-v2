@@ -9,3 +9,10 @@ dist/
 logs
 node_modules/
 shots/
+.venv-importer/
+.env.importer
+research/.cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+!.env.importer.example
