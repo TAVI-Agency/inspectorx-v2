@@ -30,7 +30,7 @@ def client(tmp_path, html=HTML):
 
 def test_gate_passes(tmp_path):
     r = verify_item(req(), client(tmp_path), llm=None)
-    assert r.ok and r.doc_id == "6445145" and r.ref == "art.14" and r.confidence >= 0.85
+    assert r.ok and r.doc_id == "-6445145" and r.ref == "art.14" and r.confidence >= 0.85
 
 
 def test_needs_review_short_circuits(tmp_path):

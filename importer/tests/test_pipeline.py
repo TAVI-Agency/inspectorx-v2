@@ -34,7 +34,7 @@ def test_e2e_load(tmp_path):
     s = run_import(path, ix, jb=None, lexuz=lexuz, llm=None,
                    queue_path=tmp_path / "q.jsonl")
     assert (s.loaded, s.merged, s.review) == (1, 0, 0)
-    assert ix.store["requirements"][0]["external_key"] == "lexuz:6445145/art.14"
+    assert ix.store["requirements"][0]["external_key"] == "lexuz:-6445145/art.14"
     assert ix.store["import_runs"][0]["status"] == "loaded"
     assert ix.store["import_items"][0]["status"] == "loaded"
 

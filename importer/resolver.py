@@ -42,7 +42,7 @@ def resolve_act(act, doc_id: str, jb, ix, queue_path: Path) -> dict:
     if jb_row is None:
         _queue_act(queue_path, doc_id, act)
 
-    canonical_url = f"https://lex.uz/ru/docs/-{doc_id}"
+    canonical_url = f"https://lex.uz/ru/docs/{doc_id}"  # doc_id уже со знаком
     if jb_row is not None:
         existing = _first(ix.table("acts").select("*")
                           .eq("jurisbase_act_id", str(jb_row[JB_ID_COLUMN])).limit(1).execute())
@@ -73,5 +73,5 @@ def ensure_paragraph(ix, act_row: dict, ref: str, quote_ru: str | None, doc_id: 
         "act_id": act_row["id"],
         "paragraph_ref": ref,
         "verbatim_ru": quote_ru,
-        "deep_link_url": f"https://lex.uz/ru/docs/-{doc_id}",
+        "deep_link_url": f"https://lex.uz/ru/docs/{doc_id}",
     }).execute())
