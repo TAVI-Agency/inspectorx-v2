@@ -30,6 +30,13 @@ _ADDRESSEES = {
     "exporter": "exporter", "seller": "seller", "retailer": "seller", "vendor": "seller",
     "carrier": "carrier", "transporter": "carrier",
     "owner": "all", "entrepreneur": "all", "business": "all", "all": "all",
+    # реальные отчёты пишут и по-русски
+    "производитель": "producer", "изготовитель": "producer",
+    "импортёр": "importer", "импортер": "importer",
+    "экспортёр": "exporter", "экспортер": "exporter",
+    "продавец": "seller", "ритейлер": "seller", "розничный продавец": "seller",
+    "перевозчик": "carrier",
+    "владелец": "all", "предприниматель": "all", "бизнес": "all", "все": "all",
 }
 
 

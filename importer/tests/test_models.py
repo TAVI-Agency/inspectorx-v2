@@ -45,6 +45,20 @@ def test_service_report_validates():
 def test_parse_report_json_dispatch():
     assert isinstance(parse_report_json(PRODUCT_JSON, "product"), ProductReport)
 
+def test_hs_code_normalized():
+    """Реальные отчёты: hs_code «8703 80», «4011 (4011 10 — легковые...)» — чистим до цифр."""
+    for raw, want in (("8703 80", "870380"),
+                      ("4011 (4011 10 — легковые; 4011 20 — автобусы)", "4011"),
+                      ("2523290000", "2523290000"),
+                      ("нет кода", None)):
+        data = {**PRODUCT_JSON, "product": {**PRODUCT_JSON["product"], "hs_code": raw}}
+        assert ProductReport.model_validate(data).product.hs_code == want
+    # коды в scope тоже чистим
+    data = {**PRODUCT_JSON,
+            "requirements": [{**PRODUCT_JSON["requirements"][0],
+                              "scope": {"level": "hs_list", "codes": ["4011 10", "8703 80"]}}]}
+    assert ProductReport.model_validate(data).requirements[0].scope.codes == ["401110", "870380"]
+
 def test_null_placeholders_tolerated():
     """Реальные отчёты: ikpu=[null], documents=[{name:null,where:null}] — пустышки отбрасываем."""
     data = {**PRODUCT_JSON,
