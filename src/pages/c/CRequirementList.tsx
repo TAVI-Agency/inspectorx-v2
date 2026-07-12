@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { Expand } from '@/components/Expand'
 import { useMarkChangeRead } from '@/data/hooks'
 import type { RequirementRow, StageInfo } from '@/data/types'
-import { categoryOf } from '@/data/taxonomy'
+import { categoryChipOf } from '@/data/taxonomy'
 import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
@@ -161,7 +161,10 @@ function CRow({
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <CDeonticChip deontic={row.deontic} />
-            <CCategoryChip category={categoryOf(row)} />
+            {(() => {
+              const category = categoryChipOf(row)
+              return category && <CCategoryChip category={category} />
+            })()}
             <span className="truncate">
               {row.roles.map((r) => ru.requirement.roles[r]).join(', ')}
             </span>
