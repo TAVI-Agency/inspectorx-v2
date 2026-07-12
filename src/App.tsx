@@ -14,12 +14,15 @@ import { BPricingPage } from './pages/b/BPricingPage'
 import { BCabinetPage } from './pages/b/BCabinetPage'
 import { BAuthPage } from './pages/b/BAuthPage'
 import { BAdminPage } from './pages/b/BAdminPage'
+import { LandingB } from './pages/landing-b/LandingB'
 
 const router = createBrowserRouter([
+  // Производственный лендинг (версия Б) — самодостаточный, вне общего Layout
+  { path: '/', element: <LandingB /> },
   {
     element: <Layout />,
     children: [
-      { path: '/', element: <LandingPage /> },
+      { path: '/landing-a', element: <LandingPage /> },
       { path: '/catalog', element: <CatalogPage /> },
       { path: '/product/:productId', element: <ProductPage /> },
       { path: '/pricing', element: <PricingPage /> },
