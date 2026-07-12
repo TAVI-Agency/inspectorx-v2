@@ -942,6 +942,45 @@
 .lb-price-list .lb-check-ico { transform: translateY(1px); }
 .lb-price-card .lb-btn { margin-top: auto; justify-content: center; }
 
+/* ── вопросы и ответы ────────────────────────────────────────── */
+
+.lb-faq {
+  max-width: 780px;
+  margin-top: 44px;
+}
+.lb-faq details {
+  border-top: 1px solid var(--lb-line);
+}
+.lb-faq details:last-child { border-bottom: 1px solid var(--lb-line); }
+.lb-faq summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 2px;
+  font-weight: 650;
+  font-size: 16.5px;
+}
+.lb-faq summary::-webkit-details-marker { display: none; }
+.lb-faq summary::after {
+  content: '+';
+  font-family: var(--lb-mono);
+  font-size: 18px;
+  line-height: 1;
+  color: var(--lb-cobalt);
+  flex: none;
+  transition: transform 0.25s var(--lb-ease);
+}
+.lb-faq details[open] summary::after { transform: rotate(45deg); }
+.lb-faq-a {
+  margin: 0;
+  padding: 0 2px 20px;
+  color: var(--lb-muted);
+  max-width: 64ch;
+}
+
 /* ── финал ───────────────────────────────────────────────────── */
 
 .lb-final {
