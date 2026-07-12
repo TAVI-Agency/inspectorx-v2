@@ -9,7 +9,7 @@ import { ThemeToggle } from './ThemeToggle'
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return cn(
-    'rounded-md px-2 py-1 text-sm transition-colors hover:text-foreground',
+    'shrink-0 rounded-md px-2 py-1 text-sm whitespace-nowrap transition-colors hover:text-foreground',
     isActive ? 'text-foreground' : 'text-muted-foreground',
   )
 }
@@ -31,7 +31,7 @@ export function SiteHeader() {
         {!isLanding && (
           <TelemetryLine className="hidden min-w-0 flex-1 justify-center md:flex" />
         )}
-        <nav className="ml-auto flex shrink-0 items-center gap-1 md:ml-0">
+        <nav className="scrollbar-none ml-auto flex min-w-0 items-center gap-1 overflow-x-auto md:ml-0">
           <NavLink to="/catalog" className={navLinkClass}>
             {ru.common.registry}
           </NavLink>
@@ -61,7 +61,7 @@ export function SiteHeader() {
         </nav>
       </div>
       {!isLanding && (
-        <div className="border-t border-border/60 px-4 py-1 md:hidden">
+        <div className="scrollbar-none overflow-x-auto border-t border-border/60 px-4 py-1 md:hidden">
           <TelemetryLine />
         </div>
       )}
