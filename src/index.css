@@ -5,6 +5,8 @@
 @import "@fontsource-variable/lora";
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/golos-text";
+@import "@fontsource-variable/unbounded";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -16,6 +18,7 @@
     /* JetBrains Mono — коды ТН ВЭД/ИКПУ, статьи, реквизиты */
     --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
     --ease-brand: cubic-bezier(0.16, 1, 0.3, 1);
+    --color-brass: var(--brass);
     --color-sanction: var(--sanction);
     --color-positive: var(--positive);
     --color-paper: var(--paper);
@@ -84,6 +87,7 @@
     --destructive: #a32d2d;
     --sanction: #a32d2d;
     --positive: #0f6e56;
+    --brass: #9c7420;
     --border: #e2ddd0;
     --input: #d8d2c3;
     --ring: #c8462b;
@@ -123,6 +127,7 @@
     --destructive: #f09595;
     --sanction: #f09595;
     --positive: #5dcaa5;
+    --brass: #d8ab54;
     --border: #2c2924;
     --input: #37332d;
     --ring: #e05a3a;
@@ -211,6 +216,78 @@
     --chart-5: #fbbf24;
 }
 
+/*
+ * ── Дизайн C ───────────────────────────────────────────────────────
+ * «Маршрут товара»: кокпит-навигатор по требованиям. Фарфор + петроль-
+ * чернила, бирюза самаркандской майолики (primary), латунь — ТОЛЬКО
+ * премиум/пейволл (гербовая печать), кармин — только санкции.
+ * Шрифты: Unbounded (дисплей, редко), Golos Text (UI), JetBrains Mono
+ * (коды/реквизиты), Lora (цитаты закона). Изолирован в .theme-c.
+ */
+.theme-c {
+    color-scheme: light;
+    font-family: 'Golos Text Variable', system-ui, sans-serif;
+    --background: #eef2f1;
+    --foreground: #0d1f22;
+    --card: #ffffff;
+    --card-foreground: #0d1f22;
+    --paper: #ffffff;
+    --popover: #ffffff;
+    --popover-foreground: #0d1f22;
+    --primary: #0e7a6d;
+    --primary-foreground: #f0fbf8;
+    --secondary: #e0e9e7;
+    --secondary-foreground: #14343a;
+    --muted: #e5ecea;
+    --muted-foreground: #5a7170;
+    --accent: #d8efe9;
+    --accent-foreground: #0b5248;
+    --destructive: #b3372e;
+    --sanction: #b3372e;
+    --positive: #177d54;
+    --brass: #96701f;
+    --border: #d5e0dd;
+    --input: #c0d0cd;
+    --ring: #0e7a6d;
+    --chart-1: #0e7a6d;
+    --chart-2: #96701f;
+    --chart-3: #177d54;
+    --chart-4: #b3372e;
+    --chart-5: #0d1f22;
+    --radius: 0.75rem;
+}
+
+.dark .theme-c {
+    color-scheme: dark;
+    --background: #0a1517;
+    --foreground: #dde8e6;
+    --card: #101d20;
+    --card-foreground: #dde8e6;
+    --paper: #101d20;
+    --popover: #132326;
+    --popover-foreground: #dde8e6;
+    --primary: #2ec4ae;
+    --primary-foreground: #03211c;
+    --secondary: #17282b;
+    --secondary-foreground: #dde8e6;
+    --accent: #12352f;
+    --accent-foreground: #9fe8d9;
+    --muted: #16262a;
+    --muted-foreground: #8aa3a2;
+    --destructive: #f0918a;
+    --sanction: #f0918a;
+    --positive: #55d09b;
+    --brass: #d8ab54;
+    --border: #1e3236;
+    --input: #2b4348;
+    --ring: #2ec4ae;
+    --chart-1: #2ec4ae;
+    --chart-2: #d8ab54;
+    --chart-3: #55d09b;
+    --chart-4: #f0918a;
+    --chart-5: #dde8e6;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -268,6 +345,102 @@
   }
   .dark .paper-grain {
     opacity: 0.05;
+  }
+
+  /* ── Дизайн C ── */
+
+  /* Дисплейный шрифт кокпита: заголовки и большие числа, с осторожностью */
+  .font-display {
+    font-family: 'Unbounded Variable', 'Golos Text Variable', system-ui, sans-serif;
+  }
+
+  /* Нить маршрута прорисовывается сверху вниз при входе на страницу */
+  .c-thread {
+    transform-origin: top;
+    animation: c-thread-draw 0.9s var(--ease-brand) both;
+  }
+  @keyframes c-thread-draw {
+    0% { transform: scaleY(0); }
+    100% { transform: scaleY(1); }
+  }
+
+  /* Станция маршрута появляется с задержкой var(--i) */
+  .c-station {
+    animation: c-station-in 0.5s var(--ease-brand) both;
+    animation-delay: calc(var(--i, 0) * 70ms + 150ms);
+  }
+  @keyframes c-station-in {
+    0% { opacity: 0; transform: translateX(-6px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  /* Каскадный подъём карточек/строк: задержка var(--i) */
+  .c-rise {
+    animation: c-rise-in 0.55s var(--ease-brand) both;
+    animation-delay: calc(var(--i, 0) * 55ms);
+  }
+  @keyframes c-rise-in {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  /* Горизонтальная SVG-нить героя: рисуется штрихом (pathLength=1) */
+  .c-path-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: c-path-draw 1.6s var(--ease-brand) 0.2s forwards;
+  }
+  @keyframes c-path-draw {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* Живой индикатор телеметрии */
+  .c-live {
+    animation: c-live-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes c-live-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in oklch, var(--positive) 45%, transparent); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 5px transparent; }
+  }
+
+  /* Непрочитанное изменение: мягкая пульсация точки */
+  .c-unread {
+    animation: c-unread-pulse 2s ease-in-out infinite;
+  }
+  @keyframes c-unread-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 40%, transparent); }
+    60% { box-shadow: 0 0 0 4px transparent; }
+  }
+
+  /* Аврора героя: два медленно плывущих пятна бирюзы/латуни */
+  .c-aurora {
+    animation: c-aurora-drift 14s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  .c-aurora-slow {
+    animation-duration: 19s;
+    animation-delay: -7s;
+  }
+  @keyframes c-aurora-drift {
+    0% { transform: translate3d(-4%, -2%, 0) scale(1); }
+    100% { transform: translate3d(5%, 4%, 0) scale(1.12); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .c-thread,
+    .c-station,
+    .c-rise,
+    .c-live,
+    .c-unread,
+    .c-aurora {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+    .c-path-draw {
+      animation: none;
+      stroke-dashoffset: 0;
+    }
   }
 
   /* «Живое досье»: штамп опускается, строки чек-листа самособираются */
