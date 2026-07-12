@@ -14,6 +14,12 @@ import { BPricingPage } from './pages/b/BPricingPage'
 import { BCabinetPage } from './pages/b/BCabinetPage'
 import { BAuthPage } from './pages/b/BAuthPage'
 import { BAdminPage } from './pages/b/BAdminPage'
+import { CLayout } from './pages/c/CLayout'
+import { CCatalogPage } from './pages/c/CCatalogPage'
+import { CProductPage } from './pages/c/CProductPage'
+import { CPricingPage } from './pages/c/CPricingPage'
+import { CCabinetPage } from './pages/c/CCabinetPage'
+import { CAuthPage } from './pages/c/CAuthPage'
 
 const router = createBrowserRouter([
   {
@@ -40,6 +46,18 @@ const router = createBrowserRouter([
       { path: 'admin', element: <BAdminPage /> },
       { path: 'login', element: <BAuthPage mode="login" /> },
       { path: 'register', element: <BAuthPage mode="register" /> },
+    ],
+  },
+  {
+    path: '/c',
+    element: <CLayout />,
+    children: [
+      { index: true, element: <CCatalogPage /> },
+      { path: 'product/:productId', element: <CProductPage /> },
+      { path: 'pricing', element: <CPricingPage /> },
+      { path: 'cabinet', element: <CCabinetPage /> },
+      { path: 'login', element: <CAuthPage mode="login" /> },
+      { path: 'register', element: <CAuthPage mode="register" /> },
     ],
   },
 ])
