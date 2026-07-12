@@ -30,7 +30,7 @@ export function CAuthPage({ mode }: { mode: 'login' | 'register' }) {
   const isRegister = mode === 'register'
 
   useEffect(() => {
-    if (!loading && session) navigate('/c/cabinet', { replace: true })
+    if (!loading && session) navigate('/cabinet', { replace: true })
   }, [loading, session, navigate])
 
   async function submit(e: React.FormEvent) {
@@ -42,7 +42,7 @@ export function CAuthPage({ mode }: { mode: 'login' | 'register' }) {
       : await signIn(email.trim(), password)
     setPending(false)
     if (result.error) setError(mapAuthError(result.error))
-    else navigate('/c/cabinet', { replace: true })
+    else navigate('/cabinet', { replace: true })
   }
 
   return (
@@ -106,11 +106,11 @@ export function CAuthPage({ mode }: { mode: 'login' | 'register' }) {
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             {isRegister ? (
-              <Link to="/c/login" className="underline-offset-2 hover:text-foreground hover:underline">
+              <Link to="/login" className="underline-offset-2 hover:text-foreground hover:underline">
                 {ru.auth.switchToLogin}
               </Link>
             ) : (
-              <Link to="/c/register" className="underline-offset-2 hover:text-foreground hover:underline">
+              <Link to="/register" className="underline-offset-2 hover:text-foreground hover:underline">
                 {ru.auth.switchToRegister}
               </Link>
             )}

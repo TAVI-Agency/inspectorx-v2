@@ -14,7 +14,7 @@ import { useRequirementCard } from '@/data/hooks'
 import type { Citation, Gated, HistoryEntry, RequirementRow } from '@/data/types'
 import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
-import { AskQuestionDialog, useAskDialogState } from '@/pages/product/AskQuestionDialog'
+import { AskQuestionDialog, useAskDialogState } from '@/components/AskQuestionDialog'
 import { CEyebrow, CPaywallGate, CPaywallPanel, CTrustStamp } from './ui'
 
 /** Шаги переноса v1 приходят с префиксом «(Пункт 35 …)\n» — выносим в реквизит */

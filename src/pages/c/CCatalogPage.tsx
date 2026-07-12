@@ -8,7 +8,7 @@ import { CCard, CEyebrow } from './ui'
 import { CSearch } from './CSearch'
 
 /**
- * Реестр (/c): одна работа страницы — найти товар. Hero с авророй,
+ * Реестр (/catalog): одна работа страницы — найти товар. Hero с авророй,
  * большой поиск и маршрут товара как подпись дизайна.
  */
 export function CCatalogPage() {
@@ -50,7 +50,7 @@ export function CCatalogPage() {
             {exampleHits.map((hit, i) => (
               <Link
                 key={hit.id}
-                to={`/c/product/${hit.id}`}
+                to={`/product/${hit.id}`}
                 className="group focus-visible:outline-none"
               >
                 <CCard
