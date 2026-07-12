@@ -7,6 +7,9 @@ import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
 import { CCabinetPage } from './pages/c/CCabinetPage'
 import { CAuthPage } from './pages/c/CAuthPage'
+import { CConfirmEmailPage } from './pages/c/CConfirmEmailPage'
+import { CForgotPasswordPage } from './pages/c/CForgotPasswordPage'
+import { CResetPasswordPage } from './pages/c/CResetPasswordPage'
 import { LandingB } from './pages/landing-b/LandingB'
 
 const router = createBrowserRouter([
@@ -23,6 +26,9 @@ const router = createBrowserRouter([
       { path: '/cabinet', element: <CCabinetPage /> },
       { path: '/login', element: <CAuthPage mode="login" /> },
       { path: '/register', element: <CAuthPage mode="register" /> },
+      { path: '/auth/confirm', element: <CConfirmEmailPage /> },
+      { path: '/auth/reset', element: <CResetPasswordPage /> },
+      { path: '/forgot-password', element: <CForgotPasswordPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
