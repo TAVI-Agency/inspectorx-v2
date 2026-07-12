@@ -4,24 +4,27 @@
 /* ═══════════════════════════════════════════════════════════════════
    Landing B — «Один маршрут»
    Самодостаточная дизайн-система лендинга, всё под префиксом .lb-.
-   Тёмный «ночной» hero (граница) → светлая «бумага» документа.
+   Палитра выровнена с дизайном C «Маршрут товара»: бирюза + петроль +
+   латунь (только премиум/пейволл). Тёмный «петроль» hero/финал →
+   светлая «фарфоровая» бумага документа.
    ═══════════════════════════════════════════════════════════════════ */
 
 .lb {
   /* палитра */
-  --lb-ink: #0e1a2b;          /* основной текст */
-  --lb-deep: #071120;         /* фон героя и финала */
-  --lb-deep-2: #0b1a30;       /* градиентная пара к deep */
-  --lb-paper: #f4f5f1;        /* фон страницы */
+  --lb-ink: #0d1f22;          /* основной текст — петроль-чернила */
+  --lb-deep: #0a1517;         /* фон героя и финала — тёмный петроль */
+  --lb-deep-2: #11282c;       /* градиентная пара к deep */
+  --lb-paper: #eef2f1;        /* фон страницы — фарфор */
   --lb-card: #ffffff;
-  --lb-cobalt: #2342c6;       /* чернила печати — главный акцент */
-  --lb-cobalt-deep: #1a339c;
-  --lb-sky: #8fa7ff;          /* маршруты и акценты на тёмном */
-  --lb-stamp: #c22b3c;        /* санкции, штраф */
-  --lb-visa: #14795a;         /* «разрешено» */
-  --lb-muted: #5b6577;
-  --lb-line: #dfe2e8;
-  --lb-line-dark: rgba(143, 167, 255, 0.16);
+  --lb-cobalt: #0e7a6d;       /* бирюза — главный акцент */
+  --lb-cobalt-deep: #0b5248;
+  --lb-sky: #2ec4ae;          /* бирюза на тёмном */
+  --lb-stamp: #b3372e;        /* санкции, штраф — кармин */
+  --lb-visa: #177d54;         /* «разрешено» */
+  --lb-muted: #5a7170;
+  --lb-line: #d5e0dd;
+  --lb-line-dark: rgba(46, 196, 174, 0.16);
+  --lb-brass: #96701f;        /* латунь — только премиум/пейволл */
 
   /* шрифты */
   --lb-display: 'Unbounded Variable', 'Arial Black', sans-serif;
@@ -41,7 +44,7 @@
 
 .lb * { box-sizing: border-box; }
 .lb :focus-visible { outline: 2px solid var(--lb-cobalt); outline-offset: 3px; border-radius: 4px; }
-.lb ::selection { background: rgba(35, 66, 198, 0.18); }
+.lb ::selection { background: rgba(14, 122, 109, 0.18); }
 
 .lb-container {
   max-width: 1128px;
@@ -55,7 +58,7 @@
   font-family: var(--lb-mono);
   font-size: 11.5px;
   font-weight: 500;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--lb-cobalt);
   display: flex;
@@ -78,7 +81,7 @@
   line-height: 1.08;
   letter-spacing: -0.01em;
   margin: 22px 0 0;
-  color: #f2f5ff;
+  color: #eafaf6;
 }
 .lb-h1 em {
   font-style: normal;
@@ -128,14 +131,14 @@
 .lb-btn--primary:hover { background: var(--lb-cobalt-deep); }
 
 .lb-btn--glass {
-  background: rgba(143, 167, 255, 0.08);
-  border-color: rgba(143, 167, 255, 0.3);
-  color: #dfe6ff;
+  background: rgba(46, 196, 174, 0.08);
+  border-color: rgba(46, 196, 174, 0.3);
+  color: #d9f2ec;
 }
-.lb-btn--glass:hover { background: rgba(143, 167, 255, 0.16); border-color: rgba(143, 167, 255, 0.5); }
+.lb-btn--glass:hover { background: rgba(46, 196, 174, 0.16); border-color: rgba(46, 196, 174, 0.5); }
 
 .lb-btn--ink { background: var(--lb-ink); color: #fff; }
-.lb-btn--ink:hover { background: #1d2c44; }
+.lb-btn--ink:hover { background: #17292b; }
 
 .lb-btn--line { border-color: var(--lb-line); color: var(--lb-ink); background: transparent; }
 .lb-btn--line:hover { border-color: var(--lb-ink); }
@@ -164,7 +167,7 @@
   font-size: 17px;
   letter-spacing: 0.01em;
   text-decoration: none;
-  color: #f2f5ff;
+  color: #eafaf6;
   display: flex;
   align-items: baseline;
   gap: 2px;
@@ -181,19 +184,19 @@
   font-size: 14.5px;
   font-weight: 500;
   text-decoration: none;
-  color: rgba(226, 233, 255, 0.78);
+  color: rgba(215, 235, 230, 0.78);
   padding: 9px 13px;
   border-radius: 8px;
   transition: color 0.2s, background 0.2s;
 }
-.lb-nav a:hover { color: #fff; background: rgba(143, 167, 255, 0.1); }
+.lb-nav a:hover { color: #fff; background: rgba(46, 196, 174, 0.1); }
 
 .lb-header-cta {
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
-  color: #071120;
-  background: #eef1ff;
+  color: #0a1517;
+  background: #e6f5f0;
   padding: 10px 18px;
   border-radius: 9px;
   transition: background 0.2s, color 0.2s;
@@ -203,13 +206,13 @@
 
 /* шапка после героя — «бумага» */
 .lb-header[data-solid='true'] {
-  background: rgba(244, 245, 241, 0.97);
+  background: rgba(238, 242, 241, 0.97);
   border-bottom-color: var(--lb-line);
 }
 .lb-header[data-solid='true'] .lb-logo { color: var(--lb-ink); }
 .lb-header[data-solid='true'] .lb-logo b { color: var(--lb-cobalt); }
 .lb-header[data-solid='true'] .lb-nav a { color: var(--lb-muted); }
-.lb-header[data-solid='true'] .lb-nav a:hover { color: var(--lb-ink); background: rgba(14, 26, 43, 0.05); }
+.lb-header[data-solid='true'] .lb-nav a:hover { color: var(--lb-ink); background: rgba(13, 31, 34, 0.05); }
 .lb-header[data-solid='true'] .lb-header-cta { background: var(--lb-cobalt); color: #fff; }
 .lb-header[data-solid='true'] .lb-header-cta:hover { background: var(--lb-cobalt-deep); }
 
@@ -220,11 +223,12 @@
 /* ── герой ────────────────────────────────────────────────────── */
 
 .lb-hero {
+  --lb-brass: #d8ab54;
   position: relative;
   background:
-    radial-gradient(1100px 520px at 78% 30%, rgba(35, 66, 198, 0.22), transparent 65%),
+    radial-gradient(1100px 520px at 78% 30%, rgba(14, 122, 109, 0.22), transparent 65%),
     linear-gradient(168deg, var(--lb-deep-2), var(--lb-deep) 55%);
-  color: #e8edfb;
+  color: #e3f3ef;
   overflow: hidden;
 }
 .lb-hero-canvas {
@@ -242,7 +246,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(7, 17, 32, 0.82) 0%, rgba(7, 17, 32, 0.35) 46%, transparent 72%);
+  background: linear-gradient(90deg, rgba(10, 21, 23, 0.82) 0%, rgba(10, 21, 23, 0.35) 46%, transparent 72%);
   pointer-events: none;
 }
 .lb-hero-inner {
@@ -260,7 +264,7 @@
 .lb-hero-sub {
   font-size: clamp(16px, 1.7vw, 18.5px);
   line-height: 1.7;
-  color: rgba(214, 223, 248, 0.82);
+  color: rgba(210, 232, 226, 0.82);
   max-width: 54ch;
   margin: 24px 0 0;
 }
@@ -284,15 +288,16 @@
   font-family: var(--lb-display);
   font-weight: 500;
   font-size: clamp(22px, 3vw, 34px);
-  color: #f2f5ff;
+  color: #eafaf6;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 .lb-stat-label {
   font-family: var(--lb-mono);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(143, 167, 255, 0.75);
+  color: rgba(46, 196, 174, 0.75);
   margin-top: 8px;
 }
 @media (max-width: 720px) {
@@ -313,7 +318,7 @@
 /* ── секции ───────────────────────────────────────────────────── */
 
 .lb-section { padding-block: clamp(76px, 10vw, 130px); }
-.lb-section--tint { background: #eef0ea; }
+.lb-section--tint { background: #e9f0ee; }
 .lb-section-head { max-width: 720px; }
 
 /* появление по скроллу */
@@ -376,16 +381,16 @@
   .lb-risk-grid { grid-template-columns: 1fr; }
 }
 
-/* ── паспорт товара (демо) ───────────────────────────────────── */
+/* ── паспорт товара (демо) — прибор кокпита C ──────────────────── */
 
 .lb-passport {
   margin-top: 56px;
   background: var(--lb-card);
   border: 1px solid var(--lb-line);
-  border-radius: 18px;
+  border-radius: 12px;
   box-shadow:
-    0 1px 2px rgba(14, 26, 43, 0.04),
-    0 24px 64px -32px rgba(14, 26, 43, 0.25);
+    0 1px 1px rgba(13, 31, 34, 0.03),
+    0 12px 28px -20px rgba(13, 31, 34, 0.28);
   overflow: hidden;
 }
 .lb-passport-head {
@@ -399,8 +404,9 @@
 }
 .lb-passport-kicker {
   font-family: var(--lb-mono);
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--lb-muted);
 }
@@ -414,8 +420,8 @@
   font-family: var(--lb-mono);
   font-size: 13.5px;
   color: var(--lb-cobalt);
-  background: rgba(35, 66, 198, 0.07);
-  border: 1px solid rgba(35, 66, 198, 0.18);
+  background: rgba(14, 122, 109, 0.07);
+  border: 1px solid rgba(14, 122, 109, 0.18);
   padding: 8px 12px;
   border-radius: 8px;
   white-space: nowrap;
@@ -437,7 +443,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: #fafbf9;
+  background: #f7faf9;
 }
 @media (max-width: 900px) {
   .lb-ops {
@@ -476,21 +482,21 @@
   border-radius: 10px;
   padding: 12px 14px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
   white-space: nowrap;
 }
-.lb-op:hover { background: rgba(14, 26, 43, 0.045); }
+.lb-op:hover { background: rgba(13, 31, 34, 0.045); }
 .lb-op[aria-selected='true'] {
-  background: #fff;
-  border-color: var(--lb-line);
-  box-shadow: 0 1px 3px rgba(14, 26, 43, 0.07);
-  color: var(--lb-cobalt);
+  background: rgba(14, 122, 109, 0.08);
+  border-color: rgba(14, 122, 109, 0.28);
+  color: var(--lb-cobalt-deep);
 }
 .lb-op-count {
   font-family: var(--lb-mono);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   color: var(--lb-muted);
-  background: rgba(14, 26, 43, 0.055);
+  background: rgba(13, 31, 34, 0.055);
   border-radius: 20px;
   padding: 2px 9px;
 }
@@ -519,6 +525,7 @@
   font-family: var(--lb-mono);
   font-size: 12.5px;
   letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
   color: var(--lb-muted);
   background: transparent;
   border: 1px solid var(--lb-line);
@@ -527,17 +534,40 @@
   cursor: pointer;
   transition: all 0.2s;
 }
-.lb-transport:hover { border-color: var(--lb-ink); color: var(--lb-ink); }
+.lb-transport:hover { border-color: var(--lb-cobalt); color: var(--lb-cobalt); }
 .lb-transport[aria-selected='true'] {
-  background: var(--lb-ink);
-  border-color: var(--lb-ink);
+  background: var(--lb-cobalt);
+  border-color: var(--lb-cobalt);
   color: #fff;
+}
+
+/* нить маршрута этапов — станции на вертикальной линии, как CRouteNav */
+.lb-route {
+  position: relative;
+}
+.lb-thread {
+  position: absolute;
+  left: 9px;
+  top: 20px;
+  bottom: 16px;
+  width: 1.5px;
+  background: linear-gradient(to bottom, var(--lb-cobalt), rgba(14, 122, 109, 0.25));
+  transform-origin: top;
+  animation: lb-thread-draw 0.9s var(--lb-ease) both;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes lb-thread-draw {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
 }
 
 .lb-stage { margin-bottom: 8px; }
 .lb-stage-name {
+  position: relative;
+  z-index: 1;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   font-family: var(--lb-mono);
   font-size: 12px;
@@ -546,10 +576,27 @@
   color: var(--lb-muted);
   padding: 14px 0 10px;
 }
-.lb-stage-name b {
-  font-weight: 600;
-  color: var(--lb-cobalt);
+.lb-station {
   flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--lb-cobalt);
+  background: var(--lb-card);
+  color: var(--lb-cobalt-deep);
+  font-family: var(--lb-mono);
+  font-weight: 600;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  animation: lb-station-in 0.5s var(--lb-ease) both;
+  animation-delay: calc(var(--d, 0) * 1ms);
+}
+@keyframes lb-station-in {
+  0% { opacity: 0; transform: translateX(-6px); }
+  100% { opacity: 1; transform: none; }
 }
 .lb-stage-name::after {
   content: '';
@@ -575,20 +622,32 @@
   color: var(--lb-ink);
   transition: background 0.2s, border-color 0.2s;
 }
-.lb-req:hover { background: rgba(35, 66, 198, 0.045); }
-.lb-req[aria-expanded='true'] { background: rgba(35, 66, 198, 0.055); border-color: rgba(35, 66, 198, 0.16); }
+.lb-req:hover { background: rgba(14, 122, 109, 0.045); }
+.lb-req[aria-expanded='true'] { background: rgba(14, 122, 109, 0.055); border-color: rgba(14, 122, 109, 0.16); }
 .lb-req-cat {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   font-family: var(--lb-mono);
   font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--lb-cobalt);
-  border: 1px solid rgba(35, 66, 198, 0.28);
+  border: 1px solid rgba(14, 122, 109, 0.28);
   border-radius: 5px;
   padding: 3px 7px;
   min-width: 92px;
   text-align: center;
+}
+.lb-req-cat::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
 }
 .lb-req-title { flex: 1; line-height: 1.4; }
 .lb-req-chev {
@@ -612,7 +671,7 @@
   font-size: 14px;
   color: var(--lb-muted);
 }
-.lb-stage-empty svg { color: var(--lb-cobalt); flex: none; }
+.lb-stage-empty svg { color: var(--lb-brass); flex: none; }
 
 /* появление строк при смене вкладки */
 .lb-anim-in {
@@ -627,7 +686,7 @@
   margin: 6px 4px 14px;
   border: 1px solid var(--lb-line);
   border-radius: 12px;
-  background: #fafbfe;
+  background: #f5faf9;
   padding: 20px 22px;
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -654,7 +713,7 @@
   font-size: 13.5px;
   color: var(--lb-muted);
 }
-.lb-lock svg { color: var(--lb-cobalt); flex: none; }
+.lb-lock svg { color: var(--lb-brass); flex: none; }
 .lb-detail-sanction p { color: var(--lb-stamp); font-weight: 550; }
 .lb-detail-cite {
   grid-column: 1 / -1;
@@ -689,7 +748,7 @@
   gap: 14px;
   border-top: 1px solid var(--lb-line);
   padding: 18px 30px;
-  background: #fafbf9;
+  background: #f7faf9;
   font-size: 14px;
   color: var(--lb-muted);
 }
@@ -739,7 +798,7 @@
 .lb-step p code {
   font-family: var(--lb-mono);
   font-size: 13px;
-  background: rgba(14, 26, 43, 0.05);
+  background: rgba(13, 31, 34, 0.05);
   padding: 2px 6px;
   border-radius: 5px;
 }
@@ -757,8 +816,9 @@
 @media (max-width: 900px) { .lb-inside { grid-template-columns: 1fr; } }
 
 .lb-cite-card {
+  --lb-brass: #d8ab54;
   background: var(--lb-deep);
-  color: #e8edfb;
+  color: #e3f3ef;
   border-radius: 16px;
   padding: 34px 34px 30px;
   position: relative;
@@ -772,7 +832,7 @@
   font-family: var(--lb-serif);
   font-size: 190px;
   line-height: 1;
-  color: rgba(143, 167, 255, 0.09);
+  color: rgba(46, 196, 174, 0.09);
 }
 .lb-cite-card blockquote {
   font-family: var(--lb-serif);
@@ -788,7 +848,7 @@
   padding-top: 18px;
   border-top: 1px solid var(--lb-line-dark);
   font-size: 13.5px;
-  color: rgba(214, 223, 248, 0.65);
+  color: rgba(210, 232, 226, 0.65);
 }
 
 .lb-checklist { display: flex; flex-direction: column; gap: 0; }
@@ -854,9 +914,10 @@
   display: flex;
   flex-direction: column;
 }
+/* тариф «Ранний доступ» — латунная окантовка, гербовый маркер премиума */
 .lb-price-card--pro {
-  border-color: rgba(35, 66, 198, 0.4);
-  box-shadow: 0 24px 60px -36px rgba(35, 66, 198, 0.45);
+  border-color: rgba(150, 112, 31, 0.4);
+  box-shadow: 0 24px 60px -36px rgba(150, 112, 31, 0.45);
   position: relative;
 }
 .lb-price-tag {
@@ -866,13 +927,14 @@
   text-transform: uppercase;
   color: var(--lb-muted);
 }
-.lb-price-card--pro .lb-price-tag { color: var(--lb-cobalt); }
+.lb-price-card--pro .lb-price-tag { color: var(--lb-brass); }
 .lb-price-num {
   font-family: var(--lb-display);
   font-weight: 500;
   font-size: clamp(26px, 3vw, 34px);
   margin-top: 16px;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 .lb-price-per { font-size: 14px; color: var(--lb-muted); margin-top: 6px; }
 .lb-price-list { margin: 24px 0 30px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
@@ -883,27 +945,28 @@
 /* ── финал ───────────────────────────────────────────────────── */
 
 .lb-final {
+  --lb-brass: #d8ab54;
   position: relative;
   background:
-    radial-gradient(900px 460px at 50% 120%, rgba(35, 66, 198, 0.35), transparent 70%),
+    radial-gradient(900px 460px at 50% 120%, rgba(14, 122, 109, 0.35), transparent 70%),
     linear-gradient(180deg, var(--lb-deep) 0%, var(--lb-deep-2) 100%);
-  color: #f2f5ff;
+  color: #eafaf6;
   text-align: center;
   overflow: hidden;
 }
 .lb-final .lb-section-head { max-width: none; }
-.lb-final .lb-h2 { max-width: none; color: #f2f5ff; }
-.lb-final .lb-lede { margin-inline: auto; color: rgba(214, 223, 248, 0.78); }
+.lb-final .lb-h2 { max-width: none; color: #eafaf6; }
+.lb-final .lb-lede { margin-inline: auto; color: rgba(210, 232, 226, 0.78); }
 .lb-final .lb-eyebrow { justify-content: center; }
 .lb-final .lb-eyebrow::before { display: none; }
 .lb-final-ctas { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; margin-top: 40px; }
 
-/* печать-розетка */
+/* печать-розетка — гербовая, латунный контур (премиум-финал) */
 .lb-seal {
   width: 128px;
   height: 128px;
   margin: 0 auto 30px;
-  color: var(--lb-sky);
+  color: var(--lb-brass);
   opacity: 0.9;
 }
 .lb-seal-spin { animation: lb-spin 40s linear infinite; transform-origin: center; }
@@ -912,8 +975,9 @@
 /* ── подвал ──────────────────────────────────────────────────── */
 
 .lb-footer {
+  --lb-brass: #d8ab54;
   background: var(--lb-deep);
-  color: rgba(214, 223, 248, 0.72);
+  color: rgba(210, 232, 226, 0.72);
   border-top: 1px solid var(--lb-line-dark);
   padding-block: 44px;
   font-size: 14px;
@@ -927,7 +991,7 @@
 }
 .lb-footer .lb-logo { font-size: 15px; }
 .lb-footer-links { display: flex; flex-wrap: wrap; gap: 4px 22px; }
-.lb-footer a { color: rgba(214, 223, 248, 0.72); text-decoration: none; }
+.lb-footer a { color: rgba(210, 232, 226, 0.72); text-decoration: none; }
 .lb-footer a:hover { color: #fff; }
 .lb-footer-note {
   margin-top: 34px;
@@ -938,14 +1002,16 @@
   gap: 10px 32px;
   justify-content: space-between;
   font-size: 12.5px;
-  color: rgba(214, 223, 248, 0.45);
+  color: rgba(210, 232, 226, 0.45);
 }
 
 /* ── доступность: без движения ──────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .lb-rise,
-  .lb-anim-in {
+  .lb-anim-in,
+  .lb-thread,
+  .lb-station {
     animation: none;
     opacity: 1;
     transform: none;
