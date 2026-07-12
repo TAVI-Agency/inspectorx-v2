@@ -134,6 +134,17 @@ export function categoryOf(row: { stageName: string; title: string }): Requireme
   return 'customs'
 }
 
+/** Категория для чипа строки: у услуг фолбэк «Таможня» — ложь интерфейса, чип скрываем. */
+export function categoryChipOf(row: {
+  stageName: string
+  title: string
+  operation: Operation
+}): RequirementCategory | null {
+  const cat = categoryOf(row)
+  if (cat === 'customs' && row.operation === 'service') return null
+  return cat
+}
+
 /** Этапы (для чипов) по произвольному подмножеству строк — со счётчиками. */
 export function stagesOf(rows: RequirementRow[]): StageInfo[] {
   const map = new Map<string, StageInfo>()

@@ -209,9 +209,11 @@ export function CServicePage() {
 }
 
 function scrollToStage(stageId: string) {
-  document
-    .getElementById(`stage-${stageId}`)
-    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // scrollIntoView в этом лейауте не прокручивает window — считаем позицию сами
+  const el = document.getElementById(`stage-${stageId}`)
+  if (!el) return
+  const top = window.scrollY + el.getBoundingClientRect().top - 88 // ≈ scroll-mt-24
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
 }
 
 /** Нить этапов жизни бизнеса — станции маршрута услуги (вместо операций товара) */
