@@ -26,9 +26,18 @@ interface AuthCtx {
     email: string,
     password: string,
     fullName: string,
-  ) => Promise<{ error?: string }>
+  ) => Promise<{ error?: string; needsConfirmation?: boolean }>
+  /** Повторно отправить письмо подтверждения регистрации */
+  resendConfirmation: (email: string) => Promise<{ error?: string }>
+  /** Письмо со ссылкой на смену пароля */
+  requestPasswordReset: (email: string) => Promise<{ error?: string }>
+  /** Смена пароля у текущей (recovery) сессии */
+  updatePassword: (password: string) => Promise<{ error?: string }>
   signOut: () => Promise<void>
 }
+
+/** Ссылки в письмах должны вести на текущий домен, а не на Site URL проекта */
+const emailRedirect = (path: string) => `${window.location.origin}${path}`
 
 const Ctx = createContext<AuthCtx | null>(null)
 
@@ -83,15 +92,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(
     async (email: string, password: string, fullName: string) => {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: {
+          data: { full_name: fullName },
+          emailRedirectTo: emailRedirect('/auth/confirm'),
+        },
       })
-      return error ? { error: error.message } : {}
+      if (error) return { error: error.message }
+      // При включённом подтверждении почты Supabase не выдаёт ошибку на занятый
+      // email (анти-перечисление), а возвращает пользователя без identities.
+      if (data.user && data.user.identities?.length === 0)
+        return { error: 'already registered' }
+      return { needsConfirmation: !data.session }
     },
     [],
   )
+
+  const resendConfirmation = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: emailRedirect('/auth/confirm') },
+    })
+    return error ? { error: error.message } : {}
+  }, [])
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: emailRedirect('/auth/reset'),
+    })
+    return error ? { error: error.message } : {}
+  }, [])
+
+  const updatePassword = useCallback(async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password })
+    return error ? { error: error.message } : {}
+  }, [])
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
@@ -106,6 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         realSubscriber: profile?.isSubscribed ?? false,
         signIn,
         signUp,
+        resendConfirmation,
+        requestPasswordReset,
+        updatePassword,
         signOut,
       }}
     >
