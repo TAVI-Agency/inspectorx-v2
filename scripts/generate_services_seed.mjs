@@ -1,17 +1,21 @@
 #!/usr/bin/env node
 /**
- * Сид модуля услуг: «Розничная аптека» + горизонтальные требования всех услуг.
+ * Сид модуля услуг: «Розничная аптека», «Кафе» + горизонтальные требования.
  *
- * Источник контента: docs/SERVICES_PASSPORT_PROPOSAL.md (утверждено 12.07.2026),
- * раздел 6 (карточки аптеки) и «горизонтальный слой». Правила честности:
- *  - непроверенные факты из раздела 7 НЕ публикуются (status=draft) и не
- *    досочиняются (спорные номера статей/суммы опущены);
+ * Источники контента:
+ *  - аптека: docs/SERVICES_PASSPORT_PROPOSAL.md (утверждено 12.07.2026), раздел 6;
+ *  - кафе: docs/CAFE_RESEARCH.md (ресёрч 12.07.2026).
+ * Правила честности:
+ *  - непроверенные факты НЕ публикуются (status=draft) и не досочиняются
+ *    (спорные номера статей/суммы опущены);
  *  - всё опубликованное — trust_label=ai_draft (юрвычитка впереди);
  *  - дословных цитат пунктов НЕ выдумываем: act_paragraphs несут только
  *    реквизит (paragraph_ref), verbatim добавит юрист.
  *
- * Выход: supabase/migrations/20260712110000_services_content.sql —
- * идемпотентная data-миграция (детерминированные uuid + on conflict do nothing).
+ * Выход (идемпотентные data-миграции: детерминированные uuid + on conflict):
+ *  - supabase/migrations/20260712110000_services_content.sql — аптека + горизонталь;
+ *  - supabase/migrations/20260712150000_cafe_content.sql — кафе + UzQR + обновление
+ *    налоговой карточки (порог 5 млрд с 01.06.2026).
  *
  * Запуск: node scripts/generate_services_seed.mjs
  */
@@ -51,6 +55,15 @@ const AUTHORITIES = {
 }
 for (const [code, a] of Object.entries(AUTHORITIES)) a.id = uuid(`authority:${code}`)
 
+// Ведомства, появившиеся со второй услугой (кафе), — эмитятся только в её миграции
+const CAFE_AUTHORITIES = {
+  raqobat: {
+    name: 'Комитет по развитию конкуренции и защите прав потребителей',
+    website: 'https://raqobat.gov.uz',
+  },
+}
+for (const [code, a] of Object.entries(CAFE_AUTHORITIES)) a.id = uuid(`authority:${code}`)
+
 const ACTS = {
   zru701: { title: 'Закон ЗРУ-701 от 14.07.2021 «О лицензировании, разрешительных и уведомительных процедурах»' },
   pkm80: { title: 'Постановление Кабинета Министров №80 от 21.02.2022 (паспорта лицензируемых видов деятельности)' },
@@ -76,7 +89,33 @@ const ACTS = {
 }
 for (const [code, a] of Object.entries(ACTS)) a.id = uuid(`act:${code}`)
 
-// --- услуга -------------------------------------------------------------------
+// Акты, появившиеся с кафе, — эмитятся только в его миграции
+const CAFE_ACTS = {
+  zru844: { title: 'Закон ЗРУ-844 от 24.05.2023 «Об ограничении распространения и употребления алкогольной и табачной продукции»' },
+  zru878: { title: 'Закон ЗРУ-878 от 15.11.2023 (усиление ответственности за санитарные нарушения и небезопасную продукцию)' },
+  zru1034: { title: 'Закон ЗРУ-1034 от 20.02.2025 (уведомления о торговле алкоголем — налоговым органам)' },
+  zru1098: { title: 'Закон ЗРУ-1098 от 27.11.2025 (запрет электронных сигарет; уведомительный порядок торговли алкоголем и табаком)' },
+  sankvan0027: { title: 'СанҚваН №0027-22 «Санитарно-гигиенические требования к предприятиям общественного питания» (пост. №14 от 14.07.2022)' },
+  sankvan0079: { title: 'СанҚваН №0079-24 (общие санитарные правила безопасности пищевой продукции, пост. №22 от 14.11.2024)' },
+  law483: { title: 'Закон №483-I от 30.08.1997 «О качестве и безопасности пищевой продукции»' },
+  pkm75: { title: 'Постановление Кабинета Министров №75 от 13.02.2003 (правила розничной торговли и общепита)' },
+  pp203: { title: 'Постановление Президента ПП-203 от 30.05.2024 (уведомительный порядок торговли пивом и табаком)' },
+  pkm631: { title: 'Постановление Кабинета Министров №631 от 01.11.2022 (маркировка воды и прохладительных напитков)' },
+  pkm833: { title: 'Постановление Кабинета Министров №833 от 30.12.2020 (этапы обязательной цифровой маркировки)' },
+  pkm589: { title: 'Постановление Кабинета Министров №589 от 16.09.2025 (пищевые отходы предприятий общественного питания)' },
+  mz200: { title: 'Приказ Минздрава №200 (рег. МЮ №2387 от 29.08.2012, положение о медицинских осмотрах)' },
+  up184: { title: 'Указ Президента УП-184 от 14.11.2024 (система «Риск-анализ» и единый реестр проверок)' },
+  courier2025: { title: 'Правила курьерской деятельности в сфере электронной торговли (рег. Минюст, июнь 2025)' },
+  uzqrDecree: { title: 'Указ Президента от 10.12.2025 о расширении безналичных платежей (единый QR-код)' },
+  pkm791: { title: 'Постановление Кабинета Министров №791 от 15.12.2025 (отмена ПКМ №624 о ночной работе общепита)' },
+  pkm88: { title: 'Постановление Кабинета Министров №88 от 25.02.2022 (порядок уведомления о начале и прекращении деятельности)' },
+}
+for (const [code, a] of Object.entries(CAFE_ACTS)) a.id = uuid(`act:${code}`)
+
+const ALL_AUTHORITIES = { ...AUTHORITIES, ...CAFE_AUTHORITIES }
+const ALL_ACTS = { ...ACTS, ...CAFE_ACTS }
+
+// --- услуги -------------------------------------------------------------------
 
 const SERVICE = {
   id: uuid('service:apteka-4773'),
@@ -99,6 +138,32 @@ const SERVICE = {
     { alias: 'dorixona ochish', lang: 'uz' },
     { alias: 'pharmacy', lang: 'en', isDefault: true },
     { alias: 'drugstore', lang: 'en' },
+  ],
+}
+
+const CAFE = {
+  id: uuid('service:cafe-5610'),
+  okedCode: '56.10',
+  ikpuCode: null, // не верифицирован — не досочиняем
+  nameRu: 'Кафе (общественное питание)',
+  nameUz: 'Kafe (umumiy ovqatlanish)',
+  nameEn: 'Café / restaurant',
+  admissionMode: 'free', // общепита нет в прил. №1–3 ЗРУ-701
+  authorityId: AUTHORITIES.ses.id, // основной контролёр — Санэпидкомитет
+  complexity: 5,
+  aliases: [
+    { alias: 'кафе', lang: 'ru', isDefault: true },
+    { alias: 'ресторан', lang: 'ru' },
+    { alias: 'общепит', lang: 'ru' },
+    { alias: 'общественное питание', lang: 'ru' },
+    { alias: 'столовая', lang: 'ru' },
+    { alias: 'кофейня', lang: 'ru' },
+    { alias: 'kafe', lang: 'uz', isDefault: true },
+    { alias: 'restoran', lang: 'uz' },
+    { alias: 'oshxona', lang: 'uz' },
+    { alias: 'umumiy ovqatlanish', lang: 'uz' },
+    { alias: 'cafe', lang: 'en', isDefault: true },
+    { alias: 'restaurant', lang: 'en' },
   ],
 }
 
@@ -769,46 +834,465 @@ const CARDS = [
   },
 ]
 
+// --- карточки кафе ---------------------------------------------------------------
+// Источник: docs/CAFE_RESEARCH.md. scope: 'cafe' -> oked_code 56.10.
+
+const CAFE_CARDS = [
+  // ===== КАФЕ · Этап 1 — Старт и допуск =====
+  {
+    key: 'cafe:no-license',
+    scope: 'cafe',
+    stage: STAGE.start,
+    deontic: 'permission',
+    nature: 'one_time',
+    category: 'licensing',
+    authority: null,
+    title: 'Открыть кафе без лицензии — общепит в свободном режиме допуска',
+    sanction: null,
+    description:
+      'Деятельность кафе и ресторанов не входит ни в один из перечней ЗРУ-701: ни в лицензируемые виды (приложение №1), ни в разрешительные (№2), ни в уведомительные (№3). Специальный допуск на само кафе не нужен — действуют общие правила: регистрация бизнеса, санитарные нормы, кассовая дисциплина. Отдельные уведомления появляются только у сопутствующих видов деятельности — алкоголь, пиво, табак (см. соседние карточки).',
+    steps: [
+      { step: 'Убедиться, что в вашем формате нет видов деятельности с отдельным допуском (алкоголь, пиво, табак)' },
+    ],
+    citations: [['zru701', 'прил. №1–3']],
+  },
+  {
+    key: 'cafe:alcohol-notice',
+    scope: 'cafe',
+    stage: STAGE.start,
+    deontic: 'obligation',
+    nature: 'one_time',
+    category: 'licensing',
+    authority: 'soliq',
+    title: 'Подать уведомление в налоговый орган до начала продажи алкоголя',
+    sanction: 'Продажа алкоголя без уведомления = работа без допуска: 5–25 БРВ (ст. 165 КоАО)',
+    description:
+      'Реализация алкогольной продукции предприятиями общественного питания — уведомительный вид деятельности (приложение №3 к ЗРУ-701). С 21.02.2025 уведомление о начале деятельности направляется налоговым органам (закон ЗРУ-1034); подача — онлайн через license.gov.uz. Продавать алкоголь могут только юридические лица — для ИП этот вид деятельности недоступен.',
+    steps: [
+      { step: 'Зарегистрировать юридическое лицо (ИП продавать алкоголь не может)' },
+      { step: 'Направить уведомление через license.gov.uz до первой продажи' },
+      { step: 'Начать уплачивать ежемесячный сбор за право реализации (отдельная карточка)' },
+    ],
+    documents: [{ name: 'Уведомление о начале деятельности', where_to_get: 'license.gov.uz' }],
+    sanctions: [{ amount: '5–25 БРВ', article: 'ст. 165 КоАО', extra: 'деятельность без обязательного уведомления' }],
+    citations: [
+      ['zru701', 'прил. №3'],
+      ['zru1034', 'ст. 3 п. 6'],
+      ['zru844', 'порядок реализации алкогольной продукции'],
+    ],
+  },
+  {
+    key: 'cafe:alcohol-fee',
+    scope: 'cafe',
+    stage: STAGE.start,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'fiscal',
+    authority: 'soliq',
+    title: 'Платить ежемесячный сбор за право реализации алкоголя',
+    sanction: 'Недоимка по сбору взыскивается по Налоговому кодексу',
+    description:
+      'За право продавать алкоголь общепит платит ежемесячный сбор (ст. 455 НК) — вдвое ниже ставок розничных магазинов. Ставки утверждаются ежегодно; на 2024 год: Ташкент — 600 тыс., Нукус и облцентры — 420 тыс., прочие города — 300 тыс., сёла — 150 тыс. сум в месяц. Уплата — предоплатой до 10 числа текущего месяца; сбор начисляется с месяца подачи уведомления.',
+    steps: [
+      { step: 'Уточнить действующую ставку для вашей местности на soliq.uz' },
+      { step: 'Платить сбор предоплатой до 10 числа каждого месяца', deadline: 'ежемесячно' },
+    ],
+    citations: [['nk', 'ст. 455']],
+  },
+  {
+    key: 'cafe:beer-tobacco-notice',
+    scope: 'cafe',
+    stage: STAGE.start,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'licensing',
+    authority: 'soliq',
+    title: 'Уведомить о торговле пивом и табаком и платить сбор 10% БРВ',
+    sanction: 'Торговля без уведомления = работа без допуска (ст. 165 КоАО)',
+    description:
+      'Розничная торговля пивной и табачной продукцией с 01.09.2024 ведётся в уведомительном порядке с ежемесячным сбором 10% БРВ (ПП-203 от 30.05.2024). Уведомительный порядок торговли алкоголем и табаком закреплён и законом ЗРУ-1098 от 27.11.2025. Если кафе продаёт только пиво (без крепкого алкоголя), действует именно этот режим.',
+    steps: [
+      { step: 'Направить уведомление о торговле пивом/табаком', cost: 'сбор 10% БРВ в месяц' },
+    ],
+    citations: [
+      ['pp203', 'уведомительный порядок с 01.09.2024'],
+      ['zru1098', 'уведомительный порядок торговли'],
+    ],
+  },
+
+  // ===== КАФЕ · Этап 2 — Помещение и запуск =====
+  {
+    key: 'cafe:sanitary-premises',
+    scope: 'cafe',
+    stage: STAGE.premises,
+    deontic: 'obligation',
+    nature: 'one_time',
+    category: 'sps',
+    authority: 'ses',
+    title: 'Привести помещение в соответствие с санитарными правилами общепита',
+    sanction: 'Нарушение санитарного законодательства: 5–10 БРВ, должностные лица 15–20 БРВ (ст. 53 КоАО)',
+    description:
+      'Действующие санитарные правила для кафе и ресторанов — СанҚваН №0027-22 (в силе с 20.08.2022): раздельные производственные, складские и клиентские зоны; стены из материалов, выдерживающих влажную уборку и дезинфекцию; водонепроницаемые нескользкие полы; механическая или естественная вентиляция для поддержания микроклимата.',
+    steps: [
+      { step: 'Спланировать раздельные зоны: кухня, склады, зал для гостей, бытовые помещения' },
+      { step: 'Отделать стены и полы моющимися дезинфицируемыми материалами' },
+      { step: 'Обеспечить вентиляцию, поддерживающую нормируемый микроклимат' },
+    ],
+    sanctions: [{ amount: '5–10 БРВ (должностные лица 15–20)', article: 'ст. 53 КоАО', extra: 'в редакции ЗРУ-878, действует с 17.02.2024' }],
+    citations: [
+      ['sankvan0027', 'пп. 26, 31, 40'],
+      ['zru878', 'усиление санкций за санитарные нарушения'],
+    ],
+  },
+  {
+    key: 'cafe:distance-100m',
+    scope: 'cafe',
+    stage: STAGE.premises,
+    deontic: 'prohibition',
+    nature: 'one_time',
+    category: null,
+    authority: null,
+    title: 'Не размещать точку с алкоголем и табаком ближе 100 м от школ и мечетей',
+    sanction: 'Продажа в запрещённой зоне — нарушение ЗРУ-844',
+    description:
+      'Если кафе продаёт алкоголь или табак, объект не может располагаться ближе 100 метров по прямой линии от образовательных, спортивных и религиозных организаций (ЗРУ-844; исключение — торговые комплексы площадью свыше 1000 м²). Запрещены также продажа без участия продавца (автоматы, полки самообслуживания), через электронную коммерцию и доставку — кроме игристых и натуральных вин.',
+    steps: [
+      { step: 'Перед арендой проверить дистанцию до школ, спортобъектов и религиозных организаций' },
+    ],
+    citations: [['zru844', 'ограничения размещения и способов продажи']],
+  },
+
+  // ===== КАФЕ · Этап 3 — Текущая работа =====
+  {
+    key: 'cafe:haccp',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'sps',
+    authority: 'ses',
+    title: 'Вести производственный контроль по принципу HACCP',
+    sanction: 'Нарушение санитарного законодательства: 5–10 БРВ, должностные лица 15–20 БРВ (ст. 53 КоАО)',
+    description:
+      'С 17.06.2025 общие санитарные правила безопасности пищевой продукции (СанҚваН №0079-24) закрепляют для всех звеньев пищевой цепи принцип «анализ опасностей и критические контрольные точки» (HACCP): предотвращение биологического, химического и физического загрязнения, входной контроль сырья, записи о температурных режимах и дезинфекции.',
+    steps: [
+      { step: 'Определить критические контрольные точки кухни: приёмка, хранение, тепловая обработка' },
+      { step: 'Проверять сырьё при приёмке на соответствие санитарным нормам', deadline: 'постоянно' },
+      { step: 'Вести журналы температурных режимов и дезинфекции', deadline: 'постоянно' },
+    ],
+    sanctions: [{ amount: '5–10 БРВ (должностные лица 15–20)', article: 'ст. 53 КоАО' }],
+    citations: [['sankvan0079', 'пп. 2, 6, 15']],
+  },
+  {
+    key: 'cafe:food-safety',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'prohibition',
+    nature: 'recurring',
+    category: 'sps',
+    authority: 'ses',
+    title: 'Не допускать в меню небезопасную и просроченную продукцию',
+    sanction: 'Сбыт небезопасной продукции: штраф до 200 БРВ, при гибели людей — до 12 лет лишения свободы (УК, ред. ЗРУ-878)',
+    description:
+      'Закон №483-I «О качестве и безопасности пищевой продукции» обязывает соблюдать сроки годности и изымать небезопасную продукцию из оборота. Уголовная ответственность за сбыт товаров и услуг, не отвечающих требованиям безопасности, усилена с 17.02.2024: штраф 100–200 БРВ, при отягчающих — ограничение или лишение свободы до 3–5 лет, при гибели людей — 7–12 лет.',
+    steps: [
+      { step: 'Контролировать сроки годности сырья и заготовок', deadline: 'постоянно' },
+      { step: 'Немедленно изымать из оборота продукцию с признаками небезопасности' },
+    ],
+    sanctions: [
+      { amount: '100–200 БРВ', article: 'УК (ред. ЗРУ-878)', extra: 'сбыт продукции, не отвечающей требованиям безопасности; номер статьи — на юрпроверке' },
+      { amount: '7–12 лет лишения свободы', article: 'УК (ред. ЗРУ-878)', extra: 'при гибели людей или иных тяжких последствиях' },
+    ],
+    citations: [
+      ['law483', 'ст. 14, 16'],
+      ['zru878', 'усиление уголовной ответственности'],
+    ],
+  },
+  {
+    key: 'cafe:menu-language',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: null,
+    authority: 'raqobat',
+    title: 'Оформить меню на государственном языке и держать уголок потребителя',
+    sanction: 'Нарушение правил торговли и оказания услуг: в крупном размере до 80 БРВ (ст. 164 КоАО)',
+    description:
+      'Правила общепита (ПКМ №75 от 13.02.2003, действующая редакция) требуют: меню на государственном языке (плюс винная/чайная/кофейная карта по специализации заведения), прейскуранты и ценники в буфетах и кафетериях, вывеску с информацией о предприятии, книгу жалоб и предложений и уголок потребителя. Информацию можно дублировать на других языках.',
+    steps: [
+      { step: 'Подготовить меню на узбекском языке (дубли на других языках — по желанию)' },
+      { step: 'Разместить уголок потребителя и завести книгу жалоб и предложений' },
+    ],
+    sanctions: [{ amount: 'в крупном размере: граждане 70, должностные лица 80 БРВ', article: 'ст. 164 КоАО', extra: 'штрафы удвоены ЗРУ-878' }],
+    citations: [
+      ['pkm75', 'правила общепита'],
+      ['consumerLaw', 'информация для потребителя'],
+    ],
+  },
+  {
+    key: 'cafe:service-charge',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'prohibition',
+    nature: 'recurring',
+    category: null,
+    authority: 'raqobat',
+    title: 'Не навязывать сервисный сбор и скрытые доплаты',
+    sanction: 'Нарушение прав потребителей; жалобы гостей — на короткий номер 1159',
+    description:
+      'Автоматическое включение в счёт 10–20% «за обслуживание» без реальной альтернативы и предварительного уведомления гостя — нарушение прав потребителей (официальная позиция Комитета по развитию конкуренции и защите прав потребителей, ноябрь 2025). Нарушениями названы также навязывание депозита до заказа, скрытые доплаты и плата за неоказанный сервис.',
+    steps: [
+      { step: 'Предупреждать о сервисном сборе до заказа и давать альтернативу без доплаты' },
+      { step: 'Убрать из счетов автоматические доплаты за неоказанные услуги' },
+    ],
+    citations: [['consumerLaw', 'права потребителя']],
+  },
+  {
+    key: 'cafe:medical-books',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'sps',
+    authority: 'ses',
+    title: 'Допускать к кухне только персонал, прошедший медосмотр',
+    sanction: 'Штраф должностным лицам за допуск без медосмотра (реквизит статьи — на юрпроверке)',
+    description:
+      'Работники общепита проходят предварительный (при приёме на работу) и периодические медицинские осмотры по положению приказа Минздрава №200 (рег. МЮ №2387); обязанность организовать медосмотры закреплена Трудовым кодексом, расходы несёт работодатель.',
+    steps: [
+      { step: 'Организовать предварительный медосмотр до допуска сотрудника к работе' },
+      { step: 'Вести график периодических осмотров персонала', deadline: 'по графику' },
+    ],
+    sanctions: [{ amount: 'уточняется', article: null, extra: 'номер статьи КоАО — на юрпроверке' }],
+    citations: [
+      ['mz200', 'положение о медосмотрах'],
+      ['tk', 'обязательные медицинские осмотры'],
+    ],
+  },
+  {
+    key: 'cafe:marked-goods',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'marking',
+    authority: 'soliq',
+    title: 'Сканировать выбытие маркированных напитков и алкоголя на кассе',
+    sanction: 'Прогрессия штрафов: 0,2% → 0,4% → 1% → 2% выручки квартала (ПП-190)',
+    description:
+      'Вода и прохладительные напитки (с 01.03.2025), алкоголь, пиво и табак — маркированные группы: при продаже касса считывает Data Matrix-код, выбытие уходит через ОФД в систему Asl Belgisi, чек формируется только после ввода кода маркировки. Санкции ПП-190 от 23.05.2025: после двух предупреждений — 0,2%, 0,4%, 1%, 2% чистой выручки квартала за повторные нарушения.',
+    steps: [
+      { step: 'Зарегистрироваться в Asl Belgisi и подключить 2D-сканер к кассе' },
+      { step: 'Сканировать код каждой маркированной единицы при продаже', deadline: 'постоянно' },
+    ],
+    sanctions: [{ amount: '0,2% → 0,4% → 1% → 2% от чистой выручки квартала', article: 'ПП-190 от 23.05.2025', extra: 'после двух предупреждений, за повторные нарушения' }],
+    citations: [
+      ['pkm631', 'маркировка воды и напитков'],
+      ['pkm833', 'этапы обязательной маркировки'],
+      ['pp190', 'санкции за немаркированную продукцию'],
+    ],
+  },
+  {
+    key: 'cafe:age-21',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'prohibition',
+    nature: 'recurring',
+    category: null,
+    authority: null,
+    title: 'Не продавать алкоголь и табак лицам младше 21 года',
+    sanction: 'Санкции по КоАО/УК (реквизит статьи — на юрпроверке)',
+    description:
+      'Продажа алкогольной и табачной продукции лицам младше 21 года запрещена (ЗРУ-844, действует с 26.08.2023; ранее порог был 20 лет). Продавец обязан требовать документ у покупателя, выглядящего моложе 21 года.',
+    steps: [
+      { step: 'Обучить персонал проверять документы у молодо выглядящих гостей', deadline: 'постоянно' },
+    ],
+    citations: [['zru844', 'возрастные ограничения']],
+  },
+  {
+    key: 'cafe:no-vape',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'prohibition',
+    nature: 'recurring',
+    category: null,
+    authority: null,
+    title: 'Не продавать электронные сигареты и стики нагревания табака',
+    sanction: 'Уголовная ответственность: от 3–5 вплоть до 7–12 лет лишения свободы (ЗРУ-1098)',
+    description:
+      'С конца 2025 года оборот электронных сигарет и систем нагревания табака запрещён полностью (ЗРУ-1098 от 27.11.2025) — в том числе продажа в заведениях общепита. За незаконный оборот введена уголовная ответственность вплоть до 7–12 лет лишения свободы за наиболее тяжкие составы.',
+    citations: [['zru1098', 'запрет оборота электронных сигарет']],
+  },
+  {
+    key: 'cafe:smoking-areas',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: null,
+    authority: 'ses',
+    title: 'Разрешать кальян и курение только в специально отведённых местах',
+    sanction: 'Штрафы по КоАО за нарушение антитабачных ограничений',
+    description:
+      'Курение, включая кальяны и электронные испарители, запрещено в общественных местах по перечню ЗРУ-844; в точках общепита курение допускается только в специально отведённых местах. За курение гостей в запрещённых местах предусмотрен штраф по КоАО.',
+    steps: [
+      { step: 'Выделить и обозначить зону для кальяна и курения, отделённую от основного зала' },
+    ],
+    citations: [['zru844', 'места, свободные от курения']],
+  },
+  {
+    key: 'cafe:food-waste',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'sps',
+    authority: 'ses',
+    title: 'Обращаться с пищевыми отходами по установленному порядку',
+    sanction: 'Нарушение санитарного законодательства (ст. 53 КоАО)',
+    description:
+      'С сентября 2025 действует отдельный порядок эффективного использования пищевых отходов предприятий общественного питания (ПКМ №589 от 16.09.2025): организуйте раздельный сбор и передачу пищевых отходов в соответствии с постановлением.',
+    citations: [['pkm589', 'порядок обращения с пищевыми отходами']],
+  },
+  {
+    key: 'cafe:noise',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: null,
+    authority: null,
+    title: 'Соблюдать тишину с 23:00 до 6:00',
+    sanction: 'Нарушение тишины: граждане 1/3 БРВ, должностные лица 1/3–1/2 БРВ; повторно — до 1 БРВ (ст. 192 КоАО)',
+    description:
+      'Ночное время по КоАО — с 23:00 до 6:00: музыка и шум заведения в этот период — административное нарушение (ст. 192 КоАО); для должностных лиц штраф выше и растёт при повторном нарушении в течение года. Парламент рассматривает отдельный закон о защите от шума с расширенными «тихими часами» — карточка обновится по итогам.',
+    sanctions: [
+      { amount: 'граждане 1/3 БРВ, должностные лица 1/3–1/2 БРВ', article: 'ст. 192 КоАО' },
+      { amount: 'повторно в течение года: 1/2 и 1/2–1 БРВ', article: 'ст. 192 КоАО' },
+    ],
+    citations: [['koao', 'ст. 192']],
+  },
+  {
+    key: 'cafe:delivery',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: null,
+    authority: null,
+    title: 'Организовать доставку еды по правилам курьерской деятельности',
+    sanction: 'Нарушение правил торговли и оказания услуг (ст. 164 КоАО)',
+    description:
+      'С июня 2025 действуют правила курьерской деятельности в электронной торговле (зарегистрированы Минюстом): курьер работает по трудовому или гражданско-правовому договору; при приёме оплаты обязательна онлайн-касса или выдача чека; еда перевозится в чистых дезинфицируемых термоконтейнерах; оператор обеспечивает курьеров термоконтейнерами, фискальными устройствами и спецодеждой со светоотражающими элементами. Точный реквизит акта уточняется юрвычиткой.',
+    steps: [
+      { step: 'Оформить курьеров по трудовому или ГПХ-договору' },
+      { step: 'Выдать термоконтейнеры, фискальное устройство и спецодежду' },
+    ],
+    citations: [['courier2025', 'правила курьерской деятельности']],
+  },
+  {
+    key: 'cafe:night-work',
+    scope: 'cafe',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'one_time',
+    category: null,
+    authority: null,
+    status: 'draft', // ПКМ №624 отменён 16.12.2025; заменяющий порядок не найден — на юрпроверке
+    title: 'Уточнить режим работы после 23:00',
+    sanction: null,
+    description:
+      'Карточка на юридической проверке: прежний порядок ночной работы общепита (ПКМ №624 — информирование ОВД, видеонаблюдение) отменён 16.12.2025 постановлением №791; заменяющий порядок уточняется по первоисточникам.',
+    citations: [['pkm791', 'отмена прежнего порядка']],
+  },
+
+  // ===== КАФЕ · Этап 4 — Проверки =====
+  {
+    key: 'cafe:ses-inspection',
+    scope: 'cafe',
+    stage: STAGE.inspections,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'sps',
+    authority: 'ses',
+    title: 'Проходить санитарный контроль по риск-анализу',
+    sanction: 'Нарушение санитарного законодательства: 5–10 БРВ, должностные лица 15–20 БРВ (ст. 53 КоАО)',
+    description:
+      'Санитарный надзор за общепитом ведёт Комитет санитарно-эпидемиологического благополучия (положение — ПКМ №48 от 29.01.2025). С 01.01.2025 проверки назначаются по электронной системе «Риск-анализ» (УП-184): субъекты с низким уровнем риска проверкам не подлежат, каждая проверка регистрируется в системе «Единый государственный контроль». Принудительно приостановить работу заведения можно только по суду (исключение — до 10 рабочих дней при реальной угрозе жизни и здоровью).',
+    sanctions: [{ amount: '5–10 БРВ (должностные лица 15–20)', article: 'ст. 53 КоАО' }],
+    citations: [
+      ['sankvan0027', 'предмет контроля'],
+      ['up184', 'риск-анализ и регистрация проверок'],
+    ],
+  },
+
+  // ===== КАФЕ · Этап 6 — Прекращение =====
+  {
+    key: 'cafe:closure-alcohol',
+    scope: 'cafe',
+    stage: STAGE.closure,
+    deontic: 'obligation',
+    nature: 'one_time',
+    category: 'licensing',
+    authority: 'soliq',
+    status: 'draft', // текст ПКМ №88 не сверен с первоисточником — на юрпроверке
+    title: 'Отозвать алкогольное уведомление при закрытии',
+    sanction: null,
+    description:
+      'Карточка на юридической проверке: порядок уведомления о прекращении деятельности (ПКМ №88 от 25.02.2022) сверяется с первоисточником; до отзыва уведомления ежемесячный сбор может продолжать начисляться.',
+    citations: [['pkm88', 'порядок уведомления о прекращении']],
+  },
+
+  // ===== ГОРИЗОНТАЛЬНЫЙ СЛОЙ · дополнение =====
+  {
+    key: 'all:uzqr-payments',
+    scope: 'all',
+    stage: STAGE.operations,
+    deontic: 'obligation',
+    nature: 'recurring',
+    category: 'fiscal',
+    authority: null,
+    title: 'Принимать оплату через единый QR-код (UzQR)',
+    sanction: 'Несоблюдение приравнено к нарушению правил торговли (ст. 164 КоАО)',
+    description:
+      'С 01.01.2026 в Узбекистане внедряется, а с 01.07.2026 становится обязательным приём платежей через единый QR-код (UzQR) для всех объектов торговли и услуг (указ Президента от 10.12.2025). Единый QR дополняет, а не заменяет платёжный терминал.',
+    steps: [
+      { step: 'Получить UzQR у обслуживающего банка и разместить на кассе', deadline: 'к 01.07.2026' },
+    ],
+    citations: [['uzqrDecree', 'единый QR-код']],
+  },
+]
+
 // --- генерация SQL --------------------------------------------------------------
 
-const out = []
-out.push('-- ============================================================================')
-out.push('-- Модуль услуг: контент «Розничная аптека» + горизонтальные требования')
-out.push('-- Сгенерировано scripts/generate_services_seed.mjs — правки вносить там')
-out.push('-- Источник: docs/SERVICES_PASSPORT_PROPOSAL.md §6 (утверждено 12.07.2026)')
-const published = CARDS.filter((c) => c.status !== 'draft')
-const apteka = CARDS.filter((c) => c.scope === 'apteka')
-const horizontal = CARDS.filter((c) => c.scope === 'all')
-out.push(`-- Карточек: ${CARDS.length} (аптека ${apteka.length}, горизонтальных ${horizontal.length}; published ${published.length}, draft ${CARDS.length - published.length})`)
-out.push('-- ============================================================================')
-
-out.push('\n-- Ведомства')
-for (const a of Object.values(AUTHORITIES))
+function emitAuthority(out, a) {
   out.push(
     `insert into public.authorities (id, name_ru, website) values (${q(a.id)}, ${q(a.name)}, ${q(a.website ?? null)}) on conflict (id) do nothing;`,
   )
-
-out.push('\n-- Акты (метаданные; дословные тексты пунктов добавит юрвычитка)')
-for (const a of Object.values(ACTS))
-  out.push(`insert into public.acts (id, title) values (${q(a.id)}, ${q(a.title)}) on conflict (id) do nothing;`)
-
-out.push('\n-- Услуга «Розничная аптека»')
-out.push(
-  `insert into public.services (id, ikpu_code, oked_code, name_ru, name_uz, name_en, admission_mode, authority_id, complexity_index) values (${q(SERVICE.id)}, ${q(SERVICE.ikpuCode)}, ${q(SERVICE.okedCode)}, ${q(SERVICE.nameRu)}, ${q(SERVICE.nameUz)}, ${q(SERVICE.nameEn)}, ${q(SERVICE.admissionMode)}, ${q(SERVICE.authorityId)}, ${SERVICE.complexity}) on conflict (id) do nothing;`,
-)
-for (const al of SERVICE.aliases) {
-  const key = `svc-alias:${SERVICE.okedCode}|${al.alias.toLowerCase()}|${al.lang}`
-  out.push(
-    `insert into public.search_aliases (id, service_id, alias, lang, is_default) values (${q(uuid(key))}, ${q(SERVICE.id)}, ${q(al.alias)}, ${q(al.lang)}, ${al.isDefault === true}) on conflict (id) do nothing;`,
-  )
 }
 
-out.push('\n-- Карточки требований')
-const paraSeen = new Set()
-for (const c of CARDS) {
+function emitAct(out, a) {
+  out.push(`insert into public.acts (id, title) values (${q(a.id)}, ${q(a.title)}) on conflict (id) do nothing;`)
+}
+
+function emitService(out, svc) {
+  out.push(
+    `insert into public.services (id, ikpu_code, oked_code, name_ru, name_uz, name_en, admission_mode, authority_id, complexity_index) values (${q(svc.id)}, ${q(svc.ikpuCode)}, ${q(svc.okedCode)}, ${q(svc.nameRu)}, ${q(svc.nameUz)}, ${q(svc.nameEn)}, ${q(svc.admissionMode)}, ${q(svc.authorityId)}, ${svc.complexity}) on conflict (id) do nothing;`,
+  )
+  for (const al of svc.aliases) {
+    const key = `svc-alias:${svc.okedCode}|${al.alias.toLowerCase()}|${al.lang}`
+    out.push(
+      `insert into public.search_aliases (id, service_id, alias, lang, is_default) values (${q(uuid(key))}, ${q(svc.id)}, ${q(al.alias)}, ${q(al.lang)}, ${al.isDefault === true}) on conflict (id) do nothing;`,
+    )
+  }
+}
+
+/** Карточка требования: scope 'all' -> all_services, иначе oked_code услуги svc. */
+function emitCard(out, c, svc, paraSeen) {
   const id = uuid(`req:${c.key}`)
   const status = c.status ?? 'published'
-  const authorityId = c.authority ? AUTHORITIES[c.authority].id : null
+  const authorityId = c.authority ? ALL_AUTHORITIES[c.authority].id : null
   out.push(`\n-- ${c.key} (${status})`)
   out.push(
     `insert into public.requirements (id, status, deontic, addressee_roles, operation, lifecycle_stage_id, authority_id, trust_label, origin, external_key, nature, requirement_category, published_at) values (${q(id)}, ${q(status)}, ${q(c.deontic)}, '{service_provider}', 'service', ${q(c.stage)}, ${q(authorityId)}, 'ai_draft', 'ai_pipeline', ${q(`svc:${c.key}`)}, ${q(c.nature)}, ${q(c.category ?? null)}, ${status === 'published' ? 'now()' : 'null'}) on conflict (external_key) do nothing;`,
@@ -823,12 +1307,12 @@ for (const c of CARDS) {
   const scopeSql =
     c.scope === 'all'
       ? `'all_services', null`
-      : `'oked_code', ${q(SERVICE.okedCode)}`
+      : `'oked_code', ${q(svc.okedCode)}`
   out.push(
     `insert into public.requirement_applicability (id, requirement_id, scope, code) values (${q(uuid(`app:${c.key}`))}, ${q(id)}, ${scopeSql}) on conflict (id) do nothing;`,
   )
   for (const [actCode, ref] of c.citations ?? []) {
-    const act = ACTS[actCode]
+    const act = ALL_ACTS[actCode]
     const paraId = uuid(`para:${actCode}|${ref}`)
     if (!paraSeen.has(paraId)) {
       paraSeen.add(paraId)
@@ -842,9 +1326,87 @@ for (const c of CARDS) {
   }
 }
 
-const target = new URL('../supabase/migrations/20260712110000_services_content.sql', import.meta.url).pathname
-writeFileSync(target, out.join('\n') + '\n')
-console.log(`OK -> ${target}`)
-console.log(
-  `cards=${CARDS.length} (apteka=${apteka.length}, horizontal=${horizontal.length}, draft=${CARDS.length - published.length}) acts=${Object.keys(ACTS).length} authorities=${Object.keys(AUTHORITIES).length} aliases=${SERVICE.aliases.length}`,
-)
+// --- файл 1: аптека + горизонтальный слой (контент заморожен, файл в проде) -------
+
+{
+  const out = []
+  out.push('-- ============================================================================')
+  out.push('-- Модуль услуг: контент «Розничная аптека» + горизонтальные требования')
+  out.push('-- Сгенерировано scripts/generate_services_seed.mjs — правки вносить там')
+  out.push('-- Источник: docs/SERVICES_PASSPORT_PROPOSAL.md §6 (утверждено 12.07.2026)')
+  const published = CARDS.filter((c) => c.status !== 'draft')
+  const apteka = CARDS.filter((c) => c.scope === 'apteka')
+  const horizontal = CARDS.filter((c) => c.scope === 'all')
+  out.push(`-- Карточек: ${CARDS.length} (аптека ${apteka.length}, горизонтальных ${horizontal.length}; published ${published.length}, draft ${CARDS.length - published.length})`)
+  out.push('-- ============================================================================')
+
+  out.push('\n-- Ведомства')
+  for (const a of Object.values(AUTHORITIES)) emitAuthority(out, a)
+
+  out.push('\n-- Акты (метаданные; дословные тексты пунктов добавит юрвычитка)')
+  for (const a of Object.values(ACTS)) emitAct(out, a)
+
+  out.push('\n-- Услуга «Розничная аптека»')
+  emitService(out, SERVICE)
+
+  out.push('\n-- Карточки требований')
+  const paraSeen = new Set()
+  for (const c of CARDS) emitCard(out, c, SERVICE, paraSeen)
+
+  const target = new URL('../supabase/migrations/20260712110000_services_content.sql', import.meta.url).pathname
+  writeFileSync(target, out.join('\n') + '\n')
+  console.log(`OK -> ${target}`)
+  console.log(
+    `cards=${CARDS.length} (apteka=${apteka.length}, horizontal=${horizontal.length}, draft=${CARDS.length - published.length}) acts=${Object.keys(ACTS).length} authorities=${Object.keys(AUTHORITIES).length} aliases=${SERVICE.aliases.length}`,
+  )
+}
+
+// --- файл 2: кафе + дополнение горизонтали + актуализация налоговой карточки -----
+
+{
+  const out = []
+  out.push('-- ============================================================================')
+  out.push('-- Модуль услуг: контент «Кафе (общественное питание)»')
+  out.push('-- Сгенерировано scripts/generate_services_seed.mjs — правки вносить там')
+  out.push('-- Источник: docs/CAFE_RESEARCH.md (ресёрч 12.07.2026)')
+  const published = CAFE_CARDS.filter((c) => c.status !== 'draft')
+  const cafe = CAFE_CARDS.filter((c) => c.scope === 'cafe')
+  const horizontal = CAFE_CARDS.filter((c) => c.scope === 'all')
+  out.push(`-- Карточек: ${CAFE_CARDS.length} (кафе ${cafe.length}, горизонтальных ${horizontal.length}; published ${published.length}, draft ${CAFE_CARDS.length - published.length})`)
+  out.push('-- ============================================================================')
+
+  out.push('\n-- Ведомства (новые со второй услугой)')
+  for (const a of Object.values(CAFE_AUTHORITIES)) emitAuthority(out, a)
+
+  out.push('\n-- Акты (метаданные; дословные тексты пунктов добавит юрвычитка)')
+  for (const a of Object.values(CAFE_ACTS)) emitAct(out, a)
+
+  out.push('\n-- Услуга «Кафе (общественное питание)»')
+  emitService(out, CAFE)
+
+  out.push('\n-- Карточки требований')
+  const paraSeen = new Set()
+  for (const c of CAFE_CARDS) emitCard(out, c, CAFE, paraSeen)
+
+  // Актуализация горизонтальной карточки «Выбрать налоговый режим»:
+  // порог перехода на общий режим повышен с 1 до 5 млрд сум (с 01.06.2026),
+  // общепиту доступен добровольный упрощённый НДС 6%.
+  const taxId = uuid('req:all:tax-regime')
+  const taxDescription =
+    'Малый бизнес платит налог с оборота (стандартная ставка 4%); с 01.06.2026 порог обязательного перехода на общий режим (НДС 12% и налог на прибыль) повышен с 1 до 5 млрд сум годового дохода. Общепиту, торговле и услугам доступен добровольный упрощённый НДС 6% с освобождением от налога на прибыль. Режим стоит определить до старта: смена задним числом означает доначисления.'
+  const taxSteps = [
+    { step: 'Оценить плановую выручку: до 5 млрд сум в год — можно остаться на налоге с оборота' },
+    { step: 'Отслеживать порог 5 млрд сум и вовремя перейти на общий режим', deadline: 'постоянно' },
+  ]
+  out.push('\n-- Актуализация «Выбрать налоговый режим» (порог 5 млрд сум с 01.06.2026)')
+  out.push(
+    `update public.requirement_details set description = ${q(taxDescription)}, how_to_comply = ${qj(taxSteps)} where requirement_id = ${q(taxId)} and lang = 'ru';`,
+  )
+
+  const target = new URL('../supabase/migrations/20260712150000_cafe_content.sql', import.meta.url).pathname
+  writeFileSync(target, out.join('\n') + '\n')
+  console.log(`OK -> ${target}`)
+  console.log(
+    `cards=${CAFE_CARDS.length} (cafe=${cafe.length}, horizontal=${horizontal.length}, draft=${CAFE_CARDS.length - published.length}) acts=${Object.keys(CAFE_ACTS).length} authorities=${Object.keys(CAFE_AUTHORITIES).length} aliases=${CAFE.aliases.length}`,
+  )
+}
