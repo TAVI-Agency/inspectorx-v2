@@ -1,6 +1,6 @@
 """Pydantic-схемы JSON-блока отчётов (контракт из research-prompt-{product,service}.md)."""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class _Base(BaseModel):
@@ -52,6 +52,14 @@ class _BaseRequirement(_Base):
     agency: str | None = None
     how_to: list[HowToStep] = []
     documents: list[DocumentItem] = []
+
+    @field_validator("documents", mode="before")
+    @classmethod
+    def _drop_empty_documents(cls, v):
+        # реальные отчёты: [{"name": null, "where": null}] = «документов нет»
+        if isinstance(v, list):
+            return [d for d in v if not (isinstance(d, dict) and not d.get("name"))]
+        return v
     sanction: Sanction | None = None
     discovered_via: str | None = None
     needs_review: bool = False
@@ -74,6 +82,14 @@ class ProductPassport(_Base):
     name: str
     hs_code: str | None = None
     ikpu: list[str] | None = []
+
+    @field_validator("ikpu", mode="before")
+    @classmethod
+    def _drop_null_ikpu(cls, v):
+        # реальные отчёты: ikpu=[null] = «код не найден»
+        if isinstance(v, list):
+            return [c for c in v if c]
+        return v
     domain: str | None = None
     duty: str | None = None
     excise: str | None = None

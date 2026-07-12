@@ -40,7 +40,7 @@ class LexuzClient:
         cached = self.cache_dir / f"{doc_id}.html"
         if cached.exists():
             return cached.read_text(encoding="utf-8")
-        html = self._fetcher(f"https://lex.uz/ru/docs/-{doc_id}")
+        html = self._fetcher(f"https://lex.uz/ru/docs/{doc_id}")  # doc_id уже со знаком
         cached.write_text(html, encoding="utf-8")
         return html
 

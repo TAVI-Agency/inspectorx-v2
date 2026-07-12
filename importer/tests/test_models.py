@@ -44,3 +44,14 @@ def test_service_report_validates():
 
 def test_parse_report_json_dispatch():
     assert isinstance(parse_report_json(PRODUCT_JSON, "product"), ProductReport)
+
+def test_null_placeholders_tolerated():
+    """Реальные отчёты: ikpu=[null], documents=[{name:null,where:null}] — пустышки отбрасываем."""
+    data = {**PRODUCT_JSON,
+            "product": {**PRODUCT_JSON["product"], "ikpu": [None]},
+            "requirements": [{**PRODUCT_JSON["requirements"][0],
+                              "documents": [{"name": None, "where": None},
+                                            {"name": "Заявка", "where": None}]}]}
+    report = ProductReport.model_validate(data)
+    assert report.product.ikpu == []
+    assert [d.name for d in report.requirements[0].documents] == ["Заявка"]
