@@ -1,0 +1,85 @@
+"""Доступ к lex.uz: fetch с дисковым кэшем (не долбим сайт), эвристики страницы."""
+import re
+import time
+from pathlib import Path
+from typing import Callable
+
+import httpx
+from bs4 import BeautifulSoup
+
+
+class LexuzUnreachable(Exception):
+    pass
+
+
+def _http_fetch(url: str) -> str:
+    last = None
+    for delay in (2, 4, 8):
+        try:
+            resp = httpx.get(url, follow_redirects=True, timeout=30,
+                             headers={"User-Agent": "Mozilla/5.0 (importer inspector-x)"})
+            if resp.status_code == 404:
+                raise LexuzUnreachable(f"404: {url}")
+            resp.raise_for_status()
+            return resp.text
+        except LexuzUnreachable:
+            raise
+        except httpx.HTTPError as e:
+            last = e
+            time.sleep(delay)
+    raise LexuzUnreachable(f"lex.uz недоступен: {url}: {last}")
+
+
+class LexuzClient:
+    def __init__(self, cache_dir: Path, fetcher: Callable[[str], str] | None = None):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._fetcher = fetcher or _http_fetch
+
+    def fetch(self, doc_id: str) -> str:
+        cached = self.cache_dir / f"{doc_id}.html"
+        if cached.exists():
+            return cached.read_text(encoding="utf-8")
+        html = self._fetcher(f"https://lex.uz/ru/docs/-{doc_id}")
+        cached.write_text(html, encoding="utf-8")
+        return html
+
+    @staticmethod
+    def page_text(html: str) -> str:
+        text = BeautifulSoup(html, "html.parser").get_text(" ")
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def is_repealed(html: str) -> bool:
+        head = LexuzClient.page_text(html)[:5000].lower()
+        return any(m in head for m in
+                   ("утратил силу", "утратила силу", "kuchini yo'qotgan", "кучини йўқотган"))
+
+    @staticmethod
+    def is_russian(html: str) -> bool:
+        text = f" {LexuzClient.page_text(html).lower()} "
+        hits = sum(text.count(w) for w in (" и ", " или ", " в ", " на "))
+        return hits >= 20
+
+    @staticmethod
+    def find_paragraph(html: str, ref: str) -> str | None:
+        text = LexuzClient.page_text(html)
+        m_art = re.match(r"art\.([\d-]+)(?:/p\.([\d-]+))?$", ref)
+        if m_art:
+            num = m_art.group(1)
+            start = re.search(rf"Статья\s+{num}\.", text)
+            if not start:
+                return None
+            rest = text[start.start():]
+            nxt = re.search(r"Статья\s+[\d-]+\.", rest[10:])
+            return rest[: nxt.start() + 10] if nxt else rest
+        m_p = re.match(r"p\.([\d-]+)$", ref)
+        if m_p:
+            num = m_p.group(1)
+            start = re.search(rf"(?:^|[.;)])\s{num}\.\s", text)
+            if not start:
+                return None
+            rest = text[start.end() - len(f"{num}. "):]
+            nxt = re.search(r"[.;]\s[\d-]+\.\s", rest[5:])
+            return rest[: nxt.start() + 5] if nxt else rest[:2000]
+        return None  # appN/rowM и прочее — сверка по всей странице (v1)
