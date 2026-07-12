@@ -135,7 +135,8 @@ export function categoryOf(row: { stageName: string; title: string }): Requireme
 }
 
 /** Категория для чипа строки: персистированная из БД приоритетнее эвристики;
- *  у услуг эвристический фолбэк «Таможня» — ложь интерфейса, чип скрываем. */
+ *  у услуг эвристика по заголовку часто врёт («доплаты» → «Валюта»),
+ *  поэтому для них чип — только из БД. */
 export function categoryChipOf(row: {
   stageName: string
   title: string
@@ -143,9 +144,8 @@ export function categoryChipOf(row: {
   category?: RequirementCategory
 }): RequirementCategory | null {
   if (row.category) return row.category
-  const cat = categoryOf(row)
-  if (cat === 'customs' && row.operation === 'service') return null
-  return cat
+  if (row.operation === 'service') return null
+  return categoryOf(row)
 }
 
 /** Этапы (для чипов) по произвольному подмножеству строк — со счётчиками. */
