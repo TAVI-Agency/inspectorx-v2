@@ -166,7 +166,7 @@ export function CProductPage() {
         />
       </div>
 
-      {/* Кросс-ссылка: этот товар продаёт услуга со своим паспортом (аптека) */}
+      {/* Кросс-ссылка: этот товар продаёт услуга со своим паспортом (аптека, кафе) */}
       {(() => {
         const link = serviceLinkForProduct(passport.hsCode)
         if (!link) return null
@@ -174,11 +174,9 @@ export function CProductPage() {
           <Link to={link.to} className="group mt-5 block focus-visible:outline-none">
             <CCard className="flex items-center gap-4 p-4 transition-colors group-hover:border-primary/40 group-focus-visible:ring-2 group-focus-visible:ring-ring">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold tracking-tight">
-                  {ru.service.crossToServiceTitle}
-                </p>
+                <p className="text-sm font-semibold tracking-tight">{link.title}</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                  {ru.service.crossToServiceText}
+                  {link.text}
                 </p>
               </div>
               <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary">

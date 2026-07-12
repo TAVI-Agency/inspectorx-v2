@@ -104,7 +104,7 @@ export function CServicePage() {
         </div>
         {passport.authorityName && (
           <p className="mt-2.5 text-sm text-muted-foreground">
-            {ru.service.licensorLabel}:{' '}
+            {ru.service.authorityLabel[passport.admissionMode ?? 'license']}:{' '}
             <span className="font-medium text-foreground">{passport.authorityName}</span>
           </p>
         )}
@@ -149,11 +149,9 @@ export function CServicePage() {
         <Link to={crossLink.to} className="group mt-5 block focus-visible:outline-none">
           <CCard className="flex items-center gap-4 p-4 transition-colors group-hover:border-primary/40 group-focus-visible:ring-2 group-focus-visible:ring-ring">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold tracking-tight">
-                {ru.service.crossTitle(crossLink.targetName)}
-              </p>
+              <p className="text-sm font-semibold tracking-tight">{crossLink.title}</p>
               <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {ru.service.crossToProductText}
+                {crossLink.text}
               </p>
             </div>
             <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary">

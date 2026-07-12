@@ -55,7 +55,7 @@ import {
   stagesFromRows,
 } from './mock/fixtures'
 import { readChangeIds } from './mock/read-store'
-import { PHARMACY_SERVICE_ID } from './cross-links'
+import { CAFE_SERVICE_ID, PHARMACY_SERVICE_ID } from './cross-links'
 
 export interface DataCtx {
   /** Реальная подписка (profiles.is_subscribed под сессией) */
@@ -90,7 +90,7 @@ export async function search(query: string, kind: SearchKind): Promise<SearchHit
   return hits.slice(0, 8)
 }
 
-/** Три примера на лендинге. Счётчики статичны для витрины
+/** Примеры в реестре: 2 товара + 2 услуги. Счётчики статичны для витрины
  *  (177 = published-строки сигарет после фильтра мусора/дублей переноса v1). */
 export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
   {
@@ -114,15 +114,24 @@ export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
     categoryName: 'Молочная продукция',
     requirementsCount: 7,
   },
-  { ...paracetamolHit, requirementsCount: 6 },
   {
     id: PHARMACY_SERVICE_ID,
     kind: 'service',
     displayName: 'Розничная аптека',
-    officialName: 'первая услуга: маршрут из 6 этапов — от лицензии до закрытия',
+    officialName: 'услуга с лицензией: маршрут из 6 этапов — от допуска до закрытия',
     code: '47.73',
     codeKind: 'oked',
     categoryName: 'Услуги · режим допуска: лицензия',
+    requirementsCount: 36,
+  },
+  {
+    id: CAFE_SERVICE_ID,
+    kind: 'service',
+    displayName: 'Кафе (общественное питание)',
+    officialName: 'услуга без лицензии: санитарка, маркировка и алкогольные уведомления',
+    code: '56.10',
+    codeKind: 'oked',
+    categoryName: 'Услуги · режим допуска: свободно',
     requirementsCount: 35,
   },
 ]
