@@ -1,39 +1,7 @@
 import json
 from importer.models import ActRef
 from importer.resolver import ensure_paragraph, resolve_act
-
-
-class FakeTable:
-    """Мини-фейк supabase table: select().eq()/ilike().limit().execute() и insert()."""
-    def __init__(self, store, name):
-        self.store, self.name, self._filters = store, name, []
-
-    def select(self, *_): return self
-    def limit(self, *_): return self
-
-    def eq(self, col, val):
-        self._filters.append(lambda r: r.get(col) == val); return self
-
-    def ilike(self, col, pattern):
-        needle = pattern.strip("%")
-        self._filters.append(lambda r: needle in (r.get(col) or "")); return self
-
-    def execute(self):
-        rows = [r for r in self.store.get(self.name, [])
-                if all(f(r) for f in self._filters)]
-        self._filters = []
-        return type("R", (), {"data": rows})()
-
-    def insert(self, row):
-        row = {"id": f"id-{len(self.store.get(self.name, []))}", **row}
-        self.store.setdefault(self.name, []).append(row)
-        store_row = row
-        return type("Q", (), {"execute": lambda self_: type("R", (), {"data": [store_row]})()})()
-
-
-class FakeClient:
-    def __init__(self, store): self.store = store
-    def table(self, name): return FakeTable(self.store, name)
+from importer.tests.fakes import FakeClient
 
 
 ACT = ActRef(name="ЗРУ-819", number="819", date="2023-04-05",
