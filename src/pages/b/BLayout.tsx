@@ -103,6 +103,9 @@ function BFooter() {
           <Link to="/" className="hover:text-foreground">
             ← Дизайн A
           </Link>
+          <Link to="/c" className="hover:text-foreground">
+            Дизайн C →
+          </Link>
         </div>
       </div>
     </footer>
