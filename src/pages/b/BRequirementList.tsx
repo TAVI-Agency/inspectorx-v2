@@ -5,9 +5,10 @@ import { useMarkChangeRead } from '@/data/hooks'
 import type { RequirementRow, StageInfo } from '@/data/types'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
+import { categoryOf } from '@/data/taxonomy'
 import { rolesLabel } from '@/pages/product/badges'
 import { RequirementCardView } from '@/pages/product/RequirementCardView'
-import { BCard, deonticChipClass } from './ui'
+import { BCard, CategoryChip, deonticChipClass } from './ui'
 
 /**
  * Список требований дизайна Б: этапы — карточки-секции, строки со скруглением
@@ -133,6 +134,7 @@ function BRow({
             >
               {ru.requirement.deontic[row.deontic]}
             </span>
+            <CategoryChip category={categoryOf(row)} />
             <span>{rolesLabel(row.roles)}</span>
             {row.authorityName && <span className="truncate">· {row.authorityName}</span>}
             {row.sanctionSummary && (

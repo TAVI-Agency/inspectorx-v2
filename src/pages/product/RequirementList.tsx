@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { Expand } from '@/components/Expand'
 import { useMarkChangeRead } from '@/data/hooks'
 import type { RequirementRow, StageInfo } from '@/data/types'
+import { CATEGORY_LABEL, categoryOf } from '@/data/taxonomy'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { DeonticBadge, StatusLabel, rolesLabel } from './badges'
@@ -161,6 +162,9 @@ function RowItem({
           </span>
           <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
             <DeonticBadge deontic={row.deontic} />
+            <span className="rounded-sm border px-1.5 py-px text-[10px] font-medium tracking-[0.04em] uppercase">
+              {CATEGORY_LABEL[categoryOf(row)]}
+            </span>
             <span>{rolesLabel(row.roles)}</span>
             {row.authorityName && (
               <>

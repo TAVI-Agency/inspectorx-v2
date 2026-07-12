@@ -10,6 +10,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { Operation } from '@/data/types'
+import type { RequirementCategory } from '@/data/taxonomy'
+import { CATEGORY_LABEL } from '@/data/taxonomy'
 import { cn } from '@/lib/utils'
 
 /** Мягкая карточка «кокпита» — крупный радиус, тонкая тень. */
@@ -71,6 +73,26 @@ export const OPERATION_ICON: Record<Operation, LucideIcon> = {
   transit: ArrowLeftRight,
   re_export: RotateCcw,
   re_import: RotateCw,
+}
+
+/** Цветной чип «рода требования» (NTM) — палитра независима от темы. */
+const CATEGORY_TONE: Record<RequirementCategory, string> = {
+  tbt: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300',
+  sps: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
+  marking: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
+  licensing: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
+  fiscal: 'bg-rose-500/10 text-rose-600 dark:text-rose-300',
+  currency: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+  customs: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+  origin: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-300',
+}
+
+export function CategoryChip({ category }: { category: RequirementCategory }) {
+  return (
+    <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', CATEGORY_TONE[category])}>
+      {CATEGORY_LABEL[category]}
+    </span>
+  )
 }
 
 /** Стиль плашки типа требования (деонтика) в дизайне Б. */
