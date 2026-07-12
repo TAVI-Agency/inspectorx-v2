@@ -46,11 +46,11 @@ export function CCatalogPage() {
 
         <section className="mt-12 pb-20 sm:mt-14">
           <CEyebrow>{ru.landing.examplesLabel}</CEyebrow>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {exampleHits.map((hit, i) => (
               <Link
                 key={hit.id}
-                to={`/product/${hit.id}`}
+                to={hit.kind === 'service' ? `/service/${hit.id}` : `/product/${hit.id}`}
                 className="group focus-visible:outline-none"
               >
                 <CCard
@@ -59,7 +59,9 @@ export function CCatalogPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className="rounded-md bg-secondary px-2 py-1 font-mono text-[11px] text-secondary-foreground">
-                      {formatHsCode(hit.code)}
+                      {hit.codeKind === 'hs'
+                        ? formatHsCode(hit.code)
+                        : `${ru.service.okedLabel} ${hit.code}`}
                     </span>
                     <ArrowUpRight className="size-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary" />
                   </div>

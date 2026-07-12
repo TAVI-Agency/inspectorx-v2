@@ -10,6 +10,7 @@ export type PartyRole =
   | 'exporter'
   | 'seller'
   | 'carrier'
+  | 'service_provider'
   | 'all'
 export type Operation =
   | 'product'
@@ -19,11 +20,14 @@ export type Operation =
   | 'transit'
   | 're_export'
   | 're_import'
+  | 'service'
 /** Вид транспорта — только у трансграничных процедур (иначе не задан) */
 export type TransportType = 'avto' | 'train' | 'avia'
 export type TrustLabel = 'ai_draft' | 'lawyer_verified' | 'official_answer'
 export type Importance = 'high' | 'medium' | 'low'
 export type SearchKind = 'product' | 'service'
+/** Режим допуска услуги по ЗРУ-701 — главный бейдж паспорта услуги */
+export type AdmissionMode = 'license' | 'permit' | 'notification' | 'free'
 
 /** Поле за пейволлом: сервер (RLS) не отдал → locked, рисуем блюр + CTA. */
 export type Gated<T> = { state: 'ok'; value: T } | { state: 'locked' }
@@ -43,7 +47,7 @@ export interface SearchHit {
   /** Полное официальное название кода — для самопроверки кода пользователем */
   officialName: string
   code: string
-  codeKind: 'hs' | 'ikpu'
+  codeKind: 'hs' | 'ikpu' | 'oked'
   categoryName?: string
 }
 
@@ -58,6 +62,24 @@ export interface ProductPassport {
   ikpuCode?: string
   categoryName?: string
   hierarchyLevels: string[]
+  complexity?: number
+  verifiedAt?: string
+}
+
+// ── Паспорт услуги ─────────────────────────────────────────────────
+// Зеркало паспорта товара: ОКЭД вместо ТН ВЭД + режим допуска и лицензиар.
+
+export interface ServicePassport {
+  id: string
+  displayName: string
+  officialName?: string
+  /** Код вида деятельности — главная ось поиска услуг */
+  okedCode?: string
+  /** Фискальный код — второй в шапке, когда известен */
+  ikpuCode?: string
+  admissionMode?: AdmissionMode
+  /** Лицензиар / разрешительный орган */
+  authorityName?: string
   complexity?: number
   verifiedAt?: string
 }

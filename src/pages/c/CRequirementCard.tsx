@@ -33,7 +33,8 @@ export function CRequirementCard({
   productId,
 }: {
   row: RequirementRow
-  productId: string
+  /** Не передаётся на странице услуги — вопрос уйдёт без привязки к товару */
+  productId?: string
 }) {
   const { data: card, isLoading } = useRequirementCard(row)
   const dialog = useAskDialogState()

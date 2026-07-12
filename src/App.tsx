@@ -3,6 +3,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { CLayout } from './pages/c/CLayout'
 import { CCatalogPage } from './pages/c/CCatalogPage'
 import { CProductPage } from './pages/c/CProductPage'
+import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
 import { CCabinetPage } from './pages/c/CCabinetPage'
 import { CAuthPage } from './pages/c/CAuthPage'
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
     children: [
       { path: '/catalog', element: <CCatalogPage /> },
       { path: '/product/:productId', element: <CProductPage /> },
+      { path: '/service/:serviceId', element: <CServicePage /> },
       { path: '/pricing', element: <CPricingPage /> },
       { path: '/cabinet', element: <CCabinetPage /> },
       { path: '/login', element: <CAuthPage mode="login" /> },

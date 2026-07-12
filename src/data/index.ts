@@ -19,6 +19,7 @@ import {
   type RequirementRow,
   type SearchHit,
   type SearchKind,
+  type ServicePassport,
   type StageInfo,
   type SummaryMetrics,
   type TelemetryStats,
@@ -28,8 +29,12 @@ import {
   fetchCardReal,
   fetchPassportReal,
   fetchRequirementsReal,
+  fetchServiceDocumentsCountReal,
+  fetchServicePassportReal,
+  fetchServiceRequirementsReal,
   fetchTelemetryReal,
   searchProductsReal,
+  searchServicesReal,
 } from './real'
 import {
   CIGARETTES_PRODUCT_ID,
@@ -50,6 +55,7 @@ import {
   stagesFromRows,
 } from './mock/fixtures'
 import { readChangeIds } from './mock/read-store'
+import { PHARMACY_SERVICE_ID } from './cross-links'
 
 export interface DataCtx {
   /** Реальная подписка (profiles.is_subscribed под сессией) */
@@ -76,7 +82,7 @@ export async function fetchTelemetry(): Promise<TelemetryStats> {
 // ── Поиск ──────────────────────────────────────────────────────────
 
 export async function search(query: string, kind: SearchKind): Promise<SearchHit[]> {
-  if (kind === 'service') return [] // услуг в базе нет — честное пустое состояние
+  if (kind === 'service') return searchServicesReal(query)
   const hits = await searchProductsReal(query)
   if (paracetamolMatches(query) && !hits.some((h) => h.id === PARACETAMOL_PRODUCT_ID)) {
     hits.unshift(paracetamolHit)
@@ -109,6 +115,16 @@ export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
     requirementsCount: 7,
   },
   { ...paracetamolHit, requirementsCount: 6 },
+  {
+    id: PHARMACY_SERVICE_ID,
+    kind: 'service',
+    displayName: 'Розничная аптека',
+    officialName: 'первая услуга: маршрут из 6 этапов — от лицензии до закрытия',
+    code: '47.73',
+    codeKind: 'oked',
+    categoryName: 'Услуги · режим допуска: лицензия',
+    requirementsCount: 35,
+  },
 ]
 
 // ── Страница товара ────────────────────────────────────────────────
@@ -230,6 +246,43 @@ export async function fetchProductBundle(
     rows,
     stages: stagesFromRows(rows),
     metrics: metricsFor(productId, rows, ctx),
+  }
+}
+
+// ── Страница услуги ────────────────────────────────────────────────
+// Зеркало товарного бандла: паспорт + строки по 6 этапам жизни бизнеса.
+
+export interface ServiceBundle {
+  passport: ServicePassport
+  rows: RequirementRow[]
+  stages: StageInfo[]
+  metrics: SummaryMetrics
+}
+
+export async function fetchServiceBundle(
+  serviceId: string,
+): Promise<ServiceBundle | null> {
+  const passport = await fetchServicePassportReal(serviceId)
+  if (!passport) return null
+
+  const list = await fetchServiceRequirementsReal(passport.okedCode ?? null)
+  const rows = list.rows
+
+  // Документы: считаем из details — RLS отдаёт их только подписчику
+  const docsCount = await fetchServiceDocumentsCountReal(rows.map((r) => r.id))
+  const documents: Gated<number> = docsCount === null ? locked : ok(docsCount)
+
+  const openMax = maxSanctionFromRows(rows)
+  return {
+    passport: { ...passport, verifiedAt: list.verifiedAt },
+    rows,
+    stages: list.stages,
+    metrics: {
+      requirements: rows.length,
+      documents,
+      maxSanction: openMax ? ok(openMax) : locked,
+      changes30d: 0, // конвейер изменений для услуг ещё не наполнялся
+    },
   }
 }
 

@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -737,9 +732,13 @@ export type Database = {
           flagged_by_event_id: string | null
           id: string
           lifecycle_stage_id: string | null
+          nature: Database["public"]["Enums"]["requirement_nature"] | null
           operation: Database["public"]["Enums"]["operation_domain"]
           origin: Database["public"]["Enums"]["requirement_origin"]
           published_at: string | null
+          requirement_category:
+            | Database["public"]["Enums"]["requirement_category"]
+            | null
           review_flag: Database["public"]["Enums"]["review_flag"]
           reviewed_at: string | null
           reviewed_by: string | null
@@ -760,9 +759,13 @@ export type Database = {
           flagged_by_event_id?: string | null
           id?: string
           lifecycle_stage_id?: string | null
+          nature?: Database["public"]["Enums"]["requirement_nature"] | null
           operation: Database["public"]["Enums"]["operation_domain"]
           origin?: Database["public"]["Enums"]["requirement_origin"]
           published_at?: string | null
+          requirement_category?:
+            | Database["public"]["Enums"]["requirement_category"]
+            | null
           review_flag?: Database["public"]["Enums"]["review_flag"]
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -783,9 +786,13 @@ export type Database = {
           flagged_by_event_id?: string | null
           id?: string
           lifecycle_stage_id?: string | null
+          nature?: Database["public"]["Enums"]["requirement_nature"] | null
           operation?: Database["public"]["Enums"]["operation_domain"]
           origin?: Database["public"]["Enums"]["requirement_origin"]
           published_at?: string | null
+          requirement_category?:
+            | Database["public"]["Enums"]["requirement_category"]
+            | null
           review_flag?: Database["public"]["Enums"]["review_flag"]
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -865,36 +872,56 @@ export type Database = {
       }
       services: {
         Row: {
+          admission_mode: Database["public"]["Enums"]["admission_mode"] | null
+          authority_id: string | null
+          complexity_index: number | null
           created_at: string
           id: string
-          ikpu_code: string
+          ikpu_code: string | null
           is_active: boolean
           name_en: string | null
           name_ru: string
           name_uz: string | null
+          oked_code: string | null
           updated_at: string
         }
         Insert: {
+          admission_mode?: Database["public"]["Enums"]["admission_mode"] | null
+          authority_id?: string | null
+          complexity_index?: number | null
           created_at?: string
           id?: string
-          ikpu_code: string
+          ikpu_code?: string | null
           is_active?: boolean
           name_en?: string | null
           name_ru: string
           name_uz?: string | null
+          oked_code?: string | null
           updated_at?: string
         }
         Update: {
+          admission_mode?: Database["public"]["Enums"]["admission_mode"] | null
+          authority_id?: string | null
+          complexity_index?: number | null
           created_at?: string
           id?: string
-          ikpu_code?: string
+          ikpu_code?: string | null
           is_active?: boolean
           name_en?: string | null
           name_ru?: string
           name_uz?: string | null
+          oked_code?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "services_authority_id_fkey"
+            columns: ["authority_id"]
+            isOneToOne: false
+            referencedRelation: "authorities"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscription_requests: {
         Row: {
@@ -1069,6 +1096,7 @@ export type Database = {
     }
     Enums: {
       act_status: "active" | "repealed" | "pending"
+      admission_mode: "license" | "permit" | "notification" | "free"
       applicability_scope:
         | "hs_code"
         | "hs_prefix"
@@ -1076,6 +1104,8 @@ export type Database = {
         | "ikpu_prefix"
         | "all_products"
         | "all_services"
+        | "oked_code"
+        | "oked_prefix"
       change_event_type: "new" | "amended" | "repealed" | "effective_soon"
       change_source: "jurisbase" | "manual"
       content_request_kind:
@@ -1095,6 +1125,7 @@ export type Database = {
         | "transit"
         | "re_export"
         | "re_import"
+        | "service"
       party_role:
         | "producer"
         | "importer"
@@ -1102,6 +1133,7 @@ export type Database = {
         | "seller"
         | "carrier"
         | "all"
+        | "service_provider"
       question_status:
         | "new"
         | "ai_answered"
@@ -1109,6 +1141,16 @@ export type Database = {
         | "gr_sent"
         | "gr_answered"
         | "closed"
+      requirement_category:
+        | "sps"
+        | "tbt"
+        | "marking"
+        | "licensing"
+        | "fiscal"
+        | "currency"
+        | "customs"
+        | "origin"
+      requirement_nature: "one_time" | "recurring"
       requirement_origin: "migration_v1" | "ai_pipeline" | "manual"
       requirement_status: "draft" | "in_review" | "published" | "archived"
       review_flag: "none" | "flagged_by_change"
@@ -1250,6 +1292,7 @@ export const Constants = {
   public: {
     Enums: {
       act_status: ["active", "repealed", "pending"],
+      admission_mode: ["license", "permit", "notification", "free"],
       applicability_scope: [
         "hs_code",
         "hs_prefix",
@@ -1257,6 +1300,8 @@ export const Constants = {
         "ikpu_prefix",
         "all_products",
         "all_services",
+        "oked_code",
+        "oked_prefix",
       ],
       change_event_type: ["new", "amended", "repealed", "effective_soon"],
       change_source: ["jurisbase", "manual"],
@@ -1278,6 +1323,7 @@ export const Constants = {
         "transit",
         "re_export",
         "re_import",
+        "service",
       ],
       party_role: [
         "producer",
@@ -1286,6 +1332,7 @@ export const Constants = {
         "seller",
         "carrier",
         "all",
+        "service_provider",
       ],
       question_status: [
         "new",
@@ -1295,6 +1342,17 @@ export const Constants = {
         "gr_answered",
         "closed",
       ],
+      requirement_category: [
+        "sps",
+        "tbt",
+        "marking",
+        "licensing",
+        "fiscal",
+        "currency",
+        "customs",
+        "origin",
+      ],
+      requirement_nature: ["one_time", "recurring"],
       requirement_origin: ["migration_v1", "ai_pipeline", "manual"],
       requirement_status: ["draft", "in_review", "published", "archived"],
       review_flag: ["none", "flagged_by_change"],
@@ -1309,3 +1367,4 @@ export const Constants = {
     },
   },
 } as const
+
