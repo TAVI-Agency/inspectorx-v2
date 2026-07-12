@@ -165,6 +165,11 @@ function CRow({
               const category = categoryChipOf(row)
               return category && <CCategoryChip category={category} />
             })()}
+            {row.nature && (
+              <span className="rounded-[6px] bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {ru.requirement.nature[row.nature]}
+              </span>
+            )}
             <span className="truncate">
               {row.roles.map((r) => ru.requirement.roles[r]).join(', ')}
             </span>

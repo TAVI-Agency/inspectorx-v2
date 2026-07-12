@@ -2,6 +2,7 @@
  * Доменные типы витрины. Компоненты знают только их —
  * откуда пришли данные (Supabase или мок), решает слой src/data.
  */
+import type { RequirementCategory } from './taxonomy'
 
 export type Deontic = 'obligation' | 'prohibition' | 'permission'
 export type PartyRole =
@@ -25,6 +26,8 @@ export type Operation =
 export type TransportType = 'avto' | 'train' | 'avia'
 export type TrustLabel = 'ai_draft' | 'lawyer_verified' | 'official_answer'
 export type Importance = 'high' | 'medium' | 'low'
+/** Пометка «разовое действие / постоянная обязанность» (requirements.nature) */
+export type RequirementNature = 'one_time' | 'recurring'
 export type SearchKind = 'product' | 'service'
 /** Режим допуска услуги по ЗРУ-701 — главный бейдж паспорта услуги */
 export type AdmissionMode = 'license' | 'permit' | 'notification' | 'free'
@@ -120,6 +123,10 @@ export interface RequirementRow {
   stageId: string
   stageName: string
   stageSortOrder: number
+  /** Персистированный род требования (UNCTAD NTM) — приоритетнее эвристики */
+  category?: RequirementCategory
+  /** разовое действие / постоянная обязанность */
+  nature?: RequirementNature
   trustLabel: TrustLabel
   trustDate?: string
   /** review_flag = flagged_by_change → значок «проверяется обновление» */

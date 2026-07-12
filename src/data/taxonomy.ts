@@ -134,12 +134,15 @@ export function categoryOf(row: { stageName: string; title: string }): Requireme
   return 'customs'
 }
 
-/** Категория для чипа строки: у услуг фолбэк «Таможня» — ложь интерфейса, чип скрываем. */
+/** Категория для чипа строки: персистированная из БД приоритетнее эвристики;
+ *  у услуг эвристический фолбэк «Таможня» — ложь интерфейса, чип скрываем. */
 export function categoryChipOf(row: {
   stageName: string
   title: string
   operation: Operation
+  category?: RequirementCategory
 }): RequirementCategory | null {
+  if (row.category) return row.category
   const cat = categoryOf(row)
   if (cat === 'customs' && row.operation === 'service') return null
   return cat

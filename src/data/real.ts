@@ -352,7 +352,7 @@ export interface RequirementListReal {
   verifiedAt?: string
 }
 
-const REQUIREMENT_LIST_SELECT = `id, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at,
+const REQUIREMENT_LIST_SELECT = `id, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at, requirement_category, nature,
        lifecycle_stages(id, name_ru, sort_order),
        authorities(name_ru),
        requirement_contents(lang, title, sanction_summary),
@@ -368,6 +368,8 @@ interface RawListRow {
   review_flag: 'none' | 'flagged_by_change'
   reviewed_at: string | null
   published_at: string | null
+  requirement_category: NonNullable<RequirementRow['category']> | null
+  nature: NonNullable<RequirementRow['nature']> | null
   lifecycle_stages: { id: string; name_ru: string; sort_order: number } | null
   authorities: { name_ru: string } | null
   requirement_contents: { lang: string; title: string; sanction_summary: string | null }[]
@@ -454,6 +456,8 @@ function listFromData(data: RawListRow[]): RequirementListReal {
       stageId: stage?.id ?? 'no-stage',
       stageName: stage?.name_ru ?? 'Общие требования',
       stageSortOrder: stage?.sort_order ?? 999,
+      category: r.requirement_category ?? undefined,
+      nature: r.nature ?? undefined,
       trustLabel: r.trust_label,
       trustDate: r.reviewed_at ?? undefined,
       underReview: r.review_flag === 'flagged_by_change',

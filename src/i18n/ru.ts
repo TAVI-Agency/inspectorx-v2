@@ -170,6 +170,10 @@ export const ru = {
       upcoming: (date: string) => `изменится с ${date}`,
     },
     underReview: 'проверяется обновление',
+    nature: {
+      one_time: 'разовое',
+      recurring: 'постоянно',
+    },
     trust: {
       ai_draft: 'AI-черновик',
       lawyer_verified: (date: string) => `Проверено юристом ${date}`,
