@@ -52,3 +52,13 @@ def test_find_paragraph_uz_modda():
     html = "<p>12-модда. Аввалги матн. 13-модда. Керакли модда матни бу ерда. 14-модда. Кейинги.</p>"
     para = LexuzClient.find_paragraph(html, "art.13")
     assert para and "Керакли модда матни" in para and "Кейинги" not in para
+
+
+def test_find_paragraph_skips_toc_picks_body():
+    from importer.lexuz import LexuzClient
+    # Кодекс: оглавление (заголовки подряд) + настоящее тело ниже
+    html = ("<p>Статья 30. Экспорт Статья 31. Реэкспорт Статья 32. Импорт</p>"
+            "<p>Статья 30. Экспорт " + "существенный текст статьи про экспорт. " * 8
+            + "Статья 31. Дальше.</p>")
+    para = LexuzClient.find_paragraph(html, "art.30")
+    assert para and "существенный текст" in para and len(para) > 120
