@@ -67,14 +67,18 @@ class LexuzClient:
         m_art = re.match(r"art\.([\d-]+)(?:/p\.([\d-]+))?$", ref)
         if m_art:
             num = m_art.group(1)
-            start = re.search(rf"Статья\s+{num}\.", text)
-            if not start:  # UZ-страница: «13-модда.»
-                start = re.search(rf"{num}-модда\.", text)
-            if not start:
-                return None
-            rest = text[start.start():]
-            nxt = re.search(r"Статья\s+[\d-]+\.|[\d-]+-модда\.", rest[10:])
-            return rest[: nxt.start() + 10] if nxt else rest
+            # Кодексы на lex.uz начинаются с оглавления, где заголовки статей идут
+            # подряд (тело ~0 знаков). Берём вхождение с самым длинным телом — это
+            # настоящая статья, а не строка содержания.
+            best = None
+            for pat in (rf"Статья\s+{num}\.", rf"{num}-модда\."):
+                for mt in re.finditer(pat, text):
+                    rest = text[mt.start():]
+                    nxt = re.search(r"Статья\s+[\d-]+\.|[\d-]+-модда\.", rest[10:])
+                    body = rest[: nxt.start() + 10] if nxt else rest
+                    if best is None or len(body) > len(best):
+                        best = body
+            return best
         m_p = re.match(r"p\.([\d-]+)$", ref)
         if m_p:
             num = m_p.group(1)

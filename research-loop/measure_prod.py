@@ -56,8 +56,9 @@ def main():
             if not r or not r.get("operation"):
                 continue
             code = a.get("code") or ""
-            if a["scope"] == "all" or (code and (p["hs_code"].startswith(code)
-                                                 or code.startswith(p["hs_code"]))):
+            if a["scope"] in ("all", "all_products") or (
+                    code and (p["hs_code"].startswith(code)
+                              or code.startswith(p["hs_code"]))):
                 counts[r["operation"]] += 1
         row = "".join(str(counts.get(op) or ".").rjust(9) for op in PRODUCT_OPS)
         gaps = sum(1 for op in PRODUCT_OPS if (counts.get(op) or 0) < TARGET_MIN)
