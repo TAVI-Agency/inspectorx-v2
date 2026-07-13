@@ -44,8 +44,10 @@ def test_map_product_scope():
 def test_map_service_scope():
     assert map_service_scope("this_okved", "47.73") == [("oked_code", "47.73")]
     assert map_service_scope("all_business", "47.73") == [("all_services", None)]
+    # licensed: слота в enum нет — безопасное сужение до ОКЭД услуги (луп 13.07.2026)
+    assert map_service_scope("licensed", "47.73") == [("oked_code", "47.73")]
     with pytest.raises(MappingError):
-        map_service_scope("licensed", "47.73")
+        map_service_scope("небывалый", "47.73")
 
 
 def test_stage_codes_and_domains_file():
