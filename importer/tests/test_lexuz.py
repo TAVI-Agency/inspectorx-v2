@@ -45,3 +45,10 @@ def test_is_russian_and_repealed():
     assert LexuzClient.is_russian(HTML) is True
     assert LexuzClient.is_repealed(HTML) is False
     assert LexuzClient.is_repealed("<p>Документ утратил силу 01.01.2025</p>") is True
+
+
+def test_find_paragraph_uz_modda():
+    from importer.lexuz import LexuzClient
+    html = "<p>12-модда. Аввалги матн. 13-модда. Керакли модда матни бу ерда. 14-модда. Кейинги.</p>"
+    para = LexuzClient.find_paragraph(html, "art.13")
+    assert para and "Керакли модда матни" in para and "Кейинги" not in para

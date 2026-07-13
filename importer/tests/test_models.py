@@ -69,3 +69,11 @@ def test_null_placeholders_tolerated():
     report = ProductReport.model_validate(data)
     assert report.product.ikpu == []
     assert [d.name for d in report.requirements[0].documents] == ["Заявка"]
+
+
+def test_service_okved_cleaned():
+    from importer.models import ServicePassport
+    s = ServicePassport.model_validate(
+        {"name": "Маркетплейс", "okved": "47.91 Розничная торговля через фирмы"})
+    assert s.okved == "47.91"
+    assert ServicePassport.model_validate({"name": "x", "okved": "62.01"}).okved == "62.01"
