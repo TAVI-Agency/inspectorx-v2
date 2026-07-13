@@ -35,8 +35,13 @@ def main():
     apps = fetch_all(ix, "requirement_applicability", "requirement_id,scope,code")
     stages = {s["id"]: s["code"] for s in fetch_all(ix, "lifecycle_stages", "id,code")}
     products = fetch_all(ix, "products", "id,name_ru,hs_code,is_active")
-    services = fetch_all(ix, "services", "id,name_ru,okved,is_active") \
+    services = fetch_all(ix, "services", "id,name_ru,oked_code,is_active") \
         if _has(ix, "services") else []
+
+    # предметы лупа: 4 товара bootstrap-цикла (v1-иерархию ТН ВЭД не меряем)
+    loop_prefixes = ("4011", "2523", "8703", "3208")
+    products = [p for p in products
+                if p.get("hs_code") and p["hs_code"].startswith(loop_prefixes)]
 
     # товар × операция: требование применимо, если код применимости — префикс hs товара
     print("## Товары (published, цель ≥3 на секцию; '.'=0)\n")
@@ -73,10 +78,10 @@ def main():
                 svc_apps[a.get("code") or "all"][st] += 1
         print("этапы:", " ".join(svc_stage_codes))
         for s in services:
-            counts = svc_apps.get(s.get("okved") or "", {})
-            merged = defaultdict(int)
-            for k, v in {**svc_apps.get("all", {}), **counts}.items():
-                merged[k] += v
+            counts = svc_apps.get(s.get("oked_code") or "", {})
+            general = svc_apps.get("all", {})
+            merged = {k: general.get(k, 0) + counts.get(k, 0)
+                      for k in set(general) | set(counts)}
             row = " ".join(str(merged.get(c) or ".").rjust(6) for c in svc_stage_codes)
             gaps = sum(1 for c in svc_stage_codes if (merged.get(c) or 0) < TARGET_MIN)
             print(f"{(s.get('name_ru') or '?')[:36].ljust(37)}{row}   gaps:{gaps}/{len(svc_stage_codes)}")

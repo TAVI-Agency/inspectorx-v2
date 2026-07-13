@@ -37,6 +37,14 @@ _ADDRESSEES = {
     "продавец": "seller", "ритейлер": "seller", "розничный продавец": "seller",
     "перевозчик": "carrier",
     "владелец": "all", "предприниматель": "all", "бизнес": "all", "все": "all",
+    # сервисные отчёты (луп 13.07.2026): адресат-бизнес и его люди → all
+    # (ролей тоньше «all» в закрытом списке БД пока нет)
+    "исполнитель услуги": "all", "service provider": "all", "provider": "all",
+    "executor": "all", "оператор": "all", "организация": "all",
+    "руководитель": "all", "director": "all", "директор": "all",
+    "manager": "all", "менеджер": "all", "staff": "all", "персонал": "all",
+    "рекламораспространитель": "all", "рекламопроизводитель": "all",
+    "рекламодатель": "all", "владелец конструкции": "all",
 }
 
 
@@ -94,7 +102,9 @@ def map_product_scope(scope, product_hs: str | None, domains: dict) -> list[tupl
 def map_service_scope(scope: str, okved: str) -> list[tuple[str, str | None]]:
     if scope == "all_business":
         return [("all_services", None)]
-    if scope == "this_okved":
+    if scope in ("this_okved", "licensed"):
+        # «licensed» — слота в enum applicability_scope нет; привязываем к ОКЭД
+        # услуги отчёта (уже, чем «все лицензируемые», — безопасное сужение)
         return [("oked_code", okved)]
     raise _no_slot(f"service scope: {scope}")
 
