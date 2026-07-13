@@ -68,6 +68,11 @@ class _BaseRequirement(_Base):
     nature: Literal["obligation", "prohibition", "right"]
     summary: str
     legal_quote_ru: str | None = None
+    # UZ-ветка гейта (решение 13.07.2026): дословная узбекская цитата + страница,
+    # по которой её сверять (приложения ПКМ публикуются только на UZ-странице акта).
+    # Дедуп-ключ по-прежнему считается от act.lexuz_url — verify_url только для сверки.
+    legal_quote_uz: str | None = None
+    verify_url: str | None = None
     act: ActRef
     unit: str | None = None
     edition_date: str | None = None
@@ -130,6 +135,18 @@ class ServicePassport(_Base):
     admission_type: str | None = None
     licensor: str | None = None
     related_products: list[str] | None = []
+
+    @field_validator("okved", mode="before")
+    @classmethod
+    def _clean_okved(cls, v):
+        # реальные отчёты: «47.91 Розничная торговля через …» → «47.91»
+        # (чек-констрейнт services_oked_code_check пускает только код)
+        if isinstance(v, str):
+            import re
+            m = re.match(r"\s*(\d{2}(?:\.\d{1,2}){0,2})", v)
+            if m:
+                return m.group(1)
+        return v
 
 
 class ProductReport(_Base):

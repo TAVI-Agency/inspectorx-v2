@@ -37,3 +37,9 @@ def test_lexuz_doc_id(url, expected):
 ])
 def test_parse_unit_ref(unit, expected):
     assert parse_unit_ref(unit) == expected
+
+
+def test_glava_pattern():
+    from importer.refs import parse_unit_ref
+    assert parse_unit_ref("гл. 3") == "ch.3"
+    assert parse_unit_ref("глава 7 (ст. 34-46)") == "ch.7"

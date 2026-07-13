@@ -30,6 +30,7 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(rf"^{_APP}(\d+)\s*[–—-]\s*(\d+)$", re.I), r"app\1-\2"),
     (re.compile(rf"^{_APP}{_NUM}$", re.I), r"app\1"),
     (re.compile(rf"^раздел\s*{_NUM}$", re.I), r"sec.\1"),
+    (re.compile(rf"^гл(?:\.|ава|авы)?\s*{_NUM}$", re.I), r"ch.\1"),
 ]
 
 

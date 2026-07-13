@@ -68,10 +68,12 @@ class LexuzClient:
         if m_art:
             num = m_art.group(1)
             start = re.search(rf"Статья\s+{num}\.", text)
+            if not start:  # UZ-страница: «13-модда.»
+                start = re.search(rf"{num}-модда\.", text)
             if not start:
                 return None
             rest = text[start.start():]
-            nxt = re.search(r"Статья\s+[\d-]+\.", rest[10:])
+            nxt = re.search(r"Статья\s+[\d-]+\.|[\d-]+-модда\.", rest[10:])
             return rest[: nxt.start() + 10] if nxt else rest
         m_p = re.match(r"p\.([\d-]+)$", ref)
         if m_p:
