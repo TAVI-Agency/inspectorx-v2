@@ -92,8 +92,9 @@ def run_import(path: Path, ix, jb, lexuz, llm, dry_run: bool = False,
                 continue
 
             act_row = resolve_act(req.act, gate.doc_id, jb, ix, queue_path)
-            paragraph_row = ensure_paragraph(ix, act_row, gate.ref,
-                                             req.legal_quote_ru, gate.doc_id)
+            paragraph_row = ensure_paragraph(
+                ix, act_row, gate.ref, req.legal_quote_ru, gate.doc_id,
+                quote_uz=(req.legal_quote_uz if gate.verified_lang == "uz" else None))
             req_id = loader.load_requirement(req, rf.kind, gate, act_row,
                                              paragraph_row, subject, stage_ids)
             item_id = loader.save_item(summary.run_id, idx, req, "loaded",

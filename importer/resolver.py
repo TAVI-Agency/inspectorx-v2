@@ -64,14 +64,21 @@ def resolve_act(act, doc_id: str, jb, ix, queue_path: Path) -> dict:
     return _first(ix.table("acts").insert(row).execute())
 
 
-def ensure_paragraph(ix, act_row: dict, ref: str, quote_ru: str | None, doc_id: str) -> dict:
+def ensure_paragraph(ix, act_row: dict, ref: str, quote_ru: str | None, doc_id: str,
+                     *, quote_uz: str | None = None) -> dict:
     existing = _first(ix.table("act_paragraphs").select("*")
                       .eq("act_id", act_row["id"]).eq("paragraph_ref", ref).limit(1).execute())
     if existing:
+        if quote_uz and not existing.get("verbatim_uz"):
+            # Библиотека оригиналов копится: досаживаем UZ-текст в старую строку.
+            ix.table("act_paragraphs").update({"verbatim_uz": quote_uz}) \
+                .eq("id", existing["id"]).execute()
+            existing = {**existing, "verbatim_uz": quote_uz}
         return existing
     return _first(ix.table("act_paragraphs").insert({
         "act_id": act_row["id"],
         "paragraph_ref": ref,
         "verbatim_ru": quote_ru,
+        "verbatim_uz": quote_uz,
         "deep_link_url": f"https://lex.uz/ru/docs/{doc_id}",
     }).execute())

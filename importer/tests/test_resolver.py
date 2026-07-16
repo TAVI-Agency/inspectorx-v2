@@ -30,3 +30,22 @@ def test_ensure_paragraph_idempotent(tmp_path):
     p2 = ensure_paragraph(ix, act_row, "art.14", "другая", "6445145")
     assert p1["id"] == p2["id"]
     assert len(ix.store["act_paragraphs"]) == 1
+
+
+def test_ensure_paragraph_writes_verbatim_uz(tmp_path):
+    ix = FakeClient({"act_paragraphs": []})
+    p = ensure_paragraph(ix, {"id": "act-1"}, "art.14", "цитата ру", "6445145",
+                         quote_uz="иқтибос ўз")
+    assert p["verbatim_uz"] == "иқтибос ўз" and p["verbatim_ru"] == "цитата ру"
+
+
+def test_ensure_paragraph_backfills_verbatim_uz(tmp_path):
+    # Старая строка без UZ — новая цитата досаживает оригинал, не создавая дубля.
+    ix = FakeClient({"act_paragraphs": []})
+    p1 = ensure_paragraph(ix, {"id": "act-1"}, "art.14", "цитата ру", "6445145")
+    assert p1.get("verbatim_uz") is None
+    p2 = ensure_paragraph(ix, {"id": "act-1"}, "art.14", "цитата ру", "6445145",
+                          quote_uz="иқтибос ўз")
+    assert p2["id"] == p1["id"]
+    assert len(ix.store["act_paragraphs"]) == 1
+    assert ix.store["act_paragraphs"][0]["verbatim_uz"] == "иқтибос ўз"
