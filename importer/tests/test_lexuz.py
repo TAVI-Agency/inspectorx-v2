@@ -66,6 +66,9 @@ def test_find_paragraph_skips_toc_picks_body():
 
 RU_LANGS_HTML = (FIX / "lexuz_act_ru_langs.html").read_text()
 
+UZ_CYR_HTML = (FIX / "lexuz_act_uz_cyr.html").read_text()
+UZ_LAT_HTML = (FIX / "lexuz_act_uz_lat.html").read_text()
+
 
 def test_language_versions_parses_header():
     v = LexuzClient.language_versions(RU_LANGS_HTML)
@@ -74,3 +77,19 @@ def test_language_versions_parses_header():
 
 def test_language_versions_empty_when_no_header():
     assert LexuzClient.language_versions("<p>страница без шапки</p>") == {}
+
+
+def test_find_paragraph_uz_latin_article():
+    body = LexuzClient.find_paragraph(UZ_LAT_HTML, "art.14")
+    assert body is not None and "majburiy tasdiqlashdan" in body
+    assert "15-modda" not in body  # граница следующей статьи соблюдена
+
+
+def test_find_paragraph_uz_cyr_article_still_works():
+    body = LexuzClient.find_paragraph(UZ_CYR_HTML, "art.14")
+    assert body is not None and "мажбурий тасдиқлашдан" in body
+
+
+def test_quote_script():
+    assert LexuzClient.quote_script("мувофиқликни тасдиқлаш шарт") == "cyr"
+    assert LexuzClient.quote_script("muvofiqlikni tasdiqlash shart") == "lat"
