@@ -84,6 +84,14 @@ class LexuzClient:
         return versions
 
     @staticmethod
+    def quote_script(text: str) -> str:
+        """Графика узбекской цитаты: 'cyr' | 'lat' — для выбора версии акта."""
+        low = text.lower()
+        cyr = len(re.findall(r"[а-яёўқғҳ]", low))
+        lat = len(re.findall(r"[a-z]", low))
+        return "lat" if lat > cyr else "cyr"
+
+    @staticmethod
     def find_paragraph(html: str, ref: str) -> str | None:
         text = LexuzClient.page_text(html)
         m_art = re.match(r"art\.([\d-]+)(?:/p\.([\d-]+))?$", ref)
@@ -93,10 +101,11 @@ class LexuzClient:
             # подряд (тело ~0 знаков). Берём вхождение с самым длинным телом — это
             # настоящая статья, а не строка содержания.
             best = None
-            for pat in (rf"Статья\s+{num}\.", rf"{num}-модда\."):
+            for pat in (rf"Статья\s+{num}\.", rf"{num}-модда\.", rf"{num}-modda\."):
                 for mt in re.finditer(pat, text):
                     rest = text[mt.start():]
-                    nxt = re.search(r"Статья\s+[\d-]+\.|[\d-]+-модда\.", rest[10:])
+                    nxt = re.search(r"Статья\s+[\d-]+\.|[\d-]+-модда\.|[\d-]+-modda\.",
+                                    rest[10:])
                     body = rest[: nxt.start() + 10] if nxt else rest
                     if best is None or len(body) > len(best):
                         best = body
