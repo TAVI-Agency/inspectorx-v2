@@ -17,7 +17,7 @@ class LexuzUnreachable(Exception):
 # (см. research-loop/DECISIONS.md, запись 2026-07-16).
 _LANG_TITLES = {
     "Ўзбекча": "uz_cyr",
-    "O'zbekcha": "uz_lat", "O'zbekcha": "uz_lat", "O'zbekcha": "uz_lat",
+    "O'zbekcha": "uz_lat", "O’zbekcha": "uz_lat", "O‘zbekcha": "uz_lat",
     "Русча": "ru", "Русский": "ru",
     "English": "en", "Инглизча": "en",
 }
