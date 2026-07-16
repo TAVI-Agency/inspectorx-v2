@@ -30,7 +30,9 @@ def client(tmp_path, html=HTML):
 
 def test_gate_passes(tmp_path):
     r = verify_item(req(), client(tmp_path), llm=None)
-    assert r.ok and r.doc_id == "-6445145" and r.ref == "art.14" and r.confidence >= 0.85
+    assert r.ok and r.doc_id == "-6445145" and r.ref == "art.14"
+    assert r.confidence >= 0.85
+    assert r.verified_lang == "ru" and r.uz_backfill_needed  # переходный режим
 
 
 def test_needs_review_short_circuits(tmp_path):
@@ -80,11 +82,12 @@ UZ_HTML = "<p>4-ИЛОВА Мувофиқлик сертификати 9. " + UZ
 
 
 def test_uz_branch_verifies_uz_quote_on_uz_only_page(tmp_path):
-    # UZ-страница + legal_quote_uz → сверка проходит с penalty 0.95
+    # UZ-only страница + legal_quote_uz → канон: сверка по самой странице, penalty 1.0
     r = verify_item(req(legal_quote_uz=UZ_ROW, unit="прил. № 4, строка 9",
                         legal_quote_ru=None),
                     client(tmp_path, UZ_HTML), llm=None)
-    assert r.ok and r.confidence <= 0.95 and r.ref == "app4/row9"
+    assert r.ok and r.verified_lang == "uz" and r.ref == "app4/row9"
+    assert 0.85 <= r.confidence <= 0.95   # 1.0 * 0.9 (fallback по всей странице)
 
 
 def test_uz_branch_without_uz_quote_still_review(tmp_path):
@@ -104,3 +107,54 @@ def test_verify_url_checks_alt_page_but_keeps_canonical_doc_id(tmp_path):
                     lex, llm=None)
     assert r.ok and r.doc_id == "-6445145"
     assert any("5249376" in u for u in calls)
+
+
+RU_LANGS_HTML = (FIX / "lexuz_act_ru_langs.html").read_text()
+UZ_CYR_HTML = (FIX / "lexuz_act_uz_cyr.html").read_text()
+UZ_LAT_HTML = (FIX / "lexuz_act_uz_lat.html").read_text()
+UZ_QUOTE_CYR = ("Рўйхатга киритилган маҳсулот белгиланган тартибда мувофиқликни "
+                "мажбурий тасдиқлашдан ўтказилиши шарт.")
+UZ_QUOTE_LAT = ("Roʻyxatga kiritilgan mahsulot belgilangan tartibda muvofiqlikni "
+                "majburiy tasdiqlashdan oʻtkazilishi shart.")
+
+
+def routed_client(tmp_path):
+    """RU-страница с шапкой; UZ-версии отдаются по своим doc_id."""
+    def fetcher(url):
+        if url.endswith("/docs/6445146"):
+            return UZ_CYR_HTML
+        if url.endswith("/docs/-6445146"):
+            return UZ_LAT_HTML
+        return RU_LANGS_HTML
+    return LexuzClient(cache_dir=tmp_path, fetcher=fetcher)
+
+
+def test_uz_canonical_via_header_links(tmp_path):
+    # Узбекская цитата + RU-страница с шапкой → гейт сам находит UZ-версию,
+    # сверяет по ней с полным доверием; ключ дедупа остаётся от act.lexuz_url.
+    r = verify_item(req(legal_quote_uz=UZ_QUOTE_CYR), routed_client(tmp_path), llm=None)
+    assert r.ok and r.verified_lang == "uz"
+    assert r.confidence >= 0.95           # канон: penalty 1.0
+    assert r.doc_id == "-6445145"          # инвариант дедупа
+    assert r.uz_doc_id == "6445146"
+    assert not r.uz_backfill_needed
+
+
+def test_uz_latin_quote_routes_to_latin_version(tmp_path):
+    r = verify_item(req(legal_quote_uz=UZ_QUOTE_LAT), routed_client(tmp_path), llm=None)
+    assert r.ok and r.verified_lang == "uz" and r.uz_doc_id == "-6445146"
+
+
+def test_ru_fallback_flags_backfill(tmp_path):
+    # Только RU-цитата, страница без шапки → вторичная сверка 0.95 + флаг добивки.
+    r = verify_item(req(), client(tmp_path), llm=None)
+    assert r.ok and r.verified_lang == "ru" and r.uz_backfill_needed
+    # penalty 0.95 * fuzzy score (~0.99, quote не дословно совпадает с текстом
+    # акта — "порядке." vs "порядке и в надлежащем виде") → confidence чуть ниже 0.95
+    assert 0.90 <= r.confidence <= 0.95
+
+
+def test_uz_quote_but_no_uz_link(tmp_path):
+    # Узбекская цитата, но RU-страница без ссылок на UZ-версии → review.
+    r = verify_item(req(legal_quote_uz=UZ_QUOTE_CYR), client(tmp_path), llm=None)
+    assert not r.ok and r.reason == "uz_version_not_found"
