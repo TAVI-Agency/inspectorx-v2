@@ -81,7 +81,10 @@ def verify_item(req, lexuz: LexuzClient, llm) -> GateResult:
                 page = lexuz.fetch(uz_doc_id)
             except LexuzUnreachable as e:
                 return _review("lexuz_unreachable", str(e), doc_id=doc_id)
-        # страница сама UZ → сверяем по ней; penalty остаётся 1.0 (канон)
+        else:
+            # страница сама UZ → она и есть UZ-версия акта
+            uz_doc_id = doc_id
+        # penalty остаётся 1.0 (канон)
     elif not LexuzClient.is_russian(html):
         return _review("uz_only_act",
                        "официального RU-текста нет и нет legal_quote_uz для UZ-сверки",
