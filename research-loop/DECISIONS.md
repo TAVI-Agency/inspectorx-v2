@@ -121,3 +121,18 @@ uz_version_not_found. verbatim_uz копится в act_paragraphs через г
 (ключа "ru" в шапке нет) — гейту не мешает, он ищет только UZ-версии. Тесты: 98
 passed (87 базовых + 11 новых). Метрика для фазы 3: доля act_paragraphs с
 verbatim_uz.
+
+## 2026-07-16 — фаза 1: follow-up после финального ревью
+
+Ревью фазы 1: Ready to merge, 0 Critical. Отложено (бэклог):
+(1) research-loop-инструменты не в новой семантике: requeue_review.py зовёт
+ensure_paragraph без quote_uz (verbatim_uz не копится через requeue), порог
+pass2_autoclear >= 0.85 стал строже для RU-items (confidence теперь ×0.95) —
+починить/пересмотреть ДО разбора очереди 205 items.
+(2) Регэксп language_versions хрупок к перевёрстке lex.uz (порядок атрибутов,
+кавычки) — при первом живом прогоне считать долю uz_version_not_found; при
+появлении контрпримера перевести парсер шапки на BeautifulSoup.
+(3) quote_script может ошибиться на кириллической цитате с латинскими кодами
+(ISO 9001 и т.п.) — отказ безопасный (review), следить по метрике.
+Сделано в этом же коммите: окина U+02BB в _LANG_TITLES; uz_doc_id = doc_id
+в UZ-only ветке гейта.

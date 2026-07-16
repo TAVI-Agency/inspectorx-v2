@@ -88,6 +88,7 @@ def test_uz_branch_verifies_uz_quote_on_uz_only_page(tmp_path):
                     client(tmp_path, UZ_HTML), llm=None)
     assert r.ok and r.verified_lang == "uz" and r.ref == "app4/row9"
     assert 0.85 <= r.confidence <= 0.95   # 1.0 * 0.9 (fallback по всей странице)
+    assert r.uz_doc_id == r.doc_id  # страница сама UZ — она и есть UZ-версия
 
 
 def test_uz_branch_without_uz_quote_still_review(tmp_path):

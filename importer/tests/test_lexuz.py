@@ -93,3 +93,10 @@ def test_find_paragraph_uz_cyr_article_still_works():
 def test_quote_script():
     assert LexuzClient.quote_script("мувофиқликни тасдиқлаш шарт") == "cyr"
     assert LexuzClient.quote_script("muvofiqlikni tasdiqlash shart") == "lat"
+
+
+def test_language_versions_recognizes_okina_apostrophe():
+    # Официальный узбекский апостроф — U+02BB (ʻ), а не U+0027/U+2019/U+2018.
+    html = ("<a onclick=\"openUrl('/uz/docs/-777')\" "
+            "title=\"Oʻzbekcha\">Oʻzbekcha</a>")
+    assert LexuzClient.language_versions(html) == {"uz_lat": "-777"}

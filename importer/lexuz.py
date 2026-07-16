@@ -18,6 +18,7 @@ class LexuzUnreachable(Exception):
 _LANG_TITLES = {
     "Ўзбекча": "uz_cyr",
     "O'zbekcha": "uz_lat", "O’zbekcha": "uz_lat", "O‘zbekcha": "uz_lat",
+    "Oʻzbekcha": "uz_lat",  # U+02BB — официальная узбекская окина
     "Русча": "ru", "Русский": "ru",
     "English": "en", "Инглизча": "en",
 }
