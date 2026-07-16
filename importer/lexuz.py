@@ -12,6 +12,17 @@ class LexuzUnreachable(Exception):
     pass
 
 
+# Заголовки языковых ссылок шапки lex.uz → наш код языка.
+# Язык версии определяется ТОЛЬКО по title: знак doc_id семантики не несёт
+# (см. research-loop/DECISIONS.md, запись 2026-07-16).
+_LANG_TITLES = {
+    "Ўзбекча": "uz_cyr",
+    "O'zbekcha": "uz_lat", "O'zbekcha": "uz_lat", "O'zbekcha": "uz_lat",
+    "Русча": "ru", "Русский": "ru",
+    "English": "en", "Инглизча": "en",
+}
+
+
 def _http_fetch(url: str) -> str:
     last = None
     for delay in (2, 4, 8):
@@ -60,6 +71,17 @@ class LexuzClient:
         text = f" {LexuzClient.page_text(html).lower()} "
         hits = sum(text.count(w) for w in (" и ", " или ", " в ", " на "))
         return hits >= 20
+
+    @staticmethod
+    def language_versions(html: str) -> dict[str, str]:
+        """Ссылки шапки акта на языковые версии: у каждой версии свой doc_id."""
+        versions: dict[str, str] = {}
+        pat = r"openUrl\('/[a-z]{2}/docs/(-?\d+)'\)\"\s*title=\"([^\"]+)\""
+        for m in re.finditer(pat, html):
+            lang = _LANG_TITLES.get(m.group(2))
+            if lang and lang not in versions:
+                versions[lang] = m.group(1)
+        return versions
 
     @staticmethod
     def find_paragraph(html: str, ref: str) -> str | None:
