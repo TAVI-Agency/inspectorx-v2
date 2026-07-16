@@ -62,3 +62,15 @@ def test_find_paragraph_skips_toc_picks_body():
             + "Статья 31. Дальше.</p>")
     para = LexuzClient.find_paragraph(html, "art.30")
     assert para and "существенный текст" in para and len(para) > 120
+
+
+RU_LANGS_HTML = (FIX / "lexuz_act_ru_langs.html").read_text()
+
+
+def test_language_versions_parses_header():
+    v = LexuzClient.language_versions(RU_LANGS_HTML)
+    assert v == {"uz_cyr": "6445146", "uz_lat": "-6445146", "ru": "-6445145"}
+
+
+def test_language_versions_empty_when_no_header():
+    assert LexuzClient.language_versions("<p>страница без шапки</p>") == {}
