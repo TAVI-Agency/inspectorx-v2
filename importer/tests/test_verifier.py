@@ -159,3 +159,30 @@ def test_uz_quote_but_no_uz_link(tmp_path):
     # Узбекская цитата, но RU-страница без ссылок на UZ-версии → review.
     r = verify_item(req(legal_quote_uz=UZ_QUOTE_CYR), client(tmp_path), llm=None)
     assert not r.ok and r.reason == "uz_version_not_found"
+
+
+def test_gate_exposes_raw_score_and_paragraph_scope(tmp_path):
+    # score — сырой fuzzy до языковых штрафов; matched_scope — где нашли цитату
+    r = verify_item(req(), client(tmp_path), llm=None)
+    assert r.ok
+    assert r.score is not None and r.score >= 0.85
+    assert r.confidence <= r.score  # RU-penalty 0.95 давит confidence, но не score
+    assert r.matched_scope == "paragraph"
+
+
+def test_page_fallback_sets_scope_page(tmp_path):
+    # "прил. N" в фикстуре не находится как параграф → сверка по всей странице
+    r = verify_item(
+        req(unit="прил. 2",
+            legal_quote_ru="Продукция, включённая в перечень, подлежит обязательному "
+                           "подтверждению соответствия в установленном порядке."),
+        client(tmp_path), llm=None)
+    assert r.ok and r.matched_scope == "page"
+    assert r.score is not None and r.score >= 0.85
+
+
+def test_quote_mismatch_carries_score(tmp_path):
+    r = verify_item(req(legal_quote_ru="совершенно другой текст про налоги и пошлины " * 3),
+                    client(tmp_path), llm=None)
+    assert not r.ok and r.reason == "quote_mismatch"
+    assert r.score is not None and r.score < 0.85

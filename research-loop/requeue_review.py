@@ -98,8 +98,11 @@ def main(dry_run: bool = False, use_llm: bool = False):
                 print(f"  [MERGED] {tag} → {key}")
                 continue
             act_row = resolve_act(req.act, gate.doc_id, jb, ix, QUEUE_PATH)
+            # Шов гейт→оригиналы как в pipeline.py: verbatim_uz копится только при
+            # verified_lang=uz; UZ-цитата не попадает в verbatim_ru (фолоу-ап фазы 1).
             paragraph_row = ensure_paragraph(
-                ix, act_row, gate.ref, req.legal_quote_ru or req.legal_quote_uz, gate.doc_id)
+                ix, act_row, gate.ref, req.legal_quote_ru, gate.doc_id,
+                quote_uz=(req.legal_quote_uz if gate.verified_lang == "uz" else None))
             req_id = loader.load_requirement(req, kind, gate, act_row, paragraph_row,
                                              subject, stage_ids)
             ix.table("requirement_sources").insert(
