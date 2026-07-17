@@ -32,11 +32,24 @@ def sanctions_conflict(existing_sanctions: list[dict], new_sanction: dict | None
     return False
 
 
+def _canonical_details(rows: list[dict]) -> dict | None:
+    """Каноническая строка details: verbatim-происхождение; легаси (origin NULL)
+    приравнен к verbatim при lang=ru. Машинный перевод каноном не бывает."""
+    for row in rows:
+        if row.get("translation_origin") == "verbatim":
+            return row
+    for row in rows:
+        if row.get("lang") == "ru" and row.get("translation_origin") is None:
+            return row
+    return None
+
+
 def merge_requirement(ix, existing: dict, new_scope_rows, new_sanction, import_item_id) -> str:
     req_id = existing["id"]
 
-    details = _first(ix.table("requirement_details").select("*")
-                     .eq("requirement_id", req_id).eq("lang", "ru").limit(1).execute())
+    rows = ix.table("requirement_details").select("*") \
+        .eq("requirement_id", req_id).execute().data
+    details = _canonical_details(rows)
     old_sanctions = (details or {}).get("sanctions") or []
     if sanctions_conflict(old_sanctions, new_sanction):
         return "conflict"
@@ -59,7 +72,7 @@ def merge_requirement(ix, existing: dict, new_scope_rows, new_sanction, import_i
                                        "article": new_sanction.get("article"),
                                        "extra": new_sanction.get("extra")}]
             ix.table("requirement_details").update({"sanctions": merged}) \
-                .eq("requirement_id", req_id).eq("lang", "ru").execute()
+                .eq("requirement_id", req_id).eq("lang", details["lang"]).execute()
 
     src = _first(ix.table("requirement_sources").select("*")
                  .eq("requirement_id", req_id)

@@ -22,6 +22,7 @@ from importer.loader import Loader  # noqa: E402
 from importer.mappings import MappingError, load_domains  # noqa: E402
 from importer.models import parse_report_json  # noqa: E402
 from importer.resolver import ensure_paragraph, resolve_act  # noqa: E402
+from importer.translator import translate_card_fields  # noqa: E402
 from importer.verifier import verify_item  # noqa: E402
 
 OVERRIDES_PATH = Path(__file__).parent / "pass2-overrides.json"
@@ -103,8 +104,10 @@ def main(dry_run: bool = False, use_llm: bool = False):
             paragraph_row = ensure_paragraph(
                 ix, act_row, gate.ref, req.legal_quote_ru, gate.doc_id,
                 quote_uz=(req.legal_quote_uz if gate.verified_lang == "uz" else None))
+            ru_tr = (translate_card_fields(req, llm)
+                     if getattr(req, "content_lang", "ru") == "uz" else None)
             req_id = loader.load_requirement(req, kind, gate, act_row, paragraph_row,
-                                             subject, stage_ids)
+                                             subject, stage_ids, ru_translation=ru_tr)
             ix.table("requirement_sources").insert(
                 {"requirement_id": req_id, "import_item_id": item["id"]}).execute()
             ix.table("import_items").update(
