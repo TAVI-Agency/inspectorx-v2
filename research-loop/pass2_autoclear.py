@@ -10,8 +10,14 @@ review_detail. Публикацию делает следующий запуск
 источник; если проверка первоисточником прошла дословно — причина исчерпана.
 Пограничные (0.60–0.85) НЕ чистим: там нужна человеческая/агентная вычитка.
 
+Порог (фолоу-ап фазы 1 UZ-first, 17.07.2026): сверяем СЫРОЙ fuzzy (gate.score),
+а не confidence — языковой штраф RU ×0.95 не должен делать правило строже для
+RU-карточек. Для fallback-сверки по всей странице (matched_scope="page") порог
+жёстче — 0.95 (эквивалент прежнего confidence-правила с penalty 0.9).
+
 Запуск: .venv-importer/bin/python research-loop/pass2_autoclear.py
 """
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -24,6 +30,14 @@ from importer.models import parse_report_json  # noqa: E402
 from importer.verifier import verify_item  # noqa: E402
 
 OVERRIDES_PATH = Path(__file__).parent / "pass2-overrides.json"
+
+
+def should_clear(gate) -> bool:
+    """Дословная сверка первоисточником, независимо от языковых штрафов."""
+    if not gate.ok or gate.score is None:
+        return False
+    threshold = 0.95 if gate.matched_scope == "page" else 0.85
+    return gate.score >= threshold
 
 
 def main():
@@ -54,11 +68,12 @@ def main():
         req = req_cls.model_validate(raw)
 
         gate = verify_item(req, lexuz, llm=None)  # строго: без LLM
-        if gate.ok and (gate.confidence or 0) >= 0.85:
+        if should_clear(gate):
             over = overrides.setdefault(short, {})
             over["needs_review"] = False
-            note = (f" || pass2-autoclear 2026-07-13: цитата дословно сошлась с "
-                    f"первоисточником (conf={gate.confidence}, {gate.doc_id}/{gate.ref}) — "
+            note = (f" || pass2-autoclear {datetime.date.today().isoformat()}: цитата "
+                    f"дословно сошлась с первоисточником (score={gate.score}, "
+                    f"conf={gate.confidence}, {gate.doc_id}/{gate.ref}) — "
                     f"флаг needs_review снят правилом лупа.")
             ix.table("import_items").update(
                 {"review_detail": (item.get("review_detail") or "") + note}

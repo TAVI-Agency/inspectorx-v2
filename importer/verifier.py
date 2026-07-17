@@ -19,6 +19,8 @@ class GateResult:
     verified_lang: str | None = None      # "uz" — канон, "ru" — переходный режим
     uz_backfill_needed: bool = False      # карточку надо добить UZ-цитатой (фаза 3)
     uz_doc_id: str | None = None          # doc_id узбекской версии, если найден
+    score: float | None = None            # сырой fuzzy ДО языковых штрафов
+    matched_scope: str | None = None      # "paragraph" | "page" (fallback по перечням)
 
 
 def _review(reason: str, detail: str = "", **kw) -> GateResult:
@@ -99,20 +101,22 @@ def verify_item(req, lexuz: LexuzClient, llm) -> GateResult:
         return _review("unit_not_found", f"unit не распознан: {req.unit!r}", doc_id=doc_id)
 
     paragraph = LexuzClient.find_paragraph(page, ref)
+    matched_scope = "paragraph"
     if paragraph is None:
         if ref.startswith(("art.", "p.")):
             return _review("unit_not_found", f"пункт {ref} не найден в акте",
                            doc_id=doc_id, ref=ref)
         paragraph = LexuzClient.page_text(page)  # перечни: сверка по всей странице (v1)
         penalty *= 0.9
+        matched_scope = "page"
 
     if not quote:
         return _review("quote_missing", "нет legal_quote_ru/uz", doc_id=doc_id, ref=ref)
 
-    score = fuzz.partial_ratio(quote.lower(), paragraph.lower()) / 100.0
+    score = round(fuzz.partial_ratio(quote.lower(), paragraph.lower()) / 100.0, 2)
     confidence = round(score * penalty, 2)
     extra = {"verified_lang": verified_lang, "uz_backfill_needed": uz_backfill,
-             "uz_doc_id": uz_doc_id}
+             "uz_doc_id": uz_doc_id, "score": score, "matched_scope": matched_scope}
     if score >= 0.85:
         return GateResult(ok=True, doc_id=doc_id, ref=ref, confidence=confidence,
                           paragraph_text=paragraph[:4000], **extra)
@@ -120,4 +124,4 @@ def verify_item(req, lexuz: LexuzClient, llm) -> GateResult:
         return GateResult(ok=True, doc_id=doc_id, ref=ref, confidence=confidence,
                           paragraph_text=paragraph[:4000], **extra)
     return _review("quote_mismatch", f"fuzzy={score:.2f}", doc_id=doc_id, ref=ref,
-                   confidence=confidence)
+                   confidence=confidence, score=score, matched_scope=matched_scope)
