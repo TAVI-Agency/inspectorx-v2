@@ -122,6 +122,24 @@ uz_version_not_found. verbatim_uz копится в act_paragraphs через г
 passed (87 базовых + 11 новых). Метрика для фазы 3: доля act_paragraphs с
 verbatim_uz.
 
+## 2026-07-17 — фаза 2 UZ-first (перевод): реализована
+
+PR #7 смержен в main (решение Абдурахмона), фаза 2 — по спеке §2, ветка та же:
+- Миграция `20260717120000_translation_origin.sql`: enum verbatim|machine,
+  nullable-колонки в contents/details. **На прод НЕ накатана** — сессия Supabase
+  CLI истекла (Unauthorized), нужен `supabase login` от человека. До наката
+  loader работает в режиме фазы 1: одноразовая проба колонки, поле отбрасывается
+  (тест test_loader_writes_without_origin_until_migration_applied).
+- `content_lang` (ru|uz, дефолт ru) в модели требования; loader пишет канон
+  на языке контента (verbatim), при uz + перевод — производные RU-строки (machine).
+- `importer/translator.py`: перевод ТОЛЬКО whitelist витринных полей единым
+  JSON-вызовом; глоссарий research-loop/glossary-uz-ru.md в промпте; юрцитаты
+  в промпт не попадают (негативный тест с sentinel); сломанная структура ответа
+  или ошибка LLM → None → честная UZ-only публикация.
+- dedup: канон details = verbatim-строка (легаси ru/NULL приравнен), машинный
+  перевод каноном не бывает; санкции мержатся в каноническую строку.
+- Тесты 111 → 123 зелёных.
+
 ## 2026-07-17 — итерация 7: фолоу-апы фазы 1 закрыты, цель лупа достигнута
 
 Процессные изменения (мотивация — измеренные классы фейлов):
