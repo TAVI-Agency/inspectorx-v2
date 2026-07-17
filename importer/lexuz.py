@@ -114,10 +114,12 @@ class LexuzClient:
         m_p = re.match(r"p\.([\d-]+)$", ref)
         if m_p:
             num = m_p.group(1)
-            start = re.search(rf"(?:^|[.;)])\s{num}\.\s", text)
+            # «документа» — хвост UI-виджета lex.uz «Получить ссылку из элемента
+            # документа», который предваряет каждый нумерованный пункт на ПКМ-страницах.
+            start = re.search(rf"(?:^|[.;)]|документа)\s{num}\.\s", text)
             if not start:
                 return None
             rest = text[start.end() - len(f"{num}. "):]
-            nxt = re.search(r"[.;]\s[\d-]+\.\s", rest[5:])
+            nxt = re.search(r"(?:[.;]|документа)\s[\d-]+\.\s", rest[5:])
             return rest[: nxt.start() + 5] if nxt else rest[:2000]
         return None  # appN/rowM и прочее — сверка по всей странице (v1)

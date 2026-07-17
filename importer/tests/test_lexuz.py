@@ -100,3 +100,13 @@ def test_language_versions_recognizes_okina_apostrophe():
     html = ("<a onclick=\"openUrl('/uz/docs/-777')\" "
             "title=\"Oʻzbekcha\">Oʻzbekcha</a>")
     assert LexuzClient.language_versions(html) == {"uz_lat": "-777"}
+
+def test_find_paragraph_point_after_lexuz_anchor_widget():
+    # На страницах ПКМ каждый пункт предваряется UI-виджетом «Получить ссылку из
+    # элемента документа» — лукбихенд [.;)] его не видел (класс фейла 17.07.2026).
+    html = ("<p>Получить ссылку из элемента документа 20. Продавец-работник обязан "
+            "обеспечить наличие единообразных ценников на товары. "
+            "Получить ссылку из элемента документа 21. Следующий пункт правил.</p>")
+    body = LexuzClient.find_paragraph(html, "p.20")
+    assert body is not None and body.startswith("20. Продавец-работник")
+    assert "Следующий пункт" not in body
