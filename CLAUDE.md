@@ -71,7 +71,7 @@ Dev-тумблер «я подписчик» (`src/app/app-mode.tsx`, localStora
 
 - Все строки UI — в `src/i18n/ru.ts` (единственный источник текста; uz/en позже с тем же контрактом). Не хардкодить текст в компонентах.
 - Цена тарифа — `src/config.ts` (не утверждена, менять только там).
-- SEO-файлы: `index.html` (метатеги, JSON-LD), `public/` (robots.txt, sitemap.xml, llms.txt, og.png). Канонический домен — `inspector-x.uz`.
+- SEO-файлы: `index.html` (метатеги, JSON-LD), `public/` (robots.txt, sitemap.xml, llms.txt, og.png). Канонический домен — `inspectorx.uz` (запасной `inspector-x.uz` — редирект на него в Vercel).
 
 ## Документы-источники истины
 
