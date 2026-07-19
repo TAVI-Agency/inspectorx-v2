@@ -19,15 +19,15 @@
 **Site URL:**
 
 ```
-https://inspectorx-v2.vercel.app
+https://inspectorx.uz
 ```
 
 **Redirect URLs** (добавить все пять; кнопка «Add URL» на каждую строку):
 
 ```
 https://inspectorx-v2.vercel.app/**
-https://inspector-x.uz/**
-https://www.inspector-x.uz/**
+https://inspectorx.uz/**
+https://www.inspectorx.uz/**
 http://localhost:5173/**
 http://127.0.0.1:5173/**
 ```
@@ -136,9 +136,9 @@ ix.regtest3.20260712@gmail.com
 запуском подключить Resend. **Изменений в коде не требуется** — шаблоны и `emailRedirectTo`
 остаются те же, меняется только транспорт и обратный адрес.
 
-1. Завести аккаунт на `resend.com`, верифицировать домен `inspector-x.uz`
+1. Завести аккаунт на `resend.com`, верифицировать домен `inspectorx.uz`
    (3 DNS-записи).
 2. Панель Supabase → **Authentication → SMTP Settings** → включить свой SMTP
-   (host / port / user / pass из Resend), sender = `noreply@inspector-x.uz`,
+   (host / port / user / pass из Resend), sender = `noreply@inspectorx.uz`,
    sender name = «ИнспекторX».
 3. Поднять лимиты рассылки в **Authentication → Rate Limits**.

@@ -1,4 +1,4 @@
-# ИнспекторX — https://inspector-x.uz
+# ИнспекторX — https://inspectorx.uz
 # Поисковые и AI-краулеры (GPTBot, ClaudeBot, PerplexityBot, Google-Extended и др.)
 # приветствуются: контент сайта — публичная справочная информация.
 
@@ -8,4 +8,4 @@ Disallow: /cabinet
 Disallow: /login
 Disallow: /register
 
-Sitemap: https://inspector-x.uz/sitemap.xml
+Sitemap: https://inspectorx.uz/sitemap.xml
