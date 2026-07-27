@@ -54,3 +54,14 @@ def test_merge_conflict():
                                {"article": "ст. 186 КоАО", "fine_bru": "до 500 БРВ"}, "item-9")
     assert status == "conflict"
     assert len(ix.store["requirement_details"][0]["sanctions"]) == 1  # ничего не записано
+
+
+def test_canonical_details_prefers_verbatim_over_machine_and_legacy():
+    from importer.dedup import _canonical_details
+    uz = {"lang": "uz", "translation_origin": "verbatim"}
+    ru_machine = {"lang": "ru", "translation_origin": "machine"}
+    legacy_ru = {"lang": "ru", "translation_origin": None}
+    assert _canonical_details([ru_machine, uz]) is uz
+    assert _canonical_details([ru_machine, legacy_ru]) is legacy_ru  # легаси = verbatim
+    assert _canonical_details([ru_machine]) is None  # машинный перевод каноном не бывает
+    assert _canonical_details([]) is None

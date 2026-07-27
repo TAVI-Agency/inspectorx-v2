@@ -10,6 +10,7 @@ from importer.mappings import (MappingError, load_domains, map_product_scope,
                                map_service_scope)
 from importer.parser import ReportParseError, load_report_file, extract_gray_zones, parse_report
 from importer.resolver import ensure_paragraph, resolve_act
+from importer.translator import translate_card_fields
 from importer.verifier import verify_item
 
 
@@ -95,8 +96,13 @@ def run_import(path: Path, ix, jb, lexuz, llm, dry_run: bool = False,
             paragraph_row = ensure_paragraph(
                 ix, act_row, gate.ref, req.legal_quote_ru, gate.doc_id,
                 quote_uz=(req.legal_quote_uz if gate.verified_lang == "uz" else None))
+            # Фаза 2: UZ-контент публикуется с производным RU-переводом витринных
+            # полей; перевод не удался → честная UZ-only публикация (спека §2).
+            ru_tr = (translate_card_fields(req, llm)
+                     if getattr(req, "content_lang", "ru") == "uz" else None)
             req_id = loader.load_requirement(req, rf.kind, gate, act_row,
-                                             paragraph_row, subject, stage_ids)
+                                             paragraph_row, subject, stage_ids,
+                                             ru_translation=ru_tr)
             item_id = loader.save_item(summary.run_id, idx, req, "loaded",
                                        requirement_id=req_id)
             ix.table("requirement_sources").insert(
