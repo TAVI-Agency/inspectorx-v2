@@ -91,6 +91,10 @@ class _BaseRequirement(_Base):
     sanction: Sanction | None = None
     discovered_via: str | None = None
     needs_review: bool = False
+    # Фаза 2 UZ-first: язык витринных полей карточки (title/summary/how_to/documents).
+    # DR-отчёты сегодня русские → дефолт "ru"; gap-ресёрчер фазы 3 ставит "uz",
+    # тогда RU-строки генерируются переводом (translation_origin='machine').
+    content_lang: Literal["ru", "uz"] = "ru"
 
 
 class ProductRequirement(_BaseRequirement):

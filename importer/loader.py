@@ -18,6 +18,24 @@ class Loader:
     def __init__(self, ix, domains: dict):
         self.ix = ix
         self.domains = domains
+        self._origin_supported: bool | None = None  # None = ещё не проверяли
+
+    def _supports_origin(self) -> bool:
+        """Миграция translation_origin (фаза 2) может быть ещё не накатана на прод —
+        тогда пишем строки без этого поля (поведение фазы 1), а не падаем."""
+        if self._origin_supported is None:
+            try:
+                self.ix.table("requirement_contents").select(
+                    "translation_origin").limit(1).execute()
+                self._origin_supported = True
+            except Exception:  # noqa: BLE001 — любой отказ = колонки нет
+                self._origin_supported = False
+        return self._origin_supported
+
+    def _strip_origin(self, row: dict) -> dict:
+        if not self._supports_origin():
+            row = {k: v for k, v in row.items() if k != "translation_origin"}
+        return row
 
     def start_run(self, rf, raw_json, gray_zones) -> str:
         existing = _first(self.ix.table("import_runs").select("*")
@@ -60,7 +78,8 @@ class Loader:
         return row["id"]
 
     def load_requirement(self, req, kind, gate, act_row, paragraph_row,
-                         subject, stage_ids: dict) -> str:
+                         subject, stage_ids: dict, *,
+                         ru_translation: dict | None = None) -> str:
         base = {
             "status": "published", "trust_label": "validated", "origin": "ai_pipeline",
             "deontic": map_nature(req.nature),
@@ -82,20 +101,49 @@ class Loader:
         req_row = _first(self.ix.table("requirements").insert(base).execute())
         req_id = req_row["id"]
 
+        # Фаза 2 UZ-first: канонические строки — на языке контента карточки
+        # (verbatim); при UZ-контенте и наличии перевода — производные RU-строки
+        # (machine). Юрцитаты в переводе не участвуют (живут в act_paragraphs).
         sanction = req.sanction
-        self.ix.table("requirement_contents").insert({
-            "requirement_id": req_id, "lang": "ru", "title": req.title,
-            "sanction_summary": (f"{sanction.article}: {sanction.fine_bru}"
-                                 if sanction and sanction.article else None),
-        }).execute()
-        self.ix.table("requirement_details").insert({
-            "requirement_id": req_id, "lang": "ru", "description": req.summary,
+        lang = getattr(req, "content_lang", "ru")
+        sanction_summary = (f"{sanction.article}: {sanction.fine_bru}"
+                            if sanction and sanction.article else None)
+        self.ix.table("requirement_contents").insert(self._strip_origin({
+            "requirement_id": req_id, "lang": lang, "title": req.title,
+            "sanction_summary": sanction_summary,
+            "translation_origin": "verbatim",
+        })).execute()
+        self.ix.table("requirement_details").insert(self._strip_origin({
+            "requirement_id": req_id, "lang": lang, "description": req.summary,
             "how_to_comply": [{"step": h.step, "deadline": h.deadline,
                                "cost": h.fee or h.cost} for h in req.how_to],
             "documents": [{"name": d.name, "where_to_get": d.where} for d in req.documents],
             "sanctions": ([{"amount": sanction.fine_bru, "article": sanction.article,
                             "extra": sanction.extra}] if sanction and sanction.article else []),
-        }).execute()
+            "translation_origin": "verbatim",
+        })).execute()
+        if lang == "uz" and ru_translation:
+            self.ix.table("requirement_contents").insert(self._strip_origin({
+                "requirement_id": req_id, "lang": "ru",
+                "title": ru_translation["title"],
+                "sanction_summary": sanction_summary,
+                "translation_origin": "machine",
+            })).execute()
+            steps_ru = ru_translation.get("how_to_steps") or []
+            docs_ru = ru_translation.get("documents") or []
+            self.ix.table("requirement_details").insert(self._strip_origin({
+                "requirement_id": req_id, "lang": "ru",
+                "description": ru_translation.get("summary"),
+                "how_to_comply": [{"step": s, "deadline": h.deadline,
+                                   "cost": h.fee or h.cost}
+                                  for s, h in zip(steps_ru, req.how_to)],
+                "documents": [{"name": d.get("name"), "where_to_get": d.get("where")}
+                              for d in docs_ru],
+                "sanctions": ([{"amount": sanction.fine_bru, "article": sanction.article,
+                                "extra": ru_translation.get("sanction_extra")}]
+                              if sanction and sanction.article else []),
+                "translation_origin": "machine",
+            })).execute()
         self.ix.table("requirement_citations").insert({
             "requirement_id": req_id, "paragraph_id": paragraph_row["id"],
             "is_primary": True, "sort_order": 0,
