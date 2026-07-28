@@ -16,6 +16,7 @@ import { daysUntil, formatDate, formatHsCode, pluralize } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { CCard, CEyebrow, CStatTile, CountUp } from './ui'
+import { CLawyerApplicationCard, CLawyerDashboard } from './CLawyerCabinet'
 
 /**
  * Кабинет: пульт слежения. Портфель товаров слева, лента изменений — станции
@@ -81,6 +82,9 @@ export function CCabinetPage() {
         />
       </div>
 
+      {/* Дешборд юриста: рисуется только у верифицированного эксперта */}
+      <CLawyerDashboard />
+
       <div className="mt-9 grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <section className="min-w-0 space-y-6">
           <div>
@@ -111,6 +115,9 @@ export function CCabinetPage() {
           </div>
 
           <CDigestSettings />
+
+          {/* Заявка «стать экспертом»: скрыта у верифицированного юриста */}
+          <CLawyerApplicationCard />
         </section>
 
         <section className="min-w-0">
