@@ -16,3 +16,6 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 !.env.importer.example
+
+# Отчёты прогонов добивки (артефакт запуска, не исходник)
+research-loop/backfill-verbatim-uz.jsonl
