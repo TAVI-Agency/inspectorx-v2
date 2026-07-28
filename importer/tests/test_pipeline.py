@@ -123,3 +123,27 @@ def test_e2e_ru_verified_gate_never_leaks_unverified_uz_quote(tmp_path):
                        queue_path=tmp_path / "q.jsonl")
     assert (s.loaded, s.merged, s.review) == (1, 0, 0)
     assert ix.store["act_paragraphs"][0]["verbatim_uz"] is None
+
+
+def test_summary_counts_uz_backfill(tmp_path):
+    # Гейт выставляет uz_backfill_needed, но до этого счётчика признак никто не
+    # читал: карточка публиковалась без узбекского оригинала молча. Прогон обязан
+    # сказать, сколько карточек проверено только по-русски (вход добивки, фаза 3).
+    path, lexuz = prepare(tmp_path)
+    ix = make_ix()
+    s = run_import(path, ix, jb=None, lexuz=lexuz, llm=None,
+                   queue_path=tmp_path / "q.jsonl")
+    assert s.loaded == 1 and ix.store["act_paragraphs"][0]["verbatim_uz"] is None
+    assert s.uz_backfill == 1
+
+
+def test_summary_uz_backfill_zero_when_canonical(tmp_path):
+    # UZ-цитата подтверждена по узбекской версии акта → добивать нечего.
+    path, lexuz = prepare(tmp_path)
+    fake_gate = GateResult(ok=True, doc_id="-6445145", ref="art.14", confidence=1.0,
+                           paragraph_text="текст статьи", verified_lang="uz",
+                           uz_backfill_needed=False)
+    with patch("importer.pipeline.verify_item", return_value=fake_gate):
+        s = run_import(path, make_ix(), jb=None, lexuz=lexuz, llm=None,
+                       queue_path=tmp_path / "q.jsonl")
+    assert s.uz_backfill == 0
