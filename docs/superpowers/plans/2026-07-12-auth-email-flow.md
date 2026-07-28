@@ -1,5 +1,15 @@
 # Auth Email Flow — Implementation Plan
 
+> **Статус на 29.07.2026:** реализован — PR #6 смержен 12.07.2026
+> (merge-коммит `553e699`), флоу в проде. Чекбоксы ниже по ходу работы
+> не проставлялись: источник истины о состоянии — эта строка, а не `- [ ]`.
+> Закрыто после плана: тестовые пользователи `ix.regtest*.20260712` удалены
+> (на 29.07.2026 в `auth.users` 1 демо-пользователь); прод-домен сменился на
+> канонический `https://inspectorx.uz` (PR #9, 19.07.2026) — везде ниже, где
+> в плане указан `https://inspectorx-v2.vercel.app`, читать новый домен.
+> Открытый остаток — русские шаблоны писем в панели Supabase (**Шаг 3** инструкции
+> `docs/SUPABASE_AUTH_SETUP.md`); шаги 1 и 2 выполнены 12.07.2026.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Довести до прода корректный флоу регистрации/входа с подтверждением e-mail и восстановлением пароля по спеке `docs/superpowers/specs/2026-07-12-auth-email-flow-design.md`.

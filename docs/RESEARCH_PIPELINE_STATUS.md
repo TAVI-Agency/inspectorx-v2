@@ -1,4 +1,4 @@
-# Конвейер данных InspectorX — статус и таймлайн (восстановлено 17.07.2026)
+# Конвейер данных InspectorX — статус и таймлайн (обновлено 29.07.2026)
 
 > Этот документ — «страховка от потери сессий»: полный таймлайн трека
 > «deep research → импортёр → research-loop → UZ-first», все решения фаундера
@@ -11,15 +11,22 @@
 | Дата | Что было | Артефакты |
 |---|---|---|
 | 11.07 | Стратегическая сессия: InspectorX v2 с нуля, целевой формат продукта | docs/SESSION_SUMMARY_2026-07-11.md, docs/TARGET_FORMAT.md |
-| 11–12.07 | БД (22 таблицы+RLS), перенос контента v1 (203 требования), фронты, лендинг, SEO, auth, услуги (аптека+кафе) | main, PR #1–#6 |
+| 11–12.07 | БД (22 таблицы+RLS), перенос контента v1 (203 требования), фронты, лендинг, SEO, auth, услуги (аптека+кафе) | main, PR #2–#6 (PR #1 закрыт — ветка front2 влита напрямую, a3b9734) |
 | 12.07 | Брейншторм импортёра DR-отчётов → спека + план (14 TDD-задач) | docs/superpowers/specs/2026-07-12-report-importer-design.md, plans/2026-07-12-report-importer.md, PR #5 |
-| 12–13.07 | Импортёр реализован (parse→resolve→verify→dedup→load, staging import_runs/import_items), живой прогон 4 отчётов: 3 validated, 40 review | importer/, PR #7 (draft) |
+| 12–13.07 | Импортёр реализован (parse→resolve→verify→dedup→load, staging import_runs/import_items), живой прогон 4 отчётов: 3 validated, 40 review | importer/, PR #7 (смержен 17.07, merge-коммит 3ecdbea) |
 | 13.07 ночь | Research-цикл: «потеря шин» = гейт по дизайну; eval-харнесс + baseline; проход 2 (ПКМ-43: цемент+шины = обязательная сертификация) | importer/evalharness.py, research-loop/REPORT-2026-07-13.md, baseline-2026-07.md |
 | 13.07 ~03:00 | **Переход на луповый формат** (4 решения фаундера, см. ниже). Итерации 1–5: прод 59→94 карточек ai_pipeline, все 11 услуг 0/6 gaps, товары 7/7→3/7 gaps | research-loop/LOOP-LOG.md, DECISIONS.md |
-| 13.07 ~14:30 | Итерация 6 оборвана (API ConnectionRefused): 3 импортных требования (Таможенный кодекс ст.55–57) прошли гейт, фоновый сид завершился exit 0, но замер/лог/коммит не сделаны | см. «Сверка итерации 6» ниже |
+| 13.07 ~14:30 | Итерация 6 оборвана (API ConnectionRefused): 3 импортных требования (Таможенный кодекс ст.55–57) прошли гейт, фоновый сид завершился exit 0. Сверено 17.07: сид записан в прод, ai_pipeline published 94→97, потерь нет, замер/лог сделаны постфактум | research-loop/LOOP-LOG.md, раздел «Итерация 6» |
 | 15–16.07 | Брейншторм UZ-first: узбекский — канонический язык данных (5 решений фаундера) → спека + план фазы 1 | specs/2026-07-16-uz-first-pipeline-design.md, plans/2026-07-16-uz-first-phase1.md |
 | 16.07 | **Фаза 1 UZ-канонизация реализована** (два параллельных исполнителя, координация через ledger): language_versions(), латиница N-modda, UZ-гейт (UZ=1.0, RU=0.95+uz_backfill_needed), verbatim_uz копится. 102 теста, смоук на живом lex.uz OK, ревью «Ready to merge, 0 Critical» | ветка report-importer-impl @ be8ddd8 |
 | 17.07 | Две попытки восстановить «потерянную сессию» (обе оборвались), затем полное восстановление контекста и продолжение работы | этот документ |
+| 17.07 | Фолоу-апы фазы 1 закрыты (quote_uz в requeue, языково-нейтральный порог autoclear по gate.score), **итерация 7**: очередь 205→152, ai_pipeline published 97→139, все 4 товара gaps 0/7, все 11 услуг 0/6 — цель лупа достигнута. **PR #7 смержен в main** | f0daa4a, 5be4194, 3ecdbea; research-loop/LOOP-LOG.md «Итерация 7» |
+| 19–20.07 | Канонический домен `inspectorx.uz` (без дефиса), редиректы с www и дефисных версий | PR #9 (3d29076) |
+| 27.07 | **Фаза 2 UZ-first смержена в main**: translator, двуязычный loader, translation_origin, канон verbatim в dedup; миграция 20260717120000_translation_origin.sql накатана на прод | PR #8 (cc1417f), коммит 3dc6a99, plans/2026-07-17-uz-first-phase2.md |
+| 27.07 | Уведомления о заявках в Telegram: pg_net + Vault, триггеры на subscription_requests / content_requests / user_questions; работают на проде, проверены живой заявкой (мёрж 28.07) | PR #10 (9663644), миграция 20260727120000_lead_notifications.sql, specs/2026-07-27-lead-notifications-design.md |
+| 28.07 | **Диагноз: у конвейера UZ-first нет узбекского входа** (3 items из 267 с legal_quote_uz, 0 из 28 отчётов) → ручная добивка `backfill_verbatim_uz.py --apply`: verbatim_uz 0 → 75 из 200; счётчик uz_backfill в выводе прогона | PR #11 (a1b5f5f), коммит 9000411, research-loop/backfill-verbatim-uz.jsonl |
+| 28–29.07 | `.claude/` убран из-под гита | PR #12 (c06001f) |
+| 29.07 | Аудит документов репозитория по факту прода; этот статус-документ приведён к фактам (таймлайн, «Где мы сейчас», бэклог, грабли) | этот документ |
 
 ## Решения фаундера (North Star)
 
@@ -44,31 +51,70 @@
 `lexuz:{doc_id}/{ref}` канонический; словари закрытые (правка руками); ошибка item
 не валит прогон (→ review с причиной); коммиты от TAVI-Agency.
 
-## Где мы сейчас (17.07.2026)
+## Где мы сейчас (29.07.2026)
 
-- **Ветка `report-importer-impl` (35 коммитов впереди main, только локально)** — весь конвейер:
-  importer/ (14 модулей + 102 теста), research-loop/ (инструменты лупа + логи + eval-отчёты).
-- PR #7 (draft) указывает на старую ветку worktree-report-importer; актуальную ветку надо запушить.
-- Прод: ~94 карточки ai_pipeline (+ возможно 3 из итерации 6 — сверить), review-очередь ~205.
-- Фаза 1 UZ-first готова; фазы 2 (перевод), 3 (оркестратор+gap-ресёрчер), 4 (аудитор+сохранность) — не начаты.
+- **Весь конвейер в main**: importer/ (15 рабочих модулей + 131 тест), research-loop/
+  (инструменты лупа, сиды, логи, eval-отчёты). PR #7 смержен 17.07 (3ecdbea — импортёр,
+  research-loop, UZ-first фаза 1), PR #8 — 27.07 (cc1417f — фаза 2, перевод).
+  Открытых PR в репозитории нет; незапушенной работы нет — ветка `report-importer-impl`
+  смержена и может быть удалена локально и на origin.
+- **Прод (замер 29.07)**: 265 товаров, 11 услуг, 345 требований (published 342, draft 3);
+  по origin: ai_pipeline 142 (published 139), migration_v1 203; trust_label=validated 84.
+  Staging: import_runs 17, import_items 267 (review 152 / loaded 82 / merged 33), acts 73.
+- **Цель лупа достигнута** (итерация 7 от 17.07): все 4 покрытых лупом товара — gaps 0/7,
+  все 11 услуг — 0/6, то есть ≥3 требования на секцию товара / этап услуги.
+- **Фазы UZ-first 1 и 2 реализованы и лежат в main**; фазы 3 (оркестратор + gap-ресёрчер)
+  и 4 (аудитор + сохранность) — не начаты: importer/orchestrator.py и модуля аудитора нет.
 
-## Бэклог (порядок из DECISIONS/LOOP-LOG)
+### Диагноз 28–29.07: конвейер UZ-first исправен, но без входа
 
-1. **Фолоу-апы фазы 1 — ДО разбора очереди**: requeue_review.py не передаёт quote_uz в
-   ensure_paragraph (verbatim_uz не копится через requeue); порог pass2_autoclear ≥0.85
-   стал строже для RU-items (confidence теперь ×0.95).
-2. Сверка итерации 6 (3 импортных требования в проде?) + лог.
-3. Авторазбор очереди 205: autoclear → borderline → requeue --llm; «честные NO» →
-   агентный поиск правильного акта.
-4. Gap-ресёрч доменных секций товаров: import (гл. 9 ТК — начат), realization
-   (правила розничной торговли), product (техрегулирование).
-5. Фаза 2: translation_origin, Sonnet-перевод витринных полей UZ→RU, глоссарий.
-6. Фаза 3: orchestrator.py (замер → gap-ресёрч → импорт → авторазбор → перевод → аудит → отчёт).
-7. Фаза 4: аудитор на второй модели, reconciliation, backfill 94 старых карточек.
-8. Хвосты: мёрж PR #7; разбор очереди человеком в админке (метрика verified/час);
-   второй прогон 1–2 товаров другой моделью (cross_model_agreement); отчёт
-   service--security без JSON-блока (перезаказать); NTM-миграция requirement_category;
-   переключатель языка на витрине (после фазы 2).
+Шов проверен живьём и работает — просто ни разу не исполнялся, потому что узбекского
+входа у него нет:
+
+- из 267 import_items узбекская цитата (`raw->>legal_quote_uz`) есть у **3**: входной
+  поток — русские DR-отчёты (0 из 28 отчётов с UZ-цитатами);
+- следствие: ветка `content_lang == "uz"` в importer/pipeline.py:107-108 не срабатывает ни
+  разу → на проде requirement_contents 345 строк, **все lang=ru** (lang=uz — 0),
+  requirement_details 284 — тоже без uz; `translation_origin IS NOT NULL` — **0** в обеих
+  таблицах (колонка есть, миграция 20260717120000_translation_origin.sql накатана);
+- act_paragraphs 200: verbatim_uz 75, verbatim_ru 135, оба null 65. Все 75 узбекских
+  оригиналов пришли **не из конвейера**, а из ручной добивки
+  research-loop/backfill_verbatim_uz.py (прогон `--apply` 28.07: было 0 → стало 75;
+  7 не найдены — app1/p.4, app1-3, app4/row9, app4/row75, ch.3 ×2, app1/p.5;
+  118 пропущены как легаси-ref из переноса v1 — «обязательная маркировка», «п. 36»).
+
+Вывод: дописывать код фаз 1–2 нечего, им нужен UZ-вход — это первый пункт бэклога.
+
+### Чего в конвейере нет вообще
+
+Мониторинг изменений законодательства не построен: на проде change_events 0,
+requirement_change_impacts 0, user_notifications 0. Таблицы созданы миграцией
+20260711120000_initial_schema.sql и закрыты RLS, потребители на витрине есть
+(src/data/real.ts), но детектора «lex.uz изменился → change_event» нет ни в importer/,
+ни в research-loop/, ни в JurisBase.
+
+## Бэклог (порядок из DECISIONS/LOOP-LOG, ревизия 29.07)
+
+1. **Дать конвейеру UZ-вход** — без него фазы 1 и 2 работают вхолостую: узбекские цитаты
+   на входе (deep research по UZ-страницам lex.uz / агентная добыча) вместо русских
+   DR-отчётов. Первый приоритет: код готов, данных нет.
+2. Разбор оставшейся очереди review — **152 items** (было 205; итерация 7 уже прогнала
+   autoclear → requeue → borderline → requeue №2): «честные NO» → агентный поиск
+   правильного акта (главный резерв очереди); классы unit_not_found (диапазоны статей,
+   дефисные вида ст. 197-1) и quote_missing.
+3. **Мониторинг изменений законодательства**: на проде change_events 0 — детектора
+   lex.uz-diff → change_events → requirement_change_impacts → user_notifications нет
+   нигде в коде. Оценить приоритет относительно фаз 3–4 (колокольчик на витрине пока
+   нечем наполнять, см. docs/LAUNCH_CHECKLIST.md).
+4. Фаза 3: orchestrator.py (замер → gap-ресёрч → импорт → авторазбор → перевод → аудит → отчёт).
+5. Фаза 4: аудитор на второй модели, reconciliation, backfill старых карточек ai_pipeline
+   (сейчас их 142).
+6. Углубление секций export/transit/re_export/re_import: держатся ровно на 3 требованиях,
+   все через scope=all (бэклог самого лупа, research-loop/LOOP-LOG.md).
+7. Хвосты: разбор очереди человеком в админке (метрика verified/час); второй прогон
+   1–2 товаров другой моделью (cross_model_agreement); отчёт service--security без
+   JSON-блока (перезаказать); NTM-миграция requirement_category; переключатель языка
+   на витрине (включать, когда появятся данные lang=uz).
 
 ## Грабли окружения
 
@@ -76,6 +122,14 @@
 - lex.uz: `/docs/-N` и `/docs/N` — разные документы; у каждой языковой версии свой doc_id;
   UZ-версию искать по ссылкам в шапке (`docContentHeader__item-link`).
 - Supabase CLI: `env -u SUPABASE_ACCESS_TOKEN`; MCP смотрит в чужой аккаунт — CLI/psql.
+- **Миграции на прод накатываются вручную** через SQL-редактор панели Supabase:
+  CLI залогинен в чужой аккаунт, проект не залинкован — `supabase db push` не работает.
+- **Запись в прод-БД агенту заблокирована** классификатором разрешений: доступно только
+  чтение (REST + `.env.importer`, `IX_SUPABASE_URL`/`IX_SUPABASE_SERVICE_KEY`, счётчики
+  через `Prefer: count=exact`). Прогоны `--apply`, сиды и живые проверки выполняет
+  владелец проекта; полная локальная проверка — `supabase db start` + `supabase db reset --local`.
 - Сетевые команды в песочнице падают — dangerouslyDisableSandbox.
-- gh: два аккаунта; репо видит только TAVI-Agency (`gh auth switch -u TAVI-Agency`).
-- Тесты: `.venv-importer/bin/python -m pytest importer/tests -q` из корня worktree.
+- gh: два аккаунта, репо видит только TAVI-Agency, и активный аккаунт слетает — подставлять
+  `gh auth switch --user TAVI-Agency` в каждую команду, а не рассчитывать на «уже переключено».
+- Тесты: `.venv-importer/bin/python -m pytest importer/tests -q` из корня worktree
+  (131 зелёный на 29.07; venv лежит в рабочем worktree конвейера, не в main).

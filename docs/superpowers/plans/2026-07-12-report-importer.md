@@ -1,5 +1,14 @@
 # Импортёр deep-research отчётов — план имплементации
 
+> **Статус на 29.07.2026:** реализован — код конвейера `importer/` в `main`
+> (PR #7 смержен 17.07.2026; сам план — PR #5, 12.07.2026). Тесты
+> `importer/tests` — 131 passed. Чекбоксы ниже по ходу работы не проставлялись:
+> источник истины о состоянии — эта строка, а не `- [ ]`.
+> Отменённое: ограничение «UZ-only акты в v1 → review `uz_only_act`
+> (ветка перевода — вне скоупа)» из Global Constraints заменено спекой
+> `docs/superpowers/specs/2026-07-16-uz-first-pipeline-design.md` и реализовано
+> фазами 1–2 (PR #7 17.07.2026, PR #8 27.07.2026).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** CLI-конвейер `import-report <file>`: markdown-отчёт deep research → верификация против lex.uz → дедуп по ключу акт+пункт → проверенные карточки в Supabase Inspector X; всё сомнительное — в review-очередь `import_items`.
