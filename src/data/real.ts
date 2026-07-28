@@ -27,6 +27,14 @@ import {
 
 // ── Разбор сырых полей ─────────────────────────────────────────────
 
+/** В БД есть ещё 'validated' (гейт импорт-конвейера) — для витрины это
+ *  не юрвычитка, показываем как AI-черновик. */
+type DbTrustLabel = RequirementRow['trustLabel'] | 'validated'
+
+function normalizeTrust(label: DbTrustLabel): RequirementRow['trustLabel'] {
+  return label === 'validated' ? 'ai_draft' : label
+}
+
 interface HierarchyPath {
   levels?: string[]
   category_name?: string
@@ -364,7 +372,7 @@ interface RawListRow {
   operation: RequirementRow['operation']
   transport_type: RequirementRow['transport'] | null
   addressee_roles: RequirementRow['roles']
-  trust_label: RequirementRow['trustLabel']
+  trust_label: DbTrustLabel
   review_flag: 'none' | 'flagged_by_change'
   reviewed_at: string | null
   published_at: string | null
@@ -458,7 +466,7 @@ function listFromData(data: RawListRow[]): RequirementListReal {
       stageSortOrder: stage?.sort_order ?? 999,
       category: r.requirement_category ?? undefined,
       nature: r.nature ?? undefined,
-      trustLabel: r.trust_label,
+      trustLabel: normalizeTrust(r.trust_label),
       trustDate: r.reviewed_at ?? undefined,
       underReview: r.review_flag === 'flagged_by_change',
     })
@@ -584,7 +592,7 @@ export async function fetchCardReal(
         .map((f) => ({
           question: f.question,
           answer: f.answer,
-          trustLabel: f.trust_label,
+          trustLabel: normalizeTrust(f.trust_label),
         })),
     )
   } else if (isSubscriber) {
