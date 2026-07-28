@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowUpRight, BadgeCheck, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,6 +21,12 @@ import { CRequirementList } from './CRequirementList'
 export function CServicePage() {
   const { serviceId } = useParams<{ serviceId: string }>()
   const { data, isLoading, isError } = useServiceBundle(serviceId)
+  // ?req= — диплинк из очереди «Ждут проверки» и уведомлений юриста
+  const [searchParams] = useSearchParams()
+  const reqParam = searchParams.get('req')
+  const deeplinkId = data?.rows.some((r) => r.id === reqParam)
+    ? (reqParam ?? undefined)
+    : undefined
 
   const inProgress = useMemo(
     () => (serviceId ? inProgressStageIds(serviceId) : new Set<string>()),
@@ -195,7 +201,7 @@ export function CServicePage() {
               <CRequirementList
                 rows={rows}
                 stages={stages}
-                initialRequirementId={rows[0]?.id}
+                initialRequirementId={deeplinkId ?? rows[0]?.id}
                 inProgressStageIds={inProgress}
               />
             </div>

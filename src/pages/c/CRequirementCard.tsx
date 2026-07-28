@@ -16,6 +16,7 @@ import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { AskQuestionDialog, useAskDialogState } from '@/components/AskQuestionDialog'
 import { CEyebrow, CPaywallGate, CPaywallPanel, CTrustStamp } from './ui'
+import { CLawyerReviewsSection } from './CLawyerReviews'
 
 /** Шаги переноса v1 приходят с префиксом «(Пункт 35 …)\n» — выносим в реквизит */
 function splitSourcePrefix(text: string): { ref?: string; body: string } {
@@ -204,6 +205,8 @@ export function CRequirementCard({
               </div>
             </section>
           )}
+
+          <CLawyerReviewsSection row={row} />
 
           <div className="flex flex-wrap gap-2 border-t border-border pt-4">
             <Button variant="outline" size="sm" onClick={dialog.openAsk}>
