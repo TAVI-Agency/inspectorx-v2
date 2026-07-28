@@ -9,13 +9,15 @@ import {
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
 import { supabase } from '@/lib/supabase'
-import type { RequirementRow, SearchKind } from './types'
+import type { LawyerReview, RequirementRow, ReviewVerdict, SearchKind } from './types'
 import {
   buildPortfolio,
   demoPortfolioIds,
   fetchCard,
   fetchChangeFeed,
+  fetchLawyerReviews,
   fetchProductBundle,
+  fetchReviewStats,
   fetchServiceBundle,
   fetchTelemetry,
   search,
@@ -25,9 +27,19 @@ import {
   addChosenReal,
   fetchChosenReal,
   fetchContentRequests,
+  fetchLawyerNotificationsReal,
+  fetchLawyerStatsReal,
+  fetchLeaderboardReal,
+  fetchMyLawyerProfileReal,
+  fetchMyReviewsReal,
+  fetchReviewQueueReal,
   fetchSubscriptionRequests,
+  markLawyerNotificationReadReal,
   removeChosenReal,
+  setReviewVoteReal,
   submitContentRequest,
+  submitLawyerApplicationReal,
+  submitLawyerReviewReal,
   submitSubscriptionRequest,
 } from './real'
 import { markChangeRead } from './mock/read-store'
@@ -35,7 +47,12 @@ import { markChangeRead } from './mock/read-store'
 export function useDataCtx(): DataCtx {
   const { realSubscriber } = useAuth()
   const { mockSubscriber } = useAppMode()
-  return { realSubscriber, mockSubscriber }
+  const { data: lawyerProfile } = useMyLawyerProfile()
+  return {
+    realSubscriber,
+    mockSubscriber,
+    verifiedLawyer: lawyerProfile?.status === 'verified',
+  }
 }
 
 export function useTelemetry() {
@@ -59,7 +76,7 @@ export function useSearchQuery(query: string, kind: SearchKind) {
 export function useProductBundle(productId: string | undefined) {
   const ctx = useDataCtx()
   return useQuery({
-    queryKey: ['product', productId, ctx.realSubscriber, ctx.mockSubscriber],
+    queryKey: ['product', productId, ctx.realSubscriber, ctx.mockSubscriber, ctx.verifiedLawyer],
     queryFn: () => fetchProductBundle(productId!, ctx),
     enabled: Boolean(productId),
     staleTime: 60_000,
@@ -67,10 +84,10 @@ export function useProductBundle(productId: string | undefined) {
 }
 
 export function useServiceBundle(serviceId: string | undefined) {
-  // realSubscriber в ключе: метрика документов приходит из закрытых RLS-ом details
-  const { realSubscriber } = useAuth()
+  // Флаги доступа в ключе: метрика документов приходит из закрытых RLS-ом details
+  const ctx = useDataCtx()
   return useQuery({
-    queryKey: ['service', serviceId, realSubscriber],
+    queryKey: ['service', serviceId, ctx.realSubscriber, ctx.verifiedLawyer],
     queryFn: () => fetchServiceBundle(serviceId!),
     enabled: Boolean(serviceId),
     staleTime: 60_000,
@@ -80,7 +97,7 @@ export function useServiceBundle(serviceId: string | undefined) {
 export function useRequirementCard(row: RequirementRow | null) {
   const ctx = useDataCtx()
   return useQuery({
-    queryKey: ['card', row?.id, ctx.realSubscriber, ctx.mockSubscriber],
+    queryKey: ['card', row?.id, ctx.realSubscriber, ctx.mockSubscriber, ctx.verifiedLawyer],
     queryFn: () => fetchCard(row!.id, ctx, row!),
     enabled: Boolean(row),
     staleTime: 60_000,
@@ -194,6 +211,171 @@ export function useAskQuestion() {
       })
       if (error) throw error
     },
+  })
+}
+
+// ── Проверка юристом ───────────────────────────────────────────────
+
+export function useMyLawyerProfile() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['lawyer-profile', session?.user.id ?? 'anon'],
+    queryFn: () => fetchMyLawyerProfileReal(session!.user.id),
+    enabled: Boolean(session),
+    staleTime: 60_000,
+  })
+}
+
+export function useLawyerApplication() {
+  const qc = useQueryClient()
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: (input: {
+      displayName: string
+      credentials: string
+      licenseNo?: string
+      specializations?: string
+    }) => {
+      if (!session) throw new Error('auth-required')
+      return submitLawyerApplicationReal({ ...input, userId: session.user.id })
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['lawyer-profile'] }),
+  })
+}
+
+export function useLawyerReviews(requirementId: string | undefined) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['lawyer-reviews', requirementId, session?.user.id ?? 'anon'],
+    queryFn: () => fetchLawyerReviews(requirementId!, session?.user.id),
+    enabled: Boolean(requirementId),
+    staleTime: 30_000,
+  })
+}
+
+export function useSubmitLawyerReview() {
+  const qc = useQueryClient()
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: (input: {
+      requirementId: string
+      verdict: ReviewVerdict
+      commentText: string
+    }) => {
+      if (!session) throw new Error('auth-required')
+      return submitLawyerReviewReal({ ...input, userId: session.user.id })
+    },
+    onSuccess: (_data, input) => {
+      void qc.invalidateQueries({ queryKey: ['lawyer-reviews', input.requirementId] })
+      void qc.invalidateQueries({ queryKey: ['review-queue'] })
+      void qc.invalidateQueries({ queryKey: ['my-reviews'] })
+    },
+  })
+}
+
+/** Голос с оптимистичным обновлением: клик не ждёт сервер */
+export function useSetReviewVote(requirementId: string) {
+  const qc = useQueryClient()
+  const { session } = useAuth()
+  const key = ['lawyer-reviews', requirementId, session?.user.id ?? 'anon']
+  return useMutation({
+    mutationFn: (input: { reviewId: string; vote: 1 | -1 | null }) => {
+      if (!session) throw new Error('auth-required')
+      return setReviewVoteReal(input.reviewId, input.vote, session.user.id)
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: key })
+      const prev = qc.getQueryData<LawyerReview[]>(key)
+      qc.setQueryData<LawyerReview[]>(key, (list) =>
+        (list ?? []).map((r) => {
+          if (r.id !== input.reviewId) return r
+          let { helpful, notHelpful } = r
+          if (r.myVote === 1) helpful -= 1
+          if (r.myVote === -1) notHelpful -= 1
+          if (input.vote === 1) helpful += 1
+          if (input.vote === -1) notHelpful += 1
+          return { ...r, myVote: input.vote, helpful, notHelpful }
+        }),
+      )
+      return { prev }
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.prev) qc.setQueryData(key, ctx.prev)
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key })
+      void qc.invalidateQueries({ queryKey: ['lawyer-stats'] })
+      void qc.invalidateQueries({ queryKey: ['leaderboard'] })
+    },
+  })
+}
+
+/** Счётчики бейджей: один агрегирующий запрос по строкам страницы */
+export function useReviewStats(requirementIds: string[]) {
+  const sorted = [...requirementIds].sort()
+  return useQuery({
+    queryKey: ['review-stats', sorted],
+    queryFn: () => fetchReviewStats(sorted),
+    enabled: sorted.length > 0,
+    staleTime: 60_000,
+  })
+}
+
+export function useLawyerStats() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['lawyer-stats', session?.user.id ?? 'anon'],
+    queryFn: () => fetchLawyerStatsReal(session!.user.id),
+    enabled: Boolean(session),
+    staleTime: 30_000,
+  })
+}
+
+export function useLeaderboard() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['leaderboard', session?.user.id ?? 'anon'],
+    queryFn: () => fetchLeaderboardReal(session?.user.id),
+    staleTime: 60_000,
+  })
+}
+
+export function useReviewQueue(enabled: boolean) {
+  return useQuery({
+    queryKey: ['review-queue'],
+    queryFn: fetchReviewQueueReal,
+    enabled,
+    staleTime: 60_000,
+  })
+}
+
+export function useMyReviews(enabled: boolean) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['my-reviews', session?.user.id ?? 'anon'],
+    queryFn: () => fetchMyReviewsReal(session!.user.id),
+    enabled: enabled && Boolean(session),
+    staleTime: 30_000,
+  })
+}
+
+export function useLawyerNotifications(enabled: boolean) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['lawyer-notifications', session?.user.id ?? 'anon'],
+    queryFn: fetchLawyerNotificationsReal,
+    enabled: enabled && Boolean(session),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => markLawyerNotificationReadReal(id),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['lawyer-notifications'] }),
   })
 }
 
