@@ -1,5 +1,12 @@
 # UZ-first конвейер, фаза 1 «UZ-канонизация» — Implementation Plan
 
+> **Статус на 29.07.2026:** реализована — код в `main`, PR #7 смержен
+> 17.07.2026. Тесты `importer/tests` — 131 passed. Чекбоксы ниже по ходу
+> работы не проставлялись: источник истины о состоянии — эта строка, а не
+> `- [ ]`. Оговорка: код фазы 1 исправен, но данных не произвёл — входной
+> поток остаётся русским (см. «Чего спека не предусмотрела» в
+> `docs/superpowers/specs/2026-07-16-uz-first-pipeline-design.md`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Гейт верифицирует карточки по узбекской версии акта как канонической (уверенность 1.0), русская сверка становится вторичной (0.95), узбекские оригиналы параграфов копятся в `act_paragraphs.verbatim_uz`.
@@ -671,6 +678,6 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ## Вне скоупа фазы 1 (следующие планы)
 
-- **Фаза 2 (перевод):** колонка `translation_origin`, Sonnet-перевод витринных полей, `lang="uz"`-строки contents/details, параметризация `lang` в loader/dedup — сейчас contents остаются RU, потому что тексты отчётов русские; писать их как `lang="uz"` было бы ложью.
-- **Фаза 3 (оркестратор):** gap-ресёрчер, добивка `uz_backfill_needed`-карточек (запрос: `act_paragraphs.verbatim_uz IS NULL`), авторазбор очереди.
-- **Фаза 4:** аудитор, reconciliation, backfill 94 старых карточек.
+- ~~**Фаза 2 (перевод):**~~ **сделана** — PR #8 смержен 27.07.2026: колонка `translation_origin` (миграция `20260717120000_translation_origin.sql`, накатана на прод), `importer/translator.py`, `lang="uz"`-строки contents/details, параметризация `lang` в loader/dedup. Вторая половина оговорки в силе и на 29.07.2026: contents остаются RU (в проде 345 строк `lang='ru'`, 0 — `lang='uz'`), потому что тексты отчётов русские; писать их как `lang="uz"` было бы ложью.
+- **Фаза 3 (оркестратор):** не начата — gap-ресёрчер, добивка `uz_backfill_needed`-карточек (запрос: `act_paragraphs.verbatim_uz IS NULL`), авторазбор очереди. Именно она оживляет фазы 1–2: без узбекского входа они данных не производят.
+- **Фаза 4:** не начата — аудитор, reconciliation. Backfill старых карточек из фазы 4 вынесен вперёд и выполнен 28.07.2026 инструментом `research-loop/backfill_verbatim_uz.py` (PR #11): `verbatim_uz` заполнен у 75 из 200 параграфов, 7 не найдены, 118 пропущены как легаси-ref из переноса v1.
