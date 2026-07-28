@@ -142,9 +142,10 @@ export async function drawShareCard(
   ctx.fillStyle = FG
   ctx.font = `500 34px ${DISPLAY}`
   ctx.fillText('InspectorX', left, 110)
+  const markW = ctx.measureText('InspectorX').width
   ctx.fillStyle = MUTED
   ctx.font = `400 19px ${SANS}`
-  ctx.fillText(t.imgTagline, left + 214, 110)
+  ctx.fillText(t.imgTagline, left + markW + 22, 110)
 
   // Латунная печать: двойное кольцо + галочка (мотив CSeal)
   const sealX = 1076
