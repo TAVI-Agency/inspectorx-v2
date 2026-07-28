@@ -799,11 +799,18 @@ export async function fetchLawyerReviewsReal(
   })
 }
 
-/** Поставить/сменить (upsert) или снять (null → delete) голос */
+/**
+ * Поставить/сменить или снять (null → delete) голос.
+ * Не upsert: PostgREST разворачивает его в ON CONFLICT DO UPDATE по всем
+ * колонкам пейлоада, а UPDATE-грант колоночный (только vote) — получился бы
+ * вечный 42501. Поэтому детерминированно: INSERT или UPDATE по hadVote,
+ * с перекрёстным фолбэком на случай устаревшего кеша.
+ */
 export async function setReviewVoteReal(
   reviewId: string,
   vote: 1 | -1 | null,
   userId: string,
+  hadVote: boolean,
 ): Promise<void> {
   if (vote === null) {
     const { error } = await supabase
@@ -814,13 +821,36 @@ export async function setReviewVoteReal(
     if (error) throw error
     return
   }
-  const { error } = await supabase
-    .from('review_votes')
-    .upsert(
-      { review_id: reviewId, user_id: userId, vote },
-      { onConflict: 'review_id,user_id' },
-    )
-  if (error) throw error
+
+  const insertVote = () =>
+    supabase.from('review_votes').insert({ review_id: reviewId, user_id: userId, vote })
+  const updateVote = () =>
+    supabase
+      .from('review_votes')
+      .update({ vote })
+      .eq('review_id', reviewId)
+      .eq('user_id', userId)
+      .select('review_id')
+
+  if (hadVote) {
+    const upd = await updateVote()
+    if (upd.error) throw upd.error
+    if ((upd.data ?? []).length > 0) return
+    // голос успели снять в другой вкладке — вставляем заново
+    const ins = await insertVote()
+    if (ins.error) throw ins.error
+    return
+  }
+
+  const ins = await insertVote()
+  if (!ins.error) return
+  if (ins.error.code === '23505') {
+    // голос уже есть (устаревший кеш) — меняем значение
+    const upd = await updateVote()
+    if (upd.error) throw upd.error
+    return
+  }
+  throw ins.error
 }
 
 export async function submitLawyerReviewReal(input: {
@@ -838,25 +868,47 @@ export async function submitLawyerReviewReal(input: {
   if (error) throw error
 }
 
-/** Заявка юриста; повторная подача после отказа — upsert той же строки */
+/**
+ * Заявка юриста; повторная подача после отказа — UPDATE той же строки
+ * (триггер в базе вернёт статус в pending). Не upsert — см. setReviewVoteReal.
+ */
 export async function submitLawyerApplicationReal(input: {
   displayName: string
   credentials: string
   licenseNo?: string
   specializations?: string
   userId: string
+  hasProfile: boolean
 }): Promise<void> {
-  const { error } = await supabase.from('lawyer_profiles').upsert(
-    {
-      user_id: input.userId,
-      display_name: input.displayName,
-      credentials: input.credentials,
-      license_no: input.licenseNo || null,
-      specializations: input.specializations || null,
-    },
-    { onConflict: 'user_id' },
-  )
-  if (error) throw error
+  const fields = {
+    display_name: input.displayName,
+    credentials: input.credentials,
+    license_no: input.licenseNo || null,
+    specializations: input.specializations || null,
+  }
+
+  if (input.hasProfile) {
+    const upd = await supabase
+      .from('lawyer_profiles')
+      .update(fields)
+      .eq('user_id', input.userId)
+      .select('user_id')
+    if (upd.error) throw upd.error
+    if ((upd.data ?? []).length > 0) return
+  }
+
+  const ins = await supabase
+    .from('lawyer_profiles')
+    .insert({ user_id: input.userId, ...fields })
+  if (ins.error?.code === '23505') {
+    const upd = await supabase
+      .from('lawyer_profiles')
+      .update(fields)
+      .eq('user_id', input.userId)
+    if (upd.error) throw upd.error
+    return
+  }
+  if (ins.error) throw ins.error
 }
 
 export async function fetchMyLawyerProfileReal(

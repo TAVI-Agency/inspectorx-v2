@@ -229,6 +229,7 @@ export function useMyLawyerProfile() {
 export function useLawyerApplication() {
   const qc = useQueryClient()
   const { session } = useAuth()
+  const { data: profile } = useMyLawyerProfile()
   return useMutation({
     mutationFn: (input: {
       displayName: string
@@ -237,7 +238,11 @@ export function useLawyerApplication() {
       specializations?: string
     }) => {
       if (!session) throw new Error('auth-required')
-      return submitLawyerApplicationReal({ ...input, userId: session.user.id })
+      return submitLawyerApplicationReal({
+        ...input,
+        userId: session.user.id,
+        hasProfile: Boolean(profile),
+      })
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['lawyer-profile'] }),
   })
@@ -279,9 +284,11 @@ export function useSetReviewVote(requirementId: string) {
   const { session } = useAuth()
   const key = ['lawyer-reviews', requirementId, session?.user.id ?? 'anon']
   return useMutation({
-    mutationFn: (input: { reviewId: string; vote: 1 | -1 | null }) => {
+    // hadVote приходит из компонента: onMutate уже перепишет кеш оптимистично,
+    // читать «прежний голос» из него внутри mutationFn поздно
+    mutationFn: (input: { reviewId: string; vote: 1 | -1 | null; hadVote: boolean }) => {
       if (!session) throw new Error('auth-required')
-      return setReviewVoteReal(input.reviewId, input.vote, session.user.id)
+      return setReviewVoteReal(input.reviewId, input.vote, session.user.id, input.hadVote)
     },
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: key })

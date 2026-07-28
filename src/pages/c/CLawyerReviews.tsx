@@ -238,6 +238,7 @@ function CVoteControls({
     setVote.mutate({
       reviewId: review.id,
       vote: review.myVote === value ? null : value,
+      hadVote: review.myVote != null,
     })
 
   return (
