@@ -21,6 +21,7 @@ import {
   fetchServiceBundle,
   fetchTelemetry,
   search,
+  setReviewVote,
   type DataCtx,
 } from './index'
 import {
@@ -36,7 +37,6 @@ import {
   fetchSubscriptionRequests,
   markLawyerNotificationReadReal,
   removeChosenReal,
-  setReviewVoteReal,
   submitContentRequest,
   submitLawyerApplicationReal,
   submitLawyerReviewReal,
@@ -288,7 +288,7 @@ export function useSetReviewVote(requirementId: string) {
     // читать «прежний голос» из него внутри mutationFn поздно
     mutationFn: (input: { reviewId: string; vote: 1 | -1 | null; hadVote: boolean }) => {
       if (!session) throw new Error('auth-required')
-      return setReviewVoteReal(input.reviewId, input.vote, session.user.id, input.hadVote)
+      return setReviewVote(input.reviewId, input.vote, session.user.id, input.hadVote)
     },
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: key })
