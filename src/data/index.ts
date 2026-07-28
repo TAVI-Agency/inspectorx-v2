@@ -39,6 +39,7 @@ import {
   fetchTelemetryReal,
   searchProductsReal,
   searchServicesReal,
+  setReviewVoteReal,
 } from './real'
 import {
   CIGARETTES_PRODUCT_ID,
@@ -60,7 +61,7 @@ import {
   paracetamolPassport,
   stagesFromRows,
 } from './mock/fixtures'
-import { readChangeIds } from './mock/read-store'
+import { loadMockReviewVotes, readChangeIds, saveMockReviewVote } from './mock/read-store'
 import { CAFE_SERVICE_ID, PHARMACY_SERVICE_ID } from './cross-links'
 
 export interface DataCtx {
@@ -336,15 +337,43 @@ export async function fetchCard(
 
 // ── Заключения юристов ─────────────────────────────────────────────
 
+export function isMockReviewId(reviewId: string): boolean {
+  return reviewId.startsWith('mock-')
+}
+
 export async function fetchLawyerReviews(
   requirementId: string,
   userId?: string,
 ): Promise<LawyerReview[]> {
-  // Мок-требования: витринные фикстуры (или пусто), в базу не ходим
+  // Мок-требования: витринные фикстуры (или пусто), в базу не ходим.
+  // Голос залогиненного пользователя — локальный оверлей, чтобы демо жило.
   if (isMockRequirementId(requirementId)) {
-    return mockLawyerReviews[requirementId] ?? []
+    const votes = userId ? loadMockReviewVotes() : {}
+    return (mockLawyerReviews[requirementId] ?? []).map((r) => {
+      const myVote = votes[r.id] ?? null
+      return {
+        ...r,
+        myVote,
+        helpful: r.helpful + (myVote === 1 ? 1 : 0),
+        notHelpful: r.notHelpful + (myVote === -1 ? 1 : 0),
+      }
+    })
   }
   return fetchLawyerReviewsReal(requirementId, userId)
+}
+
+/** Голос: демо-заключения пишем в localStorage, реальные — в review_votes */
+export async function setReviewVote(
+  reviewId: string,
+  vote: 1 | -1 | null,
+  userId: string,
+  hadVote: boolean,
+): Promise<void> {
+  if (isMockReviewId(reviewId)) {
+    saveMockReviewVote(reviewId, vote)
+    return
+  }
+  return setReviewVoteReal(reviewId, vote, userId, hadVote)
 }
 
 /** Счётчики бейджей: реальные строки из view + мок-оверлей для демо-строк */
