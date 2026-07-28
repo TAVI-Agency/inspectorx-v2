@@ -3,7 +3,7 @@
 **Дата:** 2026-07-12
 **Проект:** InspectorX v2 (`https://inspectorx-v2.vercel.app`)
 **Ветка:** `worktree-auth-email-flow`
-**Статус:** согласован, готов к плану реализации
+**Статус:** реализовано, в проде с 12.07.2026 — PR #6 «feat(auth): подтверждение e-mail и восстановление пароля» смержен 12.07.2026 (merge-коммит `553e699`). Код на месте: `src/pages/c/CConfirmEmailPage.tsx`, `CForgotPasswordPage.tsx`, `CResetPasswordPage.tsx`, `src/lib/auth-url.ts`; маршруты `/auth/confirm`, `/auth/reset`, `/forgot-password` — в `src/App.tsx`. Настройки панели §6.1–6.2 выполнены и проверены снаружи (`/auth/v1/verify` редиректит на прод-домен, не на localhost), но фактические значения новее текста §6.1: Site URL = `https://inspectorx.uz` — канонический домен без дефиса, установлен PR #9 от 19.07.2026, вместо указанных здесь `https://inspectorx-v2.vercel.app` и `inspector-x.uz`. **Открытый остаток:** §6.3 / §7 (русские шаблоны писем в панели) и §9 (переход на Resend).
 
 ---
 
