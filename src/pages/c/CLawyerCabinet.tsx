@@ -656,13 +656,16 @@ function CShareStatsDialog({
   helpful: number
   rank?: { place: number; total: number }
 }) {
+  // Контент диалога монтируется порталом асинхронно — ловим появление
+  // canvas колбэк-рефом, обычный ref в первом эффекте ещё пуст.
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    if (!open || !canvasRef.current) return
+    if (!canvasEl) return
     let cancelled = false
-    void drawShareCard(canvasRef.current, {
+    void drawShareCard(canvasEl, {
       name: profile.displayName,
       credentials: profile.credentials,
       reviewed,
@@ -674,7 +677,8 @@ function CShareStatsDialog({
     return () => {
       cancelled = true
     }
-  }, [open, profile, reviewed, helpful, rank])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rank сравнивается по полям
+  }, [canvasEl, profile, reviewed, helpful, rank?.place, rank?.total])
 
   const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(
     'https://inspectorx.uz',
@@ -689,7 +693,10 @@ function CShareStatsDialog({
         </DialogHeader>
         <div className="overflow-hidden rounded-lg border border-border">
           <canvas
-            ref={canvasRef}
+            ref={(el) => {
+              canvasRef.current = el
+              setCanvasEl(el)
+            }}
             width={SHARE_CARD_W}
             height={SHARE_CARD_H}
             className="block h-auto w-full"
