@@ -22,6 +22,10 @@ class RunSummary:
     review: int = 0
     reasons: dict = field(default_factory=dict)
     dry_run: bool = False
+    # Сколько карточек прошло гейт только по РУССКОЙ сверке: узбекского оригинала
+    # у них нет, их добивает фаза 3. Гейт считал этот признак с фазы 1, но никто
+    # его не читал — прогон молчал о том, что библиотека оригиналов не растёт.
+    uz_backfill: int = 0
 
 
 def _scope_rows(req, kind, subject, domains):
@@ -62,6 +66,8 @@ def run_import(path: Path, ix, jb, lexuz, llm, dry_run: bool = False,
             if not gate.ok:
                 mark_review(idx, req, gate.reason, gate.detail)
                 continue
+            if gate.uz_backfill_needed:
+                summary.uz_backfill += 1
             try:
                 scope_rows = _scope_rows(req, rf.kind, subject, domains)
             except MappingError as e:
