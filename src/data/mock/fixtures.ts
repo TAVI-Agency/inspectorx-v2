@@ -8,9 +8,11 @@ import type {
   ChangeCard,
   Citation,
   FaqItem,
+  LawyerReview,
   ProductPassport,
   RequirementCard,
   RequirementDetail,
+  RequirementReviewStats,
   RequirementRow,
   SearchHit,
   StageInfo,
@@ -983,3 +985,70 @@ export const mockMetrics: Record<string, { documents: number; maxSanction: strin
 export const mockWeeklyChangesCount = changeFixtures.filter(
   (c) => !c.isDraftNpa && new Date(c.date).getTime() > Date.now() - 7 * 86_400_000,
 ).length
+
+// ── Демо-заключения юристов (мок-требования: молоко, парацетамол) ──
+
+/** Витринные заключения: показывают UI секции на мок-товарах */
+export const mockLawyerReviews: Record<string, LawyerReview[]> = {
+  'mock-milk-cert': [
+    {
+      id: 'mock-review-milk-cert-1',
+      requirementId: 'mock-milk-cert',
+      verdict: 'confirm',
+      commentText:
+        'Подтверждаю: декларация о соответствии по O‘zDSt 1112:2020 обязательна для молока в потребительской упаковке. Обратите внимание — с 2025 года орган по сертификации проверяет и маркировку на соответствие техрегламенту, отдельная экспертиза не нужна.',
+      status: 'published',
+      lawyerId: 'mock-lawyer-aziza',
+      lawyerName: 'Азиза Каримова',
+      credentials: 'Юрист по техническому регулированию, 12 лет практики',
+      officialReply:
+        'Спасибо за уточнение! Добавили ссылку на объединённую процедуру в шаги исполнения.',
+      officialRepliedAt: isoDaysFromNow(-3),
+      helpful: 14,
+      notHelpful: 1,
+      myVote: null,
+      isMine: false,
+      createdAt: isoDaysFromNow(-6),
+    },
+    {
+      id: 'mock-review-milk-cert-2',
+      requirementId: 'mock-milk-cert',
+      verdict: 'addition',
+      commentText:
+        'Дополнение: для фермерских хозяйств с объёмом до 500 л/сутки действует упрощённый порядок — декларация на основании собственных доказательств, без протокола аккредитованной лаборатории.',
+      status: 'published',
+      lawyerId: 'mock-lawyer-jasur',
+      lawyerName: 'Жасур Абдуллаев',
+      credentials: 'Адвокат, специализация — агробизнес и ВЭД',
+      helpful: 6,
+      notHelpful: 0,
+      myVote: null,
+      isMine: false,
+      createdAt: isoDaysFromNow(-4),
+    },
+  ],
+  'mock-par-license': [
+    {
+      id: 'mock-review-par-license-1',
+      requirementId: 'mock-par-license',
+      verdict: 'outdated',
+      commentText:
+        'Требование частично устарело: с марта 2026 лицензия на оптовую реализацию лекарств выдаётся через единый портал license.gov.uz, бумажная подача в УзФарм больше не принимается. Срок рассмотрения сократился с 20 до 10 рабочих дней.',
+      status: 'published',
+      lawyerId: 'mock-lawyer-aziza',
+      lawyerName: 'Азиза Каримова',
+      credentials: 'Юрист по техническому регулированию, 12 лет практики',
+      helpful: 9,
+      notHelpful: 2,
+      myVote: null,
+      isMine: false,
+      createdAt: isoDaysFromNow(-2),
+    },
+  ],
+}
+
+/** Счётчики бейджей для мок-строк — согласованы с mockLawyerReviews */
+export const mockReviewStats: Record<string, RequirementReviewStats> = {
+  'mock-milk-cert': { confirms: 1, disputes: 0, total: 2 },
+  'mock-par-license': { confirms: 0, disputes: 1, total: 1 },
+}
