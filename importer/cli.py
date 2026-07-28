@@ -37,6 +37,8 @@ def main(argv=None):
         s = run_import(args.file, ix, jb, lexuz, llm, dry_run=args.dry_run)
         print(f"\n{'[DRY RUN] ' if s.dry_run else ''}loaded={s.loaded} "
               f"merged={s.merged} review={s.review}")
+        if s.uz_backfill:
+            print(f"  без узбекского оригинала (добивка фазы 3): {s.uz_backfill}")
         for reason, n in sorted(s.reasons.items(), key=lambda kv: -kv[1]):
             print(f"  review:{reason} = {n}")
         return
