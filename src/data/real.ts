@@ -14,10 +14,20 @@ import {
   type Gated,
   type HistoryEntry,
   type HowToStep,
+  type LawyerLeaderboard,
+  type LawyerNotification,
+  type LawyerProfile,
+  type LawyerReview,
+  type LawyerStats,
+  type LeaderboardEntry,
+  type MyReviewItem,
   type RequiredDocument,
   type RequirementCard,
   type RequirementDetail,
+  type RequirementReviewStats,
   type RequirementRow,
+  type ReviewQueueItem,
+  type ReviewVerdict,
   type SanctionItem,
   type SearchHit,
   type ProductPassport,
@@ -26,6 +36,14 @@ import {
 } from './types'
 
 // ── Разбор сырых полей ─────────────────────────────────────────────
+
+/** В БД есть ещё 'validated' (гейт импорт-конвейера) — для витрины это
+ *  не юрвычитка, показываем как AI-черновик. */
+type DbTrustLabel = RequirementRow['trustLabel'] | 'validated'
+
+function normalizeTrust(label: DbTrustLabel): RequirementRow['trustLabel'] {
+  return label === 'validated' ? 'ai_draft' : label
+}
 
 interface HierarchyPath {
   levels?: string[]
@@ -364,7 +382,7 @@ interface RawListRow {
   operation: RequirementRow['operation']
   transport_type: RequirementRow['transport'] | null
   addressee_roles: RequirementRow['roles']
-  trust_label: RequirementRow['trustLabel']
+  trust_label: DbTrustLabel
   review_flag: 'none' | 'flagged_by_change'
   reviewed_at: string | null
   published_at: string | null
@@ -458,7 +476,7 @@ function listFromData(data: RawListRow[]): RequirementListReal {
       stageSortOrder: stage?.sort_order ?? 999,
       category: r.requirement_category ?? undefined,
       nature: r.nature ?? undefined,
-      trustLabel: r.trust_label,
+      trustLabel: normalizeTrust(r.trust_label),
       trustDate: r.reviewed_at ?? undefined,
       underReview: r.review_flag === 'flagged_by_change',
     })
@@ -584,7 +602,7 @@ export async function fetchCardReal(
         .map((f) => ({
           question: f.question,
           answer: f.answer,
-          trustLabel: f.trust_label,
+          trustLabel: normalizeTrust(f.trust_label),
         })),
     )
   } else if (isSubscriber) {
@@ -606,6 +624,492 @@ export async function fetchCardReal(
   }
 
   return { requirementId, authority, detail, citations, faqs: faqList, history }
+}
+
+// ── Проверка юристом ───────────────────────────────────────────────
+
+/** Заголовки-заглушки переноса v1 — правило то же, что в listFromData */
+function isJunkTitle(title: string): boolean {
+  const t = title.trim()
+  return !t || ['none', 'null', '-', '—'].includes(t.toLowerCase())
+}
+
+interface RequirementLinkInfo {
+  title?: string
+  link?: string
+  targetName?: string
+}
+
+/**
+ * Требование → страница товара/услуги (маршрут + ?req= для раскрытия строки).
+ * Применимость по точному коду; классы-префиксы и «для всех» на страницу
+ * конкретного товара не отображаются — такие строки остаются без ссылки.
+ */
+async function resolveRequirementLinks(
+  requirementIds: string[],
+): Promise<Map<string, RequirementLinkInfo>> {
+  const out = new Map<string, RequirementLinkInfo>()
+  if (requirementIds.length === 0) return out
+
+  const { data } = await supabase
+    .from('requirements')
+    .select('id, requirement_contents(lang, title), requirement_applicability(scope, code)')
+    .in('id', requirementIds)
+  const reqs = data ?? []
+
+  const hsCodes = new Set<string>()
+  const okedCodes = new Set<string>()
+  for (const r of reqs) {
+    for (const a of r.requirement_applicability) {
+      if (a.scope === 'hs_code' && a.code) hsCodes.add(a.code)
+      if (a.scope === 'oked_code' && a.code) okedCodes.add(a.code)
+    }
+  }
+
+  const [productsRes, servicesRes] = await Promise.all([
+    hsCodes.size > 0
+      ? supabase
+          .from('products')
+          .select('id, name_ru, hs_code')
+          .in('hs_code', [...hsCodes])
+          .eq('is_active', true)
+      : Promise.resolve({ data: [] }),
+    okedCodes.size > 0
+      ? supabase
+          .from('services')
+          .select('id, name_ru, oked_code')
+          .in('oked_code', [...okedCodes])
+          .eq('is_active', true)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const productByHs = new Map(
+    (productsRes.data ?? []).map((p) => [p.hs_code, p] as const),
+  )
+  const aliases = await defaultAliases((productsRes.data ?? []).map((p) => p.id))
+  const serviceByOked = new Map(
+    (servicesRes.data ?? []).flatMap((s) =>
+      s.oked_code ? [[s.oked_code, s] as const] : [],
+    ),
+  )
+
+  for (const r of reqs) {
+    const content =
+      r.requirement_contents.find((c) => c.lang === 'ru') ?? r.requirement_contents[0]
+    const info: RequirementLinkInfo = { title: content?.title }
+    for (const a of r.requirement_applicability) {
+      if (a.scope === 'hs_code' && a.code) {
+        const p = productByHs.get(a.code)
+        if (p) {
+          info.link = `/product/${p.id}?req=${r.id}`
+          info.targetName = aliases.get(p.id) ?? officialFromRaw(p.name_ru)
+          break
+        }
+      }
+      if (a.scope === 'oked_code' && a.code) {
+        const s = serviceByOked.get(a.code)
+        if (s) {
+          info.link = `/service/${s.id}?req=${r.id}`
+          info.targetName = s.name_ru
+          break
+        }
+      }
+    }
+    out.set(r.id, info)
+  }
+  return out
+}
+
+const REVIEW_SELECT =
+  'id, requirement_id, lawyer_id, verdict, comment_text, status, official_reply, official_replied_at, created_at, lawyer_profiles(display_name, credentials)'
+
+async function voteCountsFor(
+  reviewIds: string[],
+): Promise<Map<string, { helpful: number; notHelpful: number }>> {
+  const map = new Map<string, { helpful: number; notHelpful: number }>()
+  if (reviewIds.length === 0) return map
+  const { data } = await supabase
+    .from('review_vote_counts')
+    .select('review_id, helpful, not_helpful')
+    .in('review_id', reviewIds)
+  for (const row of data ?? []) {
+    if (row.review_id)
+      map.set(row.review_id, {
+        helpful: row.helpful ?? 0,
+        notHelpful: row.not_helpful ?? 0,
+      })
+  }
+  return map
+}
+
+/** Заключения по требованию: published для всех + свои pending для юриста */
+export async function fetchLawyerReviewsReal(
+  requirementId: string,
+  userId?: string,
+): Promise<LawyerReview[]> {
+  const { data, error } = await supabase
+    .from('requirement_reviews')
+    .select(REVIEW_SELECT)
+    .eq('requirement_id', requirementId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const rows = (data ?? []).filter(
+    (r) => r.status === 'published' || (userId && r.lawyer_id === userId && r.status === 'pending'),
+  )
+  const ids = rows.map((r) => r.id)
+
+  const [counts, myVotes] = await Promise.all([
+    voteCountsFor(ids),
+    userId && ids.length > 0
+      ? supabase.from('review_votes').select('review_id, vote').in('review_id', ids)
+      : Promise.resolve({ data: [] }),
+  ])
+  const myVoteById = new Map(
+    (myVotes.data ?? []).map((v) => [v.review_id, v.vote] as const),
+  )
+
+  const reviews = rows.map((r): LawyerReview => {
+    const c = counts.get(r.id)
+    return {
+      id: r.id,
+      requirementId: r.requirement_id,
+      verdict: r.verdict,
+      commentText: r.comment_text,
+      status: r.status,
+      lawyerId: r.lawyer_id,
+      lawyerName: r.lawyer_profiles?.display_name ?? 'Юрист',
+      credentials: r.lawyer_profiles?.credentials ?? undefined,
+      officialReply: r.official_reply ?? undefined,
+      officialRepliedAt: r.official_replied_at ?? undefined,
+      helpful: c?.helpful ?? 0,
+      notHelpful: c?.notHelpful ?? 0,
+      myVote: (myVoteById.get(r.id) as 1 | -1 | undefined) ?? null,
+      isMine: Boolean(userId && r.lawyer_id === userId),
+      createdAt: r.created_at,
+    }
+  })
+
+  // Свои «на модерации» — сверху, published — по полезности, затем по дате
+  return reviews.sort((a, b) => {
+    if ((a.status === 'pending') !== (b.status === 'pending'))
+      return a.status === 'pending' ? -1 : 1
+    const score = b.helpful - b.notHelpful - (a.helpful - a.notHelpful)
+    if (score !== 0) return score
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+}
+
+/**
+ * Поставить/сменить или снять (null → delete) голос.
+ * Не upsert: PostgREST разворачивает его в ON CONFLICT DO UPDATE по всем
+ * колонкам пейлоада, а UPDATE-грант колоночный (только vote) — получился бы
+ * вечный 42501. Поэтому детерминированно: INSERT или UPDATE по hadVote,
+ * с перекрёстным фолбэком на случай устаревшего кеша.
+ */
+export async function setReviewVoteReal(
+  reviewId: string,
+  vote: 1 | -1 | null,
+  userId: string,
+  hadVote: boolean,
+): Promise<void> {
+  if (vote === null) {
+    const { error } = await supabase
+      .from('review_votes')
+      .delete()
+      .eq('review_id', reviewId)
+      .eq('user_id', userId)
+    if (error) throw error
+    return
+  }
+
+  const insertVote = () =>
+    supabase.from('review_votes').insert({ review_id: reviewId, user_id: userId, vote })
+  const updateVote = () =>
+    supabase
+      .from('review_votes')
+      .update({ vote })
+      .eq('review_id', reviewId)
+      .eq('user_id', userId)
+      .select('review_id')
+
+  if (hadVote) {
+    const upd = await updateVote()
+    if (upd.error) throw upd.error
+    if ((upd.data ?? []).length > 0) return
+    // голос успели снять в другой вкладке — вставляем заново
+    const ins = await insertVote()
+    if (ins.error) throw ins.error
+    return
+  }
+
+  const ins = await insertVote()
+  if (!ins.error) return
+  if (ins.error.code === '23505') {
+    // голос уже есть (устаревший кеш) — меняем значение
+    const upd = await updateVote()
+    if (upd.error) throw upd.error
+    return
+  }
+  throw ins.error
+}
+
+export async function submitLawyerReviewReal(input: {
+  requirementId: string
+  verdict: ReviewVerdict
+  commentText: string
+  userId: string
+}): Promise<void> {
+  const { error } = await supabase.from('requirement_reviews').insert({
+    requirement_id: input.requirementId,
+    lawyer_id: input.userId,
+    verdict: input.verdict,
+    comment_text: input.commentText,
+  })
+  if (error) throw error
+}
+
+/**
+ * Заявка юриста; повторная подача после отказа — UPDATE той же строки
+ * (триггер в базе вернёт статус в pending). Не upsert — см. setReviewVoteReal.
+ */
+export async function submitLawyerApplicationReal(input: {
+  displayName: string
+  credentials: string
+  licenseNo?: string
+  specializations?: string
+  userId: string
+  hasProfile: boolean
+}): Promise<void> {
+  const fields = {
+    display_name: input.displayName,
+    credentials: input.credentials,
+    license_no: input.licenseNo || null,
+    specializations: input.specializations || null,
+  }
+
+  if (input.hasProfile) {
+    const upd = await supabase
+      .from('lawyer_profiles')
+      .update(fields)
+      .eq('user_id', input.userId)
+      .select('user_id')
+    if (upd.error) throw upd.error
+    if ((upd.data ?? []).length > 0) return
+  }
+
+  const ins = await supabase
+    .from('lawyer_profiles')
+    .insert({ user_id: input.userId, ...fields })
+  if (ins.error?.code === '23505') {
+    const upd = await supabase
+      .from('lawyer_profiles')
+      .update(fields)
+      .eq('user_id', input.userId)
+    if (upd.error) throw upd.error
+    return
+  }
+  if (ins.error) throw ins.error
+}
+
+export async function fetchMyLawyerProfileReal(
+  userId: string,
+): Promise<LawyerProfile | null> {
+  const { data } = await supabase
+    .from('lawyer_profiles')
+    .select('display_name, credentials, license_no, specializations, status, verified_at')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (!data) return null
+  return {
+    displayName: data.display_name,
+    credentials: data.credentials,
+    licenseNo: data.license_no ?? undefined,
+    specializations: data.specializations ?? undefined,
+    status: data.status,
+    verifiedAt: data.verified_at ?? undefined,
+  }
+}
+
+export async function fetchLawyerStatsReal(userId: string): Promise<LawyerStats> {
+  const { data } = await supabase
+    .from('lawyer_stats')
+    .select('requirements_reviewed, reviews_published, helpful_total, not_helpful_total')
+    .eq('lawyer_id', userId)
+    .maybeSingle()
+  return {
+    requirementsReviewed: data?.requirements_reviewed ?? 0,
+    reviewsPublished: data?.reviews_published ?? 0,
+    helpfulTotal: data?.helpful_total ?? 0,
+    notHelpfulTotal: data?.not_helpful_total ?? 0,
+  }
+}
+
+interface RawLeaderboardRow {
+  lawyer_id: string | null
+  display_name: string | null
+  credentials: string | null
+  requirements_reviewed: number | null
+  reviews_published: number | null
+  helpful_total: number | null
+  not_helpful_total: number | null
+  rank: number | null
+}
+
+function toLeaderboardEntry(r: RawLeaderboardRow): LeaderboardEntry {
+  return {
+    lawyerId: r.lawyer_id ?? '',
+    displayName: r.display_name ?? 'Юрист',
+    credentials: r.credentials ?? undefined,
+    requirementsReviewed: r.requirements_reviewed ?? 0,
+    reviewsPublished: r.reviews_published ?? 0,
+    helpfulTotal: r.helpful_total ?? 0,
+    notHelpfulTotal: r.not_helpful_total ?? 0,
+    rank: r.rank ?? 0,
+  }
+}
+
+export async function fetchLeaderboardReal(
+  userId?: string,
+): Promise<LawyerLeaderboard> {
+  const [topRes, countRes, meRes] = await Promise.all([
+    supabase
+      .from('lawyer_leaderboard')
+      .select('*')
+      .order('rank', { ascending: true })
+      .limit(10),
+    supabase
+      .from('lawyer_leaderboard')
+      .select('lawyer_id', { count: 'exact', head: true }),
+    userId
+      ? supabase.from('lawyer_leaderboard').select('*').eq('lawyer_id', userId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  return {
+    top: (topRes.data ?? []).map(toLeaderboardEntry),
+    total: countRes.count ?? 0,
+    me: meRes.data ? toLeaderboardEntry(meRes.data) : undefined,
+  }
+}
+
+/** Счётчики бейджей одним запросом по requirement_ids страницы */
+export async function fetchReviewStatsReal(
+  requirementIds: string[],
+): Promise<Record<string, RequirementReviewStats>> {
+  if (requirementIds.length === 0) return {}
+  const { data } = await supabase
+    .from('requirement_review_stats')
+    .select('requirement_id, confirms, disputes, total')
+    .in('requirement_id', requirementIds)
+  const out: Record<string, RequirementReviewStats> = {}
+  for (const row of data ?? []) {
+    if (row.requirement_id)
+      out[row.requirement_id] = {
+        confirms: row.confirms ?? 0,
+        disputes: row.disputes ?? 0,
+        total: row.total ?? 0,
+      }
+  }
+  return out
+}
+
+/**
+ * Очередь «Ждут проверки»: свежие published-требования без видимых заключений
+ * (чужие pending скрыты RLS — это ожидаемая граница видимости).
+ */
+export async function fetchReviewQueueReal(): Promise<ReviewQueueItem[]> {
+  const { data, error } = await supabase
+    .from('requirements')
+    .select(
+      'id, published_at, requirement_contents(lang, title), requirement_reviews(id, status)',
+    )
+    .eq('status', 'published')
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(60)
+  if (error) throw error
+
+  const candidates = (data ?? []).filter((r) => {
+    if (r.requirement_reviews.length > 0) return false
+    const content =
+      r.requirement_contents.find((c) => c.lang === 'ru') ?? r.requirement_contents[0]
+    return content && !isJunkTitle(content.title)
+  })
+
+  const top = candidates.slice(0, 10)
+  const links = await resolveRequirementLinks(top.map((r) => r.id))
+  return top.map((r) => {
+    const content =
+      r.requirement_contents.find((c) => c.lang === 'ru') ?? r.requirement_contents[0]
+    const info = links.get(r.id)
+    return {
+      requirementId: r.id,
+      title: content?.title ?? '—',
+      publishedAt: r.published_at ?? undefined,
+      link: info?.link,
+      targetName: info?.targetName,
+    }
+  })
+}
+
+export async function fetchMyReviewsReal(userId: string): Promise<MyReviewItem[]> {
+  const { data, error } = await supabase
+    .from('requirement_reviews')
+    .select('id, requirement_id, verdict, status, created_at')
+    .eq('lawyer_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(10)
+  if (error) throw error
+  const rows = data ?? []
+  const [counts, links] = await Promise.all([
+    voteCountsFor(rows.map((r) => r.id)),
+    resolveRequirementLinks(rows.map((r) => r.requirement_id)),
+  ])
+  return rows.map((r) => {
+    const c = counts.get(r.id)
+    const info = links.get(r.requirement_id)
+    return {
+      id: r.id,
+      requirementId: r.requirement_id,
+      requirementTitle: info?.title ?? 'Требование',
+      link: info?.link,
+      verdict: r.verdict,
+      status: r.status,
+      helpful: c?.helpful ?? 0,
+      notHelpful: c?.notHelpful ?? 0,
+      createdAt: r.created_at,
+    }
+  })
+}
+
+export async function fetchLawyerNotificationsReal(): Promise<LawyerNotification[]> {
+  const { data, error } = await supabase
+    .from('lawyer_notifications')
+    .select('id, kind, requirement_id, review_id, is_read, created_at')
+    .order('created_at', { ascending: false })
+    .limit(30)
+  if (error) throw error
+  const rows = data ?? []
+  const reqIds = [...new Set(rows.flatMap((r) => (r.requirement_id ? [r.requirement_id] : [])))]
+  const links = await resolveRequirementLinks(reqIds)
+  return rows.map((r) => {
+    const info = r.requirement_id ? links.get(r.requirement_id) : undefined
+    return {
+      id: r.id,
+      kind: r.kind,
+      requirementId: r.requirement_id ?? undefined,
+      requirementTitle: info?.title,
+      link: info?.link,
+      isRead: r.is_read,
+      createdAt: r.created_at,
+    }
+  })
+}
+
+export async function markLawyerNotificationReadReal(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('lawyer_notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
 }
 
 // ── Формы (RLS: anyone insert) ─────────────────────────────────────

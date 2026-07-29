@@ -13,9 +13,11 @@ import {
   ok,
   type ChangeCard,
   type Gated,
+  type LawyerReview,
   type PortfolioItem,
   type ProductPassport,
   type RequirementCard,
+  type RequirementReviewStats,
   type RequirementRow,
   type SearchHit,
   type SearchKind,
@@ -27,14 +29,17 @@ import {
 } from './types'
 import {
   fetchCardReal,
+  fetchLawyerReviewsReal,
   fetchPassportReal,
   fetchRequirementsReal,
+  fetchReviewStatsReal,
   fetchServiceDocumentsCountReal,
   fetchServicePassportReal,
   fetchServiceRequirementsReal,
   fetchTelemetryReal,
   searchProductsReal,
   searchServicesReal,
+  setReviewVoteReal,
 } from './real'
 import {
   CIGARETTES_PRODUCT_ID,
@@ -46,7 +51,9 @@ import {
   isMockRequirementId,
   milkPassportExtras,
   mockCardFor,
+  mockLawyerReviews,
   mockMetrics,
+  mockReviewStats,
   mockRowsFor,
   mockWeeklyChangesCount,
   paracetamolHit,
@@ -54,7 +61,7 @@ import {
   paracetamolPassport,
   stagesFromRows,
 } from './mock/fixtures'
-import { readChangeIds } from './mock/read-store'
+import { loadMockReviewVotes, readChangeIds, saveMockReviewVote } from './mock/read-store'
 import { CAFE_SERVICE_ID, PHARMACY_SERVICE_ID } from './cross-links'
 
 export interface DataCtx {
@@ -62,10 +69,17 @@ export interface DataCtx {
   realSubscriber: boolean
   /** Тумблер dev-меню «я подписчик» */
   mockSubscriber: boolean
+  /** Верифицированный юрист: RLS даёт ему details наравне с подписчиком */
+  verifiedLawyer: boolean
 }
 
 export function effectiveSubscriber(ctx: DataCtx): boolean {
-  return ctx.realSubscriber || ctx.mockSubscriber
+  return ctx.realSubscriber || ctx.mockSubscriber || ctx.verifiedLawyer
+}
+
+/** Кому сервер (RLS) реально отдаёт закрытый контент */
+function serverAccess(ctx: DataCtx): boolean {
+  return ctx.realSubscriber || ctx.verifiedLawyer
 }
 
 // ── Телеметрия ─────────────────────────────────────────────────────
@@ -312,13 +326,67 @@ export async function fetchCard(
     return { ...card, detail: locked, citations: locked, faqs: locked, history: locked }
   }
 
-  const card = await fetchCardReal(requirementId, ctx.realSubscriber)
-  // Мок-подписчик без реальной подписки: сервер не отдал — показываем демо-шаблон
-  if (!ctx.realSubscriber && ctx.mockSubscriber && card.detail.state === 'locked' && row) {
+  const card = await fetchCardReal(requirementId, serverAccess(ctx))
+  // Мок-подписчик без реального доступа: сервер не отдал — показываем демо-шаблон
+  if (!serverAccess(ctx) && ctx.mockSubscriber && card.detail.state === 'locked' && row) {
     const demo = demoDetailFor(row)
     return { ...demo, authority: card.authority ?? demo.authority }
   }
   return card
+}
+
+// ── Заключения юристов ─────────────────────────────────────────────
+
+export function isMockReviewId(reviewId: string): boolean {
+  return reviewId.startsWith('mock-')
+}
+
+export async function fetchLawyerReviews(
+  requirementId: string,
+  userId?: string,
+): Promise<LawyerReview[]> {
+  // Мок-требования: витринные фикстуры (или пусто), в базу не ходим.
+  // Голос залогиненного пользователя — локальный оверлей, чтобы демо жило.
+  if (isMockRequirementId(requirementId)) {
+    const votes = userId ? loadMockReviewVotes() : {}
+    return (mockLawyerReviews[requirementId] ?? []).map((r) => {
+      const myVote = votes[r.id] ?? null
+      return {
+        ...r,
+        myVote,
+        helpful: r.helpful + (myVote === 1 ? 1 : 0),
+        notHelpful: r.notHelpful + (myVote === -1 ? 1 : 0),
+      }
+    })
+  }
+  return fetchLawyerReviewsReal(requirementId, userId)
+}
+
+/** Голос: демо-заключения пишем в localStorage, реальные — в review_votes */
+export async function setReviewVote(
+  reviewId: string,
+  vote: 1 | -1 | null,
+  userId: string,
+  hadVote: boolean,
+): Promise<void> {
+  if (isMockReviewId(reviewId)) {
+    saveMockReviewVote(reviewId, vote)
+    return
+  }
+  return setReviewVoteReal(reviewId, vote, userId, hadVote)
+}
+
+/** Счётчики бейджей: реальные строки из view + мок-оверлей для демо-строк */
+export async function fetchReviewStats(
+  requirementIds: string[],
+): Promise<Record<string, RequirementReviewStats>> {
+  const realIds = requirementIds.filter((id) => !isMockRequirementId(id))
+  const real = realIds.length > 0 ? await fetchReviewStatsReal(realIds) : {}
+  const out: Record<string, RequirementReviewStats> = { ...real }
+  for (const id of requirementIds) {
+    if (isMockRequirementId(id) && mockReviewStats[id]) out[id] = mockReviewStats[id]
+  }
+  return out
 }
 
 // ── Кабинет: портфель и лента ──────────────────────────────────────

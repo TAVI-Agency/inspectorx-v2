@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { BadgeCheck, ChevronDown, TriangleAlert } from 'lucide-react'
 import { Expand } from '@/components/Expand'
-import { useMarkChangeRead } from '@/data/hooks'
-import type { RequirementRow, StageInfo } from '@/data/types'
+import { useMarkChangeRead, useReviewStats } from '@/data/hooks'
+import type { RequirementReviewStats, RequirementRow, StageInfo } from '@/data/types'
 import { categoryChipOf } from '@/data/taxonomy'
-import { formatDate } from '@/lib/format'
+import { formatDate, pluralize } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { CCard, CCategoryChip, CDeonticChip } from './ui'
@@ -32,6 +32,8 @@ export function CRequirementList({
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(initialRequirementId ?? null)
   const markRead = useMarkChangeRead()
+  // Бейджи «Подтвердил юрист»: один агрегирующий запрос по строкам страницы
+  const { data: reviewStats } = useReviewStats(rows.map((r) => r.id))
 
   useEffect(() => {
     setExpandedId(initialRequirementId ?? null)
@@ -105,6 +107,7 @@ export function CRequirementList({
                     expanded={expandedId === row.id}
                     onToggle={() => toggle(row)}
                     productId={productId}
+                    reviewStats={reviewStats?.[row.id]}
                   />
                 ))}
               </ul>
@@ -116,18 +119,44 @@ export function CRequirementList({
   )
 }
 
+/** Бейдж проверки юристом: подтверждения — изумруд, замечание — предупреждение */
+function CReviewBadge({ stats }: { stats: RequirementReviewStats }) {
+  const t = ru.requirement.lawyerReviews
+  if (stats.confirms > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-[6px] bg-positive/10 px-1.5 py-0.5 text-[10px] font-medium text-positive">
+        <BadgeCheck className="size-3" />
+        {stats.confirms === 1
+          ? t.badgeConfirmedOne
+          : t.badgeConfirmedMany(pluralize(stats.confirms, 'юрист', 'юриста', 'юристов'))}
+      </span>
+    )
+  }
+  if (stats.disputes > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-[6px] bg-sanction/10 px-1.5 py-0.5 text-[10px] font-medium text-sanction">
+        <TriangleAlert className="size-3" />
+        {t.badgeDispute}
+      </span>
+    )
+  }
+  return null
+}
+
 function CRow({
   row,
   number,
   expanded,
   onToggle,
   productId,
+  reviewStats,
 }: {
   row: RequirementRow
   number: number
   expanded: boolean
   onToggle: () => void
   productId?: string
+  reviewStats?: RequirementReviewStats
 }) {
   return (
     <li className={cn('transition-colors', expanded && 'bg-accent/25')}>
@@ -158,6 +187,7 @@ function CRow({
                 {ru.requirement.underReview}
               </span>
             )}
+            {reviewStats && <CReviewBadge stats={reviewStats} />}
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <CDeonticChip deontic={row.deontic} />

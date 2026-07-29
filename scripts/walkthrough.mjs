@@ -1,6 +1,7 @@
 /**
- * Сквозной путь: лендинг → поиск → товар → карточка → пейволл → тариф → заявка.
- * Скриншоты каждого шага в shots/walk-*.png, консольные ошибки — в stdout.
+ * Сквозной путь: лендинг → реестр (поиск) → товар → карточка → пейволл →
+ * тариф → заявка. Скриншоты каждого шага в shots/walk-*.png,
+ * консольные ошибки — в stdout.
  */
 import { chromium } from 'playwright'
 import { mkdirSync } from 'node:fs'
@@ -20,8 +21,11 @@ async function shot(name) {
   console.log('step ok:', name)
 }
 
-// 1. Лендинг → поиск
+// 1. Лендинг «Один маршрут» → CTA в реестр → поиск
+// (строка поиска живёт в /catalog: у лендинга её нет)
 await page.goto(BASE + '/', { waitUntil: 'networkidle' })
+await shot('0-landing')
+await page.goto(BASE + '/catalog', { waitUntil: 'networkidle' })
 const input = page.getByRole('combobox')
 await input.click()
 await input.fill('iqos')
@@ -45,9 +49,9 @@ await page.waitForURL('**/pricing')
 await shot('4-pricing')
 
 // 5. Заявка
-await page.locator('#req-name').fill('ТЕСТ витрины (можно удалить)')
-await page.locator('#req-contact').fill('@inspectorx_walkthrough_test')
-await page.locator('#req-company').fill('E2E-тест сессии стройки')
+await page.locator('#cpr-name').fill('ТЕСТ витрины (можно удалить)')
+await page.locator('#cpr-contact').fill('@inspectorx_walkthrough_test')
+await page.locator('#cpr-company').fill('E2E-тест сессии стройки')
 await page.getByRole('button', { name: 'Отправить заявку' }).click()
 await page.waitForSelector('text=Заявка принята', { timeout: 10000 }).catch(() => {})
 await page.waitForTimeout(600)

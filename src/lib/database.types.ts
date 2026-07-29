@@ -306,6 +306,208 @@ export type Database = {
           },
         ]
       }
+      import_items: {
+        Row: {
+          created_at: string
+          id: string
+          idx: number
+          raw: Json
+          requirement_id: string | null
+          resolution: string
+          resolved_at: string | null
+          resolved_by: string | null
+          review_detail: string | null
+          review_reason: string | null
+          run_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idx: number
+          raw: Json
+          requirement_id?: string | null
+          resolution?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          review_detail?: string | null
+          review_reason?: string | null
+          run_id: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idx?: number
+          raw?: Json
+          requirement_id?: string | null
+          resolution?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          review_detail?: string | null
+          review_reason?: string | null
+          run_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_items_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "import_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_runs: {
+        Row: {
+          created_at: string
+          error: string | null
+          file_hash: string
+          file_name: string
+          gray_zones: string[]
+          id: string
+          loaded_count: number
+          merged_count: number
+          model: string
+          raw_json: Json | null
+          review_count: number
+          status: string
+          subject_kind: string
+          subject_slug: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          file_hash: string
+          file_name: string
+          gray_zones?: string[]
+          id?: string
+          loaded_count?: number
+          merged_count?: number
+          model: string
+          raw_json?: Json | null
+          review_count?: number
+          status?: string
+          subject_kind: string
+          subject_slug: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          file_hash?: string
+          file_name?: string
+          gray_zones?: string[]
+          id?: string
+          loaded_count?: number
+          merged_count?: number
+          model?: string
+          raw_json?: Json | null
+          review_count?: number
+          status?: string
+          subject_kind?: string
+          subject_slug?: string
+        }
+        Relationships: []
+      }
+      lawyer_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          kind: Database["public"]["Enums"]["lawyer_notification_kind"]
+          lawyer_id: string
+          read_at: string | null
+          requirement_id: string | null
+          review_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kind: Database["public"]["Enums"]["lawyer_notification_kind"]
+          lawyer_id: string
+          read_at?: string | null
+          requirement_id?: string | null
+          review_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kind?: Database["public"]["Enums"]["lawyer_notification_kind"]
+          lawyer_id?: string
+          read_at?: string | null
+          requirement_id?: string | null
+          review_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lawyer_notifications_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lawyer_notifications_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lawyer_notifications_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "requirement_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lawyer_profiles: {
+        Row: {
+          created_at: string
+          credentials: string
+          display_name: string
+          license_no: string | null
+          specializations: string | null
+          status: Database["public"]["Enums"]["lawyer_status"]
+          updated_at: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          credentials: string
+          display_name: string
+          license_no?: string | null
+          specializations?: string | null
+          status?: Database["public"]["Enums"]["lawyer_status"]
+          updated_at?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          credentials?: string
+          display_name?: string
+          license_no?: string | null
+          specializations?: string | null
+          status?: Database["public"]["Enums"]["lawyer_status"]
+          updated_at?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       lifecycle_stages: {
         Row: {
           code: string
@@ -548,6 +750,9 @@ export type Database = {
           requirement_id: string
           sanction_summary: string | null
           title: string
+          translation_origin:
+            | Database["public"]["Enums"]["translation_origin"]
+            | null
           updated_at: string
         }
         Insert: {
@@ -556,6 +761,9 @@ export type Database = {
           requirement_id: string
           sanction_summary?: string | null
           title: string
+          translation_origin?:
+            | Database["public"]["Enums"]["translation_origin"]
+            | null
           updated_at?: string
         }
         Update: {
@@ -564,6 +772,9 @@ export type Database = {
           requirement_id?: string
           sanction_summary?: string | null
           title?: string
+          translation_origin?:
+            | Database["public"]["Enums"]["translation_origin"]
+            | null
           updated_at?: string
         }
         Relationships: [
@@ -585,6 +796,9 @@ export type Database = {
           lang: Database["public"]["Enums"]["lang_code"]
           requirement_id: string
           sanctions: Json
+          translation_origin:
+            | Database["public"]["Enums"]["translation_origin"]
+            | null
           updated_at: string
         }
         Insert: {
@@ -595,6 +809,9 @@ export type Database = {
           lang: Database["public"]["Enums"]["lang_code"]
           requirement_id: string
           sanctions?: Json
+          translation_origin?:
+            | Database["public"]["Enums"]["translation_origin"]
+            | null
           updated_at?: string
         }
         Update: {
@@ -605,6 +822,9 @@ export type Database = {
           lang?: Database["public"]["Enums"]["lang_code"]
           requirement_id?: string
           sanctions?: Json
+          translation_origin?:
+            | Database["public"]["Enums"]["translation_origin"]
+            | null
           updated_at?: string
         }
         Relationships: [
@@ -671,6 +891,60 @@ export type Database = {
           },
         ]
       }
+      requirement_reviews: {
+        Row: {
+          comment_text: string
+          created_at: string
+          id: string
+          lawyer_id: string
+          official_replied_at: string | null
+          official_reply: string | null
+          published_at: string | null
+          requirement_id: string
+          status: Database["public"]["Enums"]["review_status"]
+          verdict: Database["public"]["Enums"]["review_verdict"]
+        }
+        Insert: {
+          comment_text: string
+          created_at?: string
+          id?: string
+          lawyer_id: string
+          official_replied_at?: string | null
+          official_reply?: string | null
+          published_at?: string | null
+          requirement_id: string
+          status?: Database["public"]["Enums"]["review_status"]
+          verdict: Database["public"]["Enums"]["review_verdict"]
+        }
+        Update: {
+          comment_text?: string
+          created_at?: string
+          id?: string
+          lawyer_id?: string
+          official_replied_at?: string | null
+          official_reply?: string | null
+          published_at?: string | null
+          requirement_id?: string
+          status?: Database["public"]["Enums"]["review_status"]
+          verdict?: Database["public"]["Enums"]["review_verdict"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_reviews_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "requirement_reviews_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       requirement_revisions: {
         Row: {
           change_event_id: string | null
@@ -712,6 +986,39 @@ export type Database = {
           },
           {
             foreignKeyName: "requirement_revisions_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      requirement_sources: {
+        Row: {
+          created_at: string
+          import_item_id: string
+          requirement_id: string
+        }
+        Insert: {
+          created_at?: string
+          import_item_id: string
+          requirement_id: string
+        }
+        Update: {
+          created_at?: string
+          import_item_id?: string
+          requirement_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_sources_import_item_id_fkey"
+            columns: ["import_item_id"]
+            isOneToOne: false
+            referencedRelation: "import_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_sources_requirement_id_fkey"
             columns: ["requirement_id"]
             isOneToOne: false
             referencedRelation: "requirements"
@@ -821,6 +1128,35 @@ export type Database = {
             columns: ["lifecycle_stage_id"]
             isOneToOne: false
             referencedRelation: "lifecycle_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_votes: {
+        Row: {
+          created_at: string
+          review_id: string
+          user_id: string
+          vote: number
+        }
+        Insert: {
+          created_at?: string
+          review_id: string
+          user_id: string
+          vote: number
+        }
+        Update: {
+          created_at?: string
+          review_id?: string
+          user_id?: string
+          vote?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_votes_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "requirement_reviews"
             referencedColumns: ["id"]
           },
         ]
@@ -1089,10 +1425,84 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      lawyer_leaderboard: {
+        Row: {
+          credentials: string | null
+          display_name: string | null
+          helpful_total: number | null
+          lawyer_id: string | null
+          not_helpful_total: number | null
+          rank: number | null
+          requirements_reviewed: number | null
+          reviews_published: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_reviews_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      lawyer_stats: {
+        Row: {
+          helpful_total: number | null
+          lawyer_id: string | null
+          not_helpful_total: number | null
+          requirements_reviewed: number | null
+          reviews_published: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_reviews_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      requirement_review_stats: {
+        Row: {
+          confirms: number | null
+          disputes: number | null
+          requirement_id: string | null
+          total: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_reviews_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_vote_counts: {
+        Row: {
+          helpful: number | null
+          not_helpful: number | null
+          review_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_votes_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "requirement_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       is_subscriber: { Args: never; Returns: boolean }
+      is_verified_lawyer: { Args: never; Returns: boolean }
+      notify_admin_telegram: { Args: { message: string }; Returns: undefined }
+      review_votable: { Args: { rid: string }; Returns: boolean }
     }
     Enums: {
       act_status: "active" | "repealed" | "pending"
@@ -1117,6 +1527,11 @@ export type Database = {
       impact_status: "pending_review" | "confirmed" | "dismissed"
       importance_level: "high" | "medium" | "low"
       lang_code: "ru" | "uz" | "en"
+      lawyer_notification_kind:
+        | "review_published"
+        | "review_rejected"
+        | "new_requirement"
+      lawyer_status: "pending" | "verified" | "rejected"
       operation_domain:
         | "product"
         | "realization"
@@ -1154,13 +1569,20 @@ export type Database = {
       requirement_origin: "migration_v1" | "ai_pipeline" | "manual"
       requirement_status: "draft" | "in_review" | "published" | "archived"
       review_flag: "none" | "flagged_by_change"
+      review_status: "pending" | "published" | "rejected"
+      review_verdict: "confirm" | "inaccurate" | "outdated" | "addition"
       subscription_request_status:
         | "new"
         | "contacted"
         | "activated"
         | "rejected"
+      translation_origin: "verbatim" | "machine"
       transport_type: "avto" | "avia" | "train"
-      trust_label: "ai_draft" | "lawyer_verified" | "official_answer"
+      trust_label:
+        | "ai_draft"
+        | "lawyer_verified"
+        | "official_answer"
+        | "validated"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1315,6 +1737,12 @@ export const Constants = {
       impact_status: ["pending_review", "confirmed", "dismissed"],
       importance_level: ["high", "medium", "low"],
       lang_code: ["ru", "uz", "en"],
+      lawyer_notification_kind: [
+        "review_published",
+        "review_rejected",
+        "new_requirement",
+      ],
+      lawyer_status: ["pending", "verified", "rejected"],
       operation_domain: [
         "product",
         "realization",
@@ -1356,14 +1784,22 @@ export const Constants = {
       requirement_origin: ["migration_v1", "ai_pipeline", "manual"],
       requirement_status: ["draft", "in_review", "published", "archived"],
       review_flag: ["none", "flagged_by_change"],
+      review_status: ["pending", "published", "rejected"],
+      review_verdict: ["confirm", "inaccurate", "outdated", "addition"],
       subscription_request_status: [
         "new",
         "contacted",
         "activated",
         "rejected",
       ],
+      translation_origin: ["verbatim", "machine"],
       transport_type: ["avto", "avia", "train"],
-      trust_label: ["ai_draft", "lawyer_verified", "official_answer"],
+      trust_label: [
+        "ai_draft",
+        "lawyer_verified",
+        "official_answer",
+        "validated",
+      ],
     },
   },
 } as const

@@ -202,6 +202,114 @@ export interface RequirementCard {
   history: Gated<HistoryEntry[]>
 }
 
+// ── Проверка юристом ───────────────────────────────────────────────
+
+/** подтверждаю / есть неточность / устарело / дополнение */
+export type ReviewVerdict = 'confirm' | 'inaccurate' | 'outdated' | 'addition'
+export type ReviewStatus = 'pending' | 'published' | 'rejected'
+export type LawyerStatus = 'pending' | 'verified' | 'rejected'
+
+/** Опубликованное заключение юриста (или своё pending — с пометкой) */
+export interface LawyerReview {
+  id: string
+  requirementId: string
+  verdict: ReviewVerdict
+  commentText: string
+  status: ReviewStatus
+  lawyerId: string
+  lawyerName: string
+  credentials?: string
+  officialReply?: string
+  officialRepliedAt?: string
+  helpful: number
+  notHelpful: number
+  /** Голос текущего пользователя: 1 — помогло, -1 — не помогло */
+  myVote: 1 | -1 | null
+  isMine: boolean
+  createdAt: string
+}
+
+/** Счётчики для бейджа на строке требования */
+export interface RequirementReviewStats {
+  confirms: number
+  disputes: number
+  total: number
+}
+
+export interface LawyerProfile {
+  displayName: string
+  credentials: string
+  licenseNo?: string
+  specializations?: string
+  status: LawyerStatus
+  verifiedAt?: string
+}
+
+export interface LawyerStats {
+  requirementsReviewed: number
+  reviewsPublished: number
+  helpfulTotal: number
+  notHelpfulTotal: number
+}
+
+export interface LeaderboardEntry {
+  lawyerId: string
+  displayName: string
+  credentials?: string
+  requirementsReviewed: number
+  reviewsPublished: number
+  helpfulTotal: number
+  notHelpfulTotal: number
+  rank: number
+}
+
+export interface LawyerLeaderboard {
+  top: LeaderboardEntry[]
+  /** Всего юристов в рейтинге */
+  total: number
+  /** Строка текущего юриста — есть и когда он вне топ-10 */
+  me?: LeaderboardEntry
+}
+
+export type LawyerNotificationKind =
+  | 'review_published'
+  | 'review_rejected'
+  | 'new_requirement'
+
+export interface LawyerNotification {
+  id: string
+  kind: LawyerNotificationKind
+  requirementId?: string
+  requirementTitle?: string
+  /** Страница товара/услуги с раскрытым требованием */
+  link?: string
+  isRead: boolean
+  createdAt: string
+}
+
+/** Строка очереди «Ждут проверки» */
+export interface ReviewQueueItem {
+  requirementId: string
+  title: string
+  publishedAt?: string
+  link?: string
+  /** Имя товара/услуги, к которому привязано требование */
+  targetName?: string
+}
+
+/** Строка «Мои заключения» в дешборде юриста */
+export interface MyReviewItem {
+  id: string
+  requirementId: string
+  requirementTitle: string
+  link?: string
+  verdict: ReviewVerdict
+  status: ReviewStatus
+  helpful: number
+  notHelpful: number
+  createdAt: string
+}
+
 // ── Кабинет: портфель и лента изменений ────────────────────────────
 
 export interface PortfolioItem {
