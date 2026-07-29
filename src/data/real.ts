@@ -5,6 +5,9 @@
  */
 import { supabase } from '@/lib/supabase'
 import type { Json } from '@/lib/database.types'
+import { ru } from '@/i18n/ru'
+import { PHARMACY_SERVICE_ID } from './cross-links'
+import { CIGARETTES_PRODUCT_ID } from './mock/fixtures'
 import {
   locked,
   ok,
@@ -642,8 +645,10 @@ interface RequirementLinkInfo {
 
 /**
  * Требование → страница товара/услуги (маршрут + ?req= для раскрытия строки).
- * Применимость по точному коду; классы-префиксы и «для всех» на страницу
- * конкретного товара не отображаются — такие строки остаются без ссылки.
+ * Точный код → своя страница; класс-префикс → первый подходящий товар/услуга;
+ * «для всех» → витринная страница, где требование реально видно (IQOS/аптека).
+ * Требования без единой страницы в каталоге остаются без ссылки —
+ * очередь «Ждут проверки» такие строки не показывает.
  */
 async function resolveRequirementLinks(
   requirementIds: string[],
@@ -658,61 +663,99 @@ async function resolveRequirementLinks(
   const reqs = data ?? []
 
   const hsCodes = new Set<string>()
+  const hsPrefixes = new Set<string>()
   const okedCodes = new Set<string>()
+  const okedPrefixSet = new Set<string>()
+  let needAllProducts = false
+  let needAllServices = false
   for (const r of reqs) {
     for (const a of r.requirement_applicability) {
       if (a.scope === 'hs_code' && a.code) hsCodes.add(a.code)
+      if (a.scope === 'hs_prefix' && a.code) hsPrefixes.add(a.code)
       if (a.scope === 'oked_code' && a.code) okedCodes.add(a.code)
+      if (a.scope === 'oked_prefix' && a.code) okedPrefixSet.add(a.code)
+      if (a.scope === 'all_products') needAllProducts = true
+      if (a.scope === 'all_services') needAllServices = true
     }
   }
 
+  const productFilters = [...hsCodes].map((c) => `hs_code.eq.${c}`)
+  for (const p of hsPrefixes) productFilters.push(`hs_code.like.${p}*`)
+  const serviceFilters = [...okedCodes].map((c) => `oked_code.eq.${c}`)
+  for (const p of okedPrefixSet) serviceFilters.push(`oked_code.like.${p}*`)
+
   const [productsRes, servicesRes] = await Promise.all([
-    hsCodes.size > 0
+    productFilters.length > 0
       ? supabase
           .from('products')
           .select('id, name_ru, hs_code')
-          .in('hs_code', [...hsCodes])
+          .or(productFilters.join(','))
           .eq('is_active', true)
       : Promise.resolve({ data: [] }),
-    okedCodes.size > 0
+    serviceFilters.length > 0
       ? supabase
           .from('services')
           .select('id, name_ru, oked_code')
-          .in('oked_code', [...okedCodes])
+          .or(serviceFilters.join(','))
           .eq('is_active', true)
       : Promise.resolve({ data: [] }),
   ])
 
-  const productByHs = new Map(
-    (productsRes.data ?? []).map((p) => [p.hs_code, p] as const),
-  )
-  const aliases = await defaultAliases((productsRes.data ?? []).map((p) => p.id))
+  const products = productsRes.data ?? []
+  const services = servicesRes.data ?? []
+  const productByHs = new Map(products.map((p) => [p.hs_code, p] as const))
+  const aliases = await defaultAliases(products.map((p) => p.id))
   const serviceByOked = new Map(
-    (servicesRes.data ?? []).flatMap((s) =>
-      s.oked_code ? [[s.oked_code, s] as const] : [],
-    ),
+    services.flatMap((s) => (s.oked_code ? [[s.oked_code, s] as const] : [])),
   )
+
+  const productLink = (p: { id: string; name_ru: string }, reqId: string) => ({
+    link: `/product/${p.id}?req=${reqId}`,
+    targetName: aliases.get(p.id) ?? officialFromRaw(p.name_ru),
+  })
+  const serviceLink = (s: { id: string; name_ru: string }, reqId: string) => ({
+    link: `/service/${s.id}?req=${reqId}`,
+    targetName: s.name_ru,
+  })
 
   for (const r of reqs) {
     const content =
       r.requirement_contents.find((c) => c.lang === 'ru') ?? r.requirement_contents[0]
     const info: RequirementLinkInfo = { title: content?.title }
+
+    // Точный код — самый конкретный маршрут
     for (const a of r.requirement_applicability) {
+      if (info.link) break
       if (a.scope === 'hs_code' && a.code) {
         const p = productByHs.get(a.code)
-        if (p) {
-          info.link = `/product/${p.id}?req=${r.id}`
-          info.targetName = aliases.get(p.id) ?? officialFromRaw(p.name_ru)
-          break
-        }
+        if (p) Object.assign(info, productLink(p, r.id))
       }
       if (a.scope === 'oked_code' && a.code) {
         const s = serviceByOked.get(a.code)
-        if (s) {
-          info.link = `/service/${s.id}?req=${r.id}`
-          info.targetName = s.name_ru
-          break
-        }
+        if (s) Object.assign(info, serviceLink(s, r.id))
+      }
+    }
+    // Класс-префикс — первый подходящий из каталога
+    for (const a of r.requirement_applicability) {
+      if (info.link) break
+      if (a.scope === 'hs_prefix' && a.code) {
+        const p = products.find((x) => x.hs_code.startsWith(a.code!))
+        if (p) Object.assign(info, productLink(p, r.id))
+      }
+      if (a.scope === 'oked_prefix' && a.code) {
+        const s = services.find((x) => x.oked_code?.startsWith(a.code!))
+        if (s) Object.assign(info, serviceLink(s, r.id))
+      }
+    }
+    // «Для всех» — витринная страница: требование там реально в списке
+    if (!info.link) {
+      const scopes = r.requirement_applicability.map((a) => a.scope)
+      if (needAllProducts && scopes.includes('all_products')) {
+        info.link = `/product/${CIGARETTES_PRODUCT_ID}?req=${r.id}`
+        info.targetName = ru.cabinet.lawyer.queueAllProducts
+      } else if (needAllServices && scopes.includes('all_services')) {
+        info.link = `/service/${PHARMACY_SERVICE_ID}?req=${r.id}`
+        info.targetName = ru.cabinet.lawyer.queueAllServices
       }
     }
     out.set(r.id, info)
@@ -1034,20 +1077,24 @@ export async function fetchReviewQueueReal(): Promise<ReviewQueueItem[]> {
     return content && !isJunkTitle(content.title)
   })
 
-  const top = candidates.slice(0, 10)
-  const links = await resolveRequirementLinks(top.map((r) => r.id))
-  return top.map((r) => {
-    const content =
-      r.requirement_contents.find((c) => c.lang === 'ru') ?? r.requirement_contents[0]
-    const info = links.get(r.id)
-    return {
-      requirementId: r.id,
-      title: content?.title ?? '—',
-      publishedAt: r.published_at ?? undefined,
-      link: info?.link,
-      targetName: info?.targetName,
-    }
-  })
+  // Ссылки резолвим до среза: строки, которым некуда вести (в каталоге нет
+  // такой страницы), в очередь не попадают — юристу нечего было бы открыть
+  const links = await resolveRequirementLinks(candidates.map((r) => r.id))
+  return candidates
+    .filter((r) => links.get(r.id)?.link)
+    .slice(0, 10)
+    .map((r) => {
+      const content =
+        r.requirement_contents.find((c) => c.lang === 'ru') ?? r.requirement_contents[0]
+      const info = links.get(r.id)
+      return {
+        requirementId: r.id,
+        title: content?.title ?? '—',
+        publishedAt: r.published_at ?? undefined,
+        link: info?.link,
+        targetName: info?.targetName,
+      }
+    })
 }
 
 export async function fetchMyReviewsReal(userId: string): Promise<MyReviewItem[]> {
