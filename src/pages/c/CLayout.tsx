@@ -22,11 +22,10 @@ export function CLayout() {
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(RAIL_KEY) === '1')
   const toggle = useCallback(() => {
-    setCollapsed((v) => {
-      localStorage.setItem(RAIL_KEY, v ? '0' : '1')
-      return !v
-    })
-  }, [])
+    const next = !collapsed
+    setCollapsed(next)
+    localStorage.setItem(RAIL_KEY, next ? '1' : '0')
+  }, [collapsed])
 
   return (
     <div className="theme-c min-h-svh bg-background font-sans text-foreground antialiased">

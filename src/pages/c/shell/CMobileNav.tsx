@@ -36,9 +36,9 @@ export function CMobileTop() {
 
 const TABS: { to: string; end?: boolean; label: string; icon: LucideIcon; dot?: boolean }[] = [
   { to: '/catalog', end: true, label: ru.nav.registry, icon: Compass },
-  { to: '/products', label: ru.nav.products, icon: Package, dot: true },
+  { to: '/products', label: ru.nav.productsShort, icon: Package, dot: true },
   { to: '/changes', label: ru.nav.changes, icon: TrendingUp, dot: true },
-  { to: '/questions', label: ru.nav.questions, icon: MessageCircle },
+  { to: '/questions', label: ru.nav.questionsShort, icon: MessageCircle },
 ]
 
 /** Нижние табы: частое + вход в меню профиля (там же «Проверки» и юрист) */
