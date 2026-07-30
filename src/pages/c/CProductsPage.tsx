@@ -77,10 +77,12 @@ const STATUS_TONE: Record<PortfolioItem['statusKind'], string> = {
 /** ОДНА строка статуса: дедлайн / в вашу пользу / без действий / тишина */
 function statusText(item: PortfolioItem): string {
   if (item.statusKind === 'deadline')
-    return ru.products.status.deadline(
-      pluralize(Math.max(item.recentCount, 1), 'изменение', 'изменения', 'изменений'),
-      formatDate(item.statusLine),
-    )
+    return item.recentCount > 0
+      ? ru.products.status.deadline(
+          pluralize(item.recentCount, 'изменение', 'изменения', 'изменений'),
+          formatDate(item.statusLine),
+        )
+      : ru.cabinet.productStatus.deadline(formatDate(item.statusLine))
   if (item.statusKind === 'noAction' && item.allInFavor)
     return ru.products.status.inFavor(
       pluralize(item.recentCount, 'изменение', 'изменения', 'изменений'),
