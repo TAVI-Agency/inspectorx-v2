@@ -27,8 +27,6 @@ export const ru = {
     monitoring: (acts: string) => `${acts} на мониторинге`,
     updated: (time: string) => `обновлено ${time}`,
     actsUnit: ['акт', 'акта', 'актов'] as const,
-    themeToggle: 'Переключить тему',
-    menu: 'Меню',
   },
 
   footer: {
@@ -308,7 +306,6 @@ export const ru = {
       quiet: 'без изменений 30 дней',
     },
     unreadShort: (n: number) => `${n} новых`,
-    feedTitle: 'Лента изменений',
     importance: { high: 'важно', medium: 'средняя', low: 'низкая' },
     effectiveIn: (days: number, date: string) =>
       `вступает ${date} — ${days === 0 ? 'сегодня' : `осталось ${days} дн.`}`,
@@ -381,12 +378,9 @@ export const ru = {
       you: 'вы',
 
       notifications: {
-        title: 'Уведомления',
-        empty: 'Пока тихо. Сообщим о модерации ваших заключений и новых требованиях.',
         review_published: 'Ваше заключение опубликовано',
         review_rejected: 'Ваше заключение не прошло модерацию',
         new_requirement: 'Новое требование на площадке — оставьте заключение',
-        aria: (n: number) => `Уведомления, непрочитанных: ${n}`,
       },
 
       share: {
@@ -407,10 +401,6 @@ export const ru = {
         imgTagline: 'Чек-лист соответствия вашего бизнеса',
       },
     },
-    digestTitle: 'Дайджест изменений',
-    digestText: 'Как присылать изменения по вашим товарам:',
-    digestEmail: 'Email еженедельно',
-    digestTelegram: 'Telegram мгновенно',
     digestSaved: 'Настройки дайджеста сохранены',
     feedQuiet: 'За 30 дней тишина. Это хорошие новости.',
   },
@@ -475,8 +465,6 @@ export const ru = {
   },
 
   dev: {
-    menuTitle: 'Демо-режим',
-    mockSubscriber: 'Я подписчик (мок)',
     mockSubscriberHint:
       'Показывает полный вид карточек. Данные details у реальных требований — демо-шаблон до входа под реальной подпиской.',
   },

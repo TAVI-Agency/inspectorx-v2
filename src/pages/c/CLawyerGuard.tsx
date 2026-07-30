@@ -25,9 +25,15 @@ export function CLawyerGuard({ children }: { children: ReactNode }) {
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {ru.cabinet.lawyer.becomeText}
         </p>
-        <Button className="mt-5" nativeButton={false} render={<Link to="/settings" />}>
-          {ru.cabinet.lawyer.becomeCta}
-        </Button>
+        {session ? (
+          <Button className="mt-5" nativeButton={false} render={<Link to="/settings" />}>
+            {ru.cabinet.lawyer.becomeCta}
+          </Button>
+        ) : (
+          <Button className="mt-5" nativeButton={false} render={<Link to="/login" />}>
+            {ru.common.signIn}
+          </Button>
+        )}
       </CCard>
     </div>
   )

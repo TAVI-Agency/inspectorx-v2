@@ -35,11 +35,12 @@ await shot('1-search')
 // 2. Выбор товара → страница товара
 await page.locator('[role="option"] button').first().click()
 await page.waitForSelector('h1', { timeout: 15000 })
-await page.waitForSelector('button[aria-expanded]', { timeout: 15000 })
+await page.waitForSelector('main button[aria-expanded="false"]', { timeout: 15000 })
 await shot('2-product')
 
 // 3. Раскрытие карточки → пейволл
-await page.locator('button[aria-expanded]').first().click()
+// (первая карточка раскрыта по умолчанию — берём первую ЗАКРЫТУЮ, чтобы клик её открыл)
+await page.locator('main button[aria-expanded="false"]').first().click()
 await page.waitForTimeout(800)
 await shot('3-card-paywall')
 
