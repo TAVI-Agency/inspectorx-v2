@@ -390,7 +390,7 @@ function CNotificationRow({
 
 // ── Очередь «Ждут проверки» ────────────────────────────────────────
 
-function CReviewQueueCard() {
+export function CReviewQueueCard() {
   const { data: queue, isLoading, isError } = useReviewQueue(true)
 
   return (
@@ -459,7 +459,7 @@ const REVIEW_STATUS_TONE: Record<MyReviewItem['status'], string> = {
   rejected: 'bg-sanction/10 text-sanction',
 }
 
-function CMyReviewsCard() {
+export function CMyReviewsCard() {
   const { data: reviews, isLoading } = useMyReviews(true)
 
   return (
@@ -525,7 +525,7 @@ function CMyReviewsCard() {
 
 // ── Рейтинг юристов ────────────────────────────────────────────────
 
-function CLeaderboardCard() {
+export function CLeaderboardCard() {
   const { session } = useAuth()
   const { data: leaderboard, isLoading } = useLeaderboard()
   const me = leaderboard?.me
@@ -609,7 +609,7 @@ function CLeaderboardCard() {
 
 // ── Share-карточка статистики ──────────────────────────────────────
 
-function CShareStatsButton({
+export function CShareStatsButton({
   profile,
   reviewed,
   helpful,
