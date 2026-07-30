@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { CLayout } from './pages/c/CLayout'
 import { CCatalogPage } from './pages/c/CCatalogPage'
@@ -11,7 +11,6 @@ import { CHelpPage } from './pages/c/CHelpPage'
 import { CProductPage } from './pages/c/CProductPage'
 import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
-import { CCabinetPage } from './pages/c/CCabinetPage'
 import { CLawyerQueuePage } from './pages/c/CLawyerQueuePage'
 import { CLawyerReviewsPage } from './pages/c/CLawyerReviewsPage'
 import { CAuthPage } from './pages/c/CAuthPage'
@@ -38,7 +37,8 @@ const router = createBrowserRouter([
       { path: '/product/:productId', element: <CProductPage /> },
       { path: '/service/:serviceId', element: <CServicePage /> },
       { path: '/pricing', element: <CPricingPage /> },
-      { path: '/cabinet', element: <CCabinetPage /> },
+      // Старый кабинет разобран на разделы — ведём в портфель
+      { path: '/cabinet', element: <Navigate to="/products" replace /> },
       { path: '/lawyer/queue', element: <CLawyerQueuePage /> },
       { path: '/lawyer/reviews', element: <CLawyerReviewsPage /> },
       { path: '/login', element: <CAuthPage mode="login" /> },

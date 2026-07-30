@@ -33,7 +33,7 @@ export function CResetPasswordPage() {
 
   useEffect(() => {
     if (!done) return
-    const timer = window.setTimeout(() => navigate('/cabinet', { replace: true }), 1800)
+    const timer = window.setTimeout(() => navigate('/products', { replace: true }), 1800)
     return () => window.clearTimeout(timer)
   }, [done, navigate])
 
