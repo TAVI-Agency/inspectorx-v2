@@ -85,7 +85,7 @@ export function CAuthPage({ mode }: { mode: 'login' | 'register' }) {
   const isRegister = mode === 'register'
 
   useEffect(() => {
-    if (!loading && session) navigate('/cabinet', { replace: true })
+    if (!loading && session) navigate('/products', { replace: true })
   }, [loading, session, navigate])
 
   async function submit(e: React.FormEvent) {
@@ -97,12 +97,12 @@ export function CAuthPage({ mode }: { mode: 'login' | 'register' }) {
       setPending(false)
       if (result.error) setError(mapAuthError(result.error))
       else if (result.needsConfirmation) setConfirmSentTo(email.trim())
-      else navigate('/cabinet', { replace: true })
+      else navigate('/products', { replace: true })
     } else {
       const result = await signIn(email.trim(), password)
       setPending(false)
       if (result.error) setError(mapAuthError(result.error))
-      else navigate('/cabinet', { replace: true })
+      else navigate('/products', { replace: true })
     }
   }
 
