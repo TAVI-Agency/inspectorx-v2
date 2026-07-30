@@ -12,6 +12,8 @@ import { CProductPage } from './pages/c/CProductPage'
 import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
 import { CCabinetPage } from './pages/c/CCabinetPage'
+import { CLawyerQueuePage } from './pages/c/CLawyerQueuePage'
+import { CLawyerReviewsPage } from './pages/c/CLawyerReviewsPage'
 import { CAuthPage } from './pages/c/CAuthPage'
 import { CConfirmEmailPage } from './pages/c/CConfirmEmailPage'
 import { CForgotPasswordPage } from './pages/c/CForgotPasswordPage'
@@ -37,6 +39,8 @@ const router = createBrowserRouter([
       { path: '/service/:serviceId', element: <CServicePage /> },
       { path: '/pricing', element: <CPricingPage /> },
       { path: '/cabinet', element: <CCabinetPage /> },
+      { path: '/lawyer/queue', element: <CLawyerQueuePage /> },
+      { path: '/lawyer/reviews', element: <CLawyerReviewsPage /> },
       { path: '/login', element: <CAuthPage mode="login" /> },
       { path: '/register', element: <CAuthPage mode="register" /> },
       { path: '/auth/confirm', element: <CConfirmEmailPage /> },
