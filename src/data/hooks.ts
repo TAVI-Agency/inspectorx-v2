@@ -9,7 +9,15 @@ import {
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
 import { supabase } from '@/lib/supabase'
-import type { LawyerReview, RequirementRow, ReviewVerdict, SearchKind } from './types'
+import { ru } from '@/i18n/ru'
+import type {
+  AppNotification,
+  LawyerReview,
+  RequirementRow,
+  ReviewVerdict,
+  SearchKind,
+  UserQuestion,
+} from './types'
 import {
   buildPortfolio,
   demoPortfolioIds,
@@ -32,6 +40,7 @@ import {
   fetchLawyerStatsReal,
   fetchLeaderboardReal,
   fetchMyLawyerProfileReal,
+  fetchMyQuestionsReal,
   fetchMyReviewsReal,
   fetchReviewQueueReal,
   fetchSubscriptionRequests,
@@ -41,8 +50,14 @@ import {
   submitLawyerApplicationReal,
   submitLawyerReviewReal,
   submitSubscriptionRequest,
+  updateProfileReal,
 } from './real'
-import { markChangeRead } from './mock/read-store'
+import { demoQuestions } from './mock/fixtures'
+import {
+  markChangeRead,
+  markQuestionAnswerRead,
+  readQuestionAnswerIds,
+} from './mock/read-store'
 
 export function useDataCtx(): DataCtx {
   const { realSubscriber } = useAuth()
@@ -172,6 +187,119 @@ export function useUnfollowProduct() {
   })
 }
 
+// ── Мои вопросы ────────────────────────────────────────────────────
+
+export function useMyQuestions() {
+  const { session } = useAuth()
+  const { mockSubscriber } = useAppMode()
+  return useQuery({
+    queryKey: ['my-questions', session?.user.id ?? 'anon', mockSubscriber],
+    queryFn: async (): Promise<UserQuestion[]> => {
+      if (session) return fetchMyQuestionsReal()
+      // Демо-витрина пути эскалации — без сессии в мок-режиме
+      return mockSubscriber ? demoQuestions : []
+    },
+    staleTime: 30_000,
+  })
+}
+
+export function useUpdateProfile() {
+  const { session, refreshProfile } = useAuth()
+  return useMutation({
+    mutationFn: async (input: { fullName: string; phone?: string; company?: string }) => {
+      if (!session) throw new Error('auth-required')
+      await updateProfileReal(session.user.id, input)
+    },
+    onSuccess: () => void refreshProfile(),
+  })
+}
+
+// ── Центр уведомлений (колокольчик) ────────────────────────────────
+
+/**
+ * Сводит три источника в одну ленту: мок-изменения портфеля,
+ * ответы на вопросы пользователя, реальные уведомления юриста.
+ */
+export function useNotificationCenter() {
+  const qc = useQueryClient()
+  const { data: portfolio } = usePortfolioIds()
+  const ids = portfolio?.ids ?? []
+  const { data: feed } = useChangeFeed(ids.length > 0 ? ids : undefined)
+  const { data: questions } = useMyQuestions()
+  const { data: lawyerProfile } = useMyLawyerProfile()
+  const verified = lawyerProfile?.status === 'verified'
+  const { data: lawyerNotifs } = useLawyerNotifications(verified)
+  const markChange = useMarkChangeRead()
+  const markLawyer = useMarkNotificationRead()
+
+  const items: AppNotification[] = []
+
+  for (const c of feed?.items ?? []) {
+    if (c.isDraftNpa) continue
+    items.push({
+      id: `change-${c.id}`,
+      kind: 'change',
+      sourceId: c.id,
+      title: c.title,
+      subtitle: c.productName,
+      inFavor: c.inFavor,
+      link: c.requirementId
+        ? `/product/${c.productId}?req=${c.requirementId}`
+        : '/changes',
+      isRead: !c.unread,
+      createdAt: c.date,
+    })
+  }
+
+  const readAnswers = readQuestionAnswerIds()
+  for (const q of questions ?? []) {
+    if (!q.answeredAt) continue
+    items.push({
+      id: `question-${q.id}`,
+      kind: 'question',
+      sourceId: q.id,
+      title: ru.notifications.questionAnswered,
+      subtitle: q.questionText,
+      link: '/questions',
+      isRead: readAnswers.has(q.id),
+      createdAt: q.answeredAt,
+    })
+  }
+
+  for (const n of lawyerNotifs ?? []) {
+    items.push({
+      id: `lawyer-${n.id}`,
+      kind: 'lawyer',
+      sourceId: n.id,
+      title: ru.cabinet.lawyer.notifications[n.kind],
+      subtitle: n.requirementTitle,
+      link: n.link,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+    })
+  }
+
+  items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+  const markRead = (n: AppNotification) => {
+    if (n.isRead) return
+    if (n.kind === 'change') markChange.mutate(n.sourceId)
+    else if (n.kind === 'lawyer') markLawyer.mutate(n.sourceId)
+    else {
+      markQuestionAnswerRead(n.sourceId)
+      void qc.invalidateQueries({ queryKey: ['my-questions'] })
+    }
+  }
+
+  return {
+    items,
+    unreadCount: items.filter((n) => !n.isRead).length,
+    changesUnread: items.filter((n) => n.kind === 'change' && !n.isRead).length,
+    markRead,
+    markAllRead: () => items.filter((n) => !n.isRead).forEach(markRead),
+  }
+}
+
 // ── Формы ──────────────────────────────────────────────────────────
 
 export function useSubscriptionRequest() {
@@ -183,6 +311,7 @@ export function useSubscriptionRequest() {
 }
 
 export function useAskQuestion() {
+  const qc = useQueryClient()
   const { session } = useAuth()
   return useMutation({
     mutationFn: async (input: {
@@ -211,6 +340,7 @@ export function useAskQuestion() {
       })
       if (error) throw error
     },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['my-questions'] }),
   })
 }
 
