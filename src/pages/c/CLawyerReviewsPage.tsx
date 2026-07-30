@@ -22,13 +22,13 @@ function CLawyerReviewsContent() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <CEyebrow>{t.dashboardEyebrow}</CEyebrow>
-          <h2 className="font-display mt-1.5 flex items-center gap-2 text-[20px] leading-tight font-medium tracking-tight sm:text-[24px]">
+          <h1 className="font-display mt-1.5 flex flex-wrap items-center gap-2 text-[22px] leading-tight font-medium tracking-tight sm:text-[30px]">
             {profile.displayName}
             <span className="inline-flex items-center gap-1 rounded-[4px] border border-positive/40 px-2 py-0.5 font-mono text-[10px] font-medium tracking-[0.08em] text-positive uppercase">
               <BadgeCheck className="size-3.5" />
               {t.verifiedStamp}
             </span>
-          </h2>
+          </h1>
           <p className="mt-1 text-xs text-muted-foreground">{profile.credentials}</p>
         </div>
         <div className="flex items-center gap-2">
