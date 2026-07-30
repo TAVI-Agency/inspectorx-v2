@@ -36,6 +36,7 @@ import {
   type ProductPassport,
   type ServicePassport,
   type StageInfo,
+  type UserQuestion,
 } from './types'
 
 // ── Разбор сырых полей ─────────────────────────────────────────────
@@ -1156,6 +1157,48 @@ export async function markLawyerNotificationReadReal(id: string): Promise<void> 
     .from('lawyer_notifications')
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq('id', id)
+  if (error) throw error
+}
+
+// ── Мои вопросы (user_questions, RLS: own read) ────────────────────
+
+export async function fetchMyQuestionsReal(): Promise<UserQuestion[]> {
+  const { data, error } = await supabase
+    .from('user_questions')
+    .select(
+      'id, question_text, status, answer_text, answered_at, created_at, is_urgent, legal_review_only, product_id, requirement_id',
+    )
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    questionText: r.question_text,
+    status: r.status,
+    answerText: r.answer_text ?? undefined,
+    answeredAt: r.answered_at ?? undefined,
+    createdAt: r.created_at,
+    isUrgent: r.is_urgent,
+    legalReviewOnly: r.legal_review_only,
+    productId: r.product_id ?? undefined,
+    requirementId: r.requirement_id ?? undefined,
+  }))
+}
+
+// ── Профиль (grant update: full_name, phone, company) ──────────────
+
+export async function updateProfileReal(
+  userId: string,
+  input: { fullName: string; phone?: string; company?: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      full_name: input.fullName,
+      phone: input.phone || null,
+      company: input.company || null,
+    })
+    .eq('id', userId)
   if (error) throw error
 }
 

@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 
 interface Profile {
   fullName: string
+  phone?: string
   company?: string
   isSubscribed: boolean
 }
@@ -33,6 +34,8 @@ interface AuthCtx {
   requestPasswordReset: (email: string) => Promise<{ error?: string }>
   /** Смена пароля у текущей (recovery) сессии */
   updatePassword: (password: string) => Promise<{ error?: string }>
+  /** Перечитать профиль после редактирования в настройках */
+  refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -57,33 +60,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  const loadProfile = useCallback(async (userId: string): Promise<Profile | null> => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, phone, company, is_subscribed')
+      .eq('id', userId)
+      .maybeSingle()
+    return data
+      ? {
+          fullName: data.full_name,
+          phone: data.phone ?? undefined,
+          company: data.company ?? undefined,
+          isSubscribed: data.is_subscribed,
+        }
+      : null
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     if (!session) {
       setProfile(null)
       return
     }
-    supabase
-      .from('profiles')
-      .select('full_name, company, is_subscribed')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return
-        setProfile(
-          data
-            ? {
-                fullName: data.full_name,
-                company: data.company ?? undefined,
-                isSubscribed: data.is_subscribed,
-              }
-            : null,
-        )
-      })
+    void loadProfile(session.user.id).then((p) => {
+      if (!cancelled) setProfile(p)
+    })
     return () => {
       cancelled = true
     }
-  }, [session])
+  }, [session, loadProfile])
+
+  const refreshProfile = useCallback(async () => {
+    if (!session) return
+    setProfile(await loadProfile(session.user.id))
+  }, [session, loadProfile])
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -147,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resendConfirmation,
         requestPasswordReset,
         updatePassword,
+        refreshProfile,
         signOut,
       }}
     >
