@@ -5,6 +5,7 @@ import { CCatalogPage } from './pages/c/CCatalogPage'
 import { CProductsPage } from './pages/c/CProductsPage'
 import { CChangesPage } from './pages/c/CChangesPage'
 import { CQuestionsPage } from './pages/c/CQuestionsPage'
+import { CCheckAnnouncePage } from './pages/c/CCheckAnnouncePage'
 import { CProductPage } from './pages/c/CProductPage'
 import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
@@ -26,6 +27,8 @@ const router = createBrowserRouter([
       { path: '/products', element: <CProductsPage /> },
       { path: '/changes', element: <CChangesPage /> },
       { path: '/questions', element: <CQuestionsPage /> },
+      { path: '/checks/packaging', element: <CCheckAnnouncePage check="packaging" /> },
+      { path: '/checks/documents', element: <CCheckAnnouncePage check="documents" /> },
       { path: '/product/:productId', element: <CProductPage /> },
       { path: '/service/:serviceId', element: <CServicePage /> },
       { path: '/pricing', element: <CPricingPage /> },
