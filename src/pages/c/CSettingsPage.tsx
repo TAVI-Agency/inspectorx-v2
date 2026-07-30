@@ -87,13 +87,19 @@ function CProfileTab() {
   const [company, setCompany] = useState(profile?.company ?? '')
   const [touched, setTouched] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
+  const [initialized, setInitialized] = useState(false)
 
-  // Профиль догружается асинхронно после session — наполняем поля, когда придёт
+  // Профиль догружается асинхронно после session — наполняем поля один раз, когда
+  // он впервые появится. AuthProvider пересоздаёт profile при каждой смене session
+  // (фоновый рефреш токена, синк между вкладками) и после useUpdateProfile.mutate,
+  // поэтому реагировать на каждую смену ссылки нельзя — затрёт несохранённый ввод.
   useEffect(() => {
-    setName(profile?.fullName ?? '')
-    setPhone(profile?.phone ?? '')
-    setCompany(profile?.company ?? '')
-  }, [profile])
+    if (!profile || initialized) return
+    setName(profile.fullName ?? '')
+    setPhone(profile.phone ?? '')
+    setCompany(profile.company ?? '')
+    setInitialized(true)
+  }, [profile, initialized])
 
   useEffect(() => {
     if (!savedFlash) return
