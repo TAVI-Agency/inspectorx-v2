@@ -474,12 +474,15 @@ export function buildPortfolio(productIds: string[], feed: ChangeCard[]): Portfo
         (a, b) => new Date(a.effectiveDate!).getTime() - new Date(b.effectiveDate!).getTime(),
       )[0]
     const cutoff30 = Date.now() - 30 * 86_400_000
-    const recent = mine.some((c) => new Date(c.date).getTime() > cutoff30)
+    const recentList = mine.filter((c) => new Date(c.date).getTime() > cutoff30)
+    const recent = recentList.length > 0
     return {
       productId,
       displayName: info.name,
       hsCode: info.hs,
       unreadCount,
+      recentCount: recentList.length,
+      allInFavor: recentList.length > 0 && recentList.every((c) => c.inFavor),
       statusKind: nearest ? 'deadline' : recent ? 'noAction' : 'quiet',
       statusLine: nearest?.effectiveDate ?? '',
     }

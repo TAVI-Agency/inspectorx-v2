@@ -364,6 +364,10 @@ export interface PortfolioItem {
   displayName: string
   hsCode: string
   unreadCount: number
+  /** изменений за 30 дней (без проектов НПА) */
+  recentCount: number
+  /** все недавние изменения — в пользу пользователя */
+  allInFavor: boolean
   /** «дедлайн 01.09» / «действий не требуется» / «без изменений 30 дней» */
   statusLine: string
   statusKind: 'deadline' | 'noAction' | 'quiet'
