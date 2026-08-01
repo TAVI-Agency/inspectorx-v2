@@ -310,6 +310,53 @@ export interface MyReviewItem {
   createdAt: string
 }
 
+// ── Мои вопросы (user_questions) ───────────────────────────────────
+
+/** Статус вопроса: путь эскалации AI → юрист → официальный запрос */
+export type QuestionStatus =
+  | 'new'
+  | 'ai_answered'
+  | 'expert_answered'
+  | 'gr_sent'
+  | 'gr_answered'
+  | 'closed'
+
+export interface UserQuestion {
+  id: string
+  questionText: string
+  status: QuestionStatus
+  answerText?: string
+  answeredAt?: string
+  createdAt: string
+  isUrgent: boolean
+  legalReviewOnly: boolean
+  productId?: string
+  requirementId?: string
+}
+
+// ── Центр уведомлений (колокольчик) ────────────────────────────────
+
+export type AppNotificationKind = 'change' | 'question' | 'lawyer'
+
+/**
+ * Строка центра уведомлений. Источники:
+ * change — мок-лента изменений портфеля (прочитанность — ix-read-changes),
+ * question — ответ на вопрос пользователя (прочитанность — локальный стор),
+ * lawyer — реальные уведомления юриста (lawyer_notifications).
+ */
+export interface AppNotification {
+  id: string
+  kind: AppNotificationKind
+  /** id в таблице/сторе источника — для отметки прочитанности */
+  sourceId: string
+  title: string
+  subtitle?: string
+  inFavor?: boolean
+  link?: string
+  isRead: boolean
+  createdAt: string
+}
+
 // ── Кабинет: портфель и лента изменений ────────────────────────────
 
 export interface PortfolioItem {
@@ -317,6 +364,10 @@ export interface PortfolioItem {
   displayName: string
   hsCode: string
   unreadCount: number
+  /** изменений за 30 дней (без проектов НПА) */
+  recentCount: number
+  /** все недавние изменения — в пользу пользователя */
+  allInFavor: boolean
   /** «дедлайн 01.09» / «действий не требуется» / «без изменений 30 дней» */
   statusLine: string
   statusKind: 'deadline' | 'noAction' | 'quiet'

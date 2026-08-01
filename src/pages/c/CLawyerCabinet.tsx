@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
-  BadgeCheck,
-  Bell,
   Clock,
   Download,
   Scale,
@@ -20,26 +18,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/app/auth'
 import {
   useLawyerApplication,
-  useLawyerNotifications,
-  useLawyerStats,
   useLeaderboard,
-  useMarkNotificationRead,
   useMyLawyerProfile,
   useMyReviews,
   useReviewQueue,
 } from '@/data/hooks'
-import type {
-  LawyerNotification,
-  LawyerProfile,
-  MyReviewItem,
-  ReviewQueueItem,
-} from '@/data/types'
+import type { LawyerProfile, MyReviewItem, ReviewQueueItem } from '@/data/types'
 import {
   downloadCanvasPng,
   drawShareCard,
@@ -49,7 +38,7 @@ import {
 import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
-import { CCard, CEyebrow, CStatTile, CountUp } from './ui'
+import { CCard, CEyebrow } from './ui'
 import { CVerdictChip } from './CLawyerReviews'
 
 const t = ru.cabinet.lawyer
@@ -201,196 +190,9 @@ function CLawyerApplicationForm({
   )
 }
 
-// ── Дешборд верифицированного юриста ───────────────────────────────
-
-/** Витрина фичи: статистика с CountUp, очередь, свои заключения, рейтинг */
-export function CLawyerDashboard() {
-  const { data: profile } = useMyLawyerProfile()
-  const verified = profile?.status === 'verified'
-  const { data: stats } = useLawyerStats()
-  const { data: leaderboard } = useLeaderboard()
-
-  if (!verified || !profile) return null
-
-  const rank = leaderboard?.me
-
-  return (
-    <section className="mt-10">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <CEyebrow>{t.dashboardEyebrow}</CEyebrow>
-          <h2 className="font-display mt-1.5 flex items-center gap-2 text-[20px] leading-tight font-medium tracking-tight sm:text-[24px]">
-            {profile.displayName}
-            <span className="inline-flex items-center gap-1 rounded-[4px] border border-positive/40 px-2 py-0.5 font-mono text-[10px] font-medium tracking-[0.08em] text-positive uppercase">
-              <BadgeCheck className="size-3.5" />
-              {t.verifiedStamp}
-            </span>
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">{profile.credentials}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <CNotificationsBell />
-          <CShareStatsButton
-            profile={profile}
-            reviewed={stats?.requirementsReviewed ?? 0}
-            helpful={stats?.helpfulTotal ?? 0}
-            rank={rank ? { place: rank.rank, total: leaderboard?.total ?? 0 } : undefined}
-          />
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <CStatTile
-          index={0}
-          label={t.statReviewed}
-          value={<CountUp value={stats?.requirementsReviewed ?? 0} />}
-          tone="primary"
-        />
-        <CStatTile
-          index={1}
-          label={t.statPublished}
-          value={<CountUp value={stats?.reviewsPublished ?? 0} />}
-        />
-        <CStatTile
-          index={2}
-          label={t.statHelpful}
-          value={<CountUp value={stats?.helpfulTotal ?? 0} />}
-          tone="positive"
-          hint={t.statHelpfulHint(stats?.notHelpfulTotal ?? 0)}
-        />
-        <CStatTile
-          index={3}
-          label={t.statRank}
-          value={
-            rank ? t.rankOf(rank.rank, leaderboard?.total ?? 0) : t.noRankYet
-          }
-          tone={rank ? 'primary' : 'default'}
-          hint={rank ? undefined : t.noRankHint}
-        />
-      </div>
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-        <div className="min-w-0 space-y-6">
-          <CReviewQueueCard />
-          <CMyReviewsCard />
-        </div>
-        <CLeaderboardCard />
-      </div>
-    </section>
-  )
-}
-
-// ── Колокольчик уведомлений ────────────────────────────────────────
-
-function notificationText(n: LawyerNotification): string {
-  return t.notifications[n.kind]
-}
-
-function CNotificationsBell() {
-  const { data: notifications } = useLawyerNotifications(true)
-  const markRead = useMarkNotificationRead()
-  const unread = (notifications ?? []).filter((n) => !n.isRead).length
-
-  return (
-    <Popover>
-      <PopoverTrigger
-        aria-label={t.notifications.aria(unread)}
-        className="relative inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-      >
-        <Bell className="size-4" />
-        {unread > 0 && (
-          <span className="c-unread absolute -top-1.5 -right-1.5 grid min-w-[18px] place-items-center rounded-full bg-primary px-1 py-0.5 font-mono text-[10px] leading-none font-semibold text-primary-foreground">
-            {unread}
-          </span>
-        )}
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <p className="border-b border-border px-3.5 py-2.5 text-sm font-semibold tracking-tight">
-          {t.notifications.title}
-        </p>
-        <div className="max-h-80 overflow-y-auto">
-          {(notifications ?? []).length === 0 ? (
-            <p className="px-3.5 py-4 text-xs leading-relaxed text-muted-foreground">
-              {t.notifications.empty}
-            </p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {(notifications ?? []).map((n) => (
-                <CNotificationRow
-                  key={n.id}
-                  notification={n}
-                  onRead={() => {
-                    if (!n.isRead) markRead.mutate(n.id)
-                  }}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function CNotificationRow({
-  notification: n,
-  onRead,
-}: {
-  notification: LawyerNotification
-  onRead: () => void
-}) {
-  const inner = (
-    <>
-      <span className="flex items-start gap-2">
-        <span
-          className={cn(
-            'mt-1.5 size-1.5 shrink-0 rounded-full',
-            n.isRead ? 'bg-transparent' : 'c-unread bg-primary',
-          )}
-        />
-        <span className="min-w-0">
-          <span className={cn('block text-[13px] leading-snug', !n.isRead && 'font-medium')}>
-            {notificationText(n)}
-          </span>
-          {n.requirementTitle && (
-            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-              {n.requirementTitle}
-            </span>
-          )}
-          <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
-            {formatDate(n.createdAt)}
-          </span>
-        </span>
-      </span>
-    </>
-  )
-
-  return (
-    <li>
-      {n.link ? (
-        <Link
-          to={n.link}
-          onClick={onRead}
-          className="block px-3.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          {inner}
-        </Link>
-      ) : (
-        <button
-          type="button"
-          onClick={onRead}
-          className="block w-full px-3.5 py-2.5 text-left transition-colors hover:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          {inner}
-        </button>
-      )}
-    </li>
-  )
-}
-
 // ── Очередь «Ждут проверки» ────────────────────────────────────────
 
-function CReviewQueueCard() {
+export function CReviewQueueCard() {
   const { data: queue, isLoading, isError } = useReviewQueue(true)
 
   return (
@@ -459,7 +261,7 @@ const REVIEW_STATUS_TONE: Record<MyReviewItem['status'], string> = {
   rejected: 'bg-sanction/10 text-sanction',
 }
 
-function CMyReviewsCard() {
+export function CMyReviewsCard() {
   const { data: reviews, isLoading } = useMyReviews(true)
 
   return (
@@ -525,7 +327,7 @@ function CMyReviewsCard() {
 
 // ── Рейтинг юристов ────────────────────────────────────────────────
 
-function CLeaderboardCard() {
+export function CLeaderboardCard() {
   const { session } = useAuth()
   const { data: leaderboard, isLoading } = useLeaderboard()
   const me = leaderboard?.me
@@ -609,7 +411,7 @@ function CLeaderboardCard() {
 
 // ── Share-карточка статистики ──────────────────────────────────────
 
-function CShareStatsButton({
+export function CShareStatsButton({
   profile,
   reviewed,
   helpful,

@@ -29,6 +29,33 @@ export function readChangeIds(): Set<string> {
   return load()
 }
 
+// ── Прочитанность ответов на вопросы (центр уведомлений) ───────────
+// Колонки прочитанности у user_questions нет — держим локально,
+// как и прочитанность мок-изменений выше.
+
+const QA_KEY = 'ix-read-question-answers'
+
+function loadQa(): Set<string> {
+  try {
+    const raw = localStorage.getItem(QA_KEY)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    return new Set(Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+export function readQuestionAnswerIds(): Set<string> {
+  return loadQa()
+}
+
+export function markQuestionAnswerRead(questionId: string): void {
+  const set = loadQa()
+  set.add(questionId)
+  localStorage.setItem(QA_KEY, JSON.stringify([...set]))
+}
+
 // ── Голоса за демо-заключения юристов (мок) ────────────────────────
 // Реальные голоса живут в review_votes; для витринных фикстур
 // (молоко/парацетамол) держим голос локально, чтобы демо было живым.

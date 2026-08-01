@@ -373,7 +373,8 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 [edge_runtime]
-enabled = true
+# Edge-функций в проекте нет; контейнер требует внешний DNS и валит старт — локально выключен
+enabled = false
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
 # `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
@@ -387,7 +388,8 @@ deno_version = 2
 # secret_key = "env(SECRET_VALUE)"
 
 [analytics]
-enabled = true
+# Логфлер-контейнер нестабилен на этом маке (грабли 29.07) — локально выключен
+enabled = false
 port = 54337
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"

@@ -32,7 +32,7 @@ export function CConfirmEmailPage() {
 
   useEffect(() => {
     if (!session) return
-    const timer = window.setTimeout(() => navigate('/cabinet', { replace: true }), 1800)
+    const timer = window.setTimeout(() => navigate('/products', { replace: true }), 1800)
     return () => window.clearTimeout(timer)
   }, [session, navigate])
 
@@ -56,7 +56,7 @@ export function CConfirmEmailPage() {
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               {ru.auth.confirmedText}
             </p>
-            <Button className="mt-6 w-full" onClick={() => navigate('/cabinet')}>
+            <Button className="mt-6 w-full" onClick={() => navigate('/products')}>
               {ru.auth.confirmedCta}
             </Button>
           </>
