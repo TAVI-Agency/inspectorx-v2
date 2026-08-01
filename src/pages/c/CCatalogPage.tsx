@@ -46,7 +46,7 @@ export function CCatalogPage() {
 
         <section className="mt-12 pb-20 sm:mt-14">
           <CEyebrow>{ru.landing.examplesLabel}</CEyebrow>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {exampleHits.map((hit, i) => (
               <Link
                 key={hit.id}
@@ -71,8 +71,8 @@ export function CCatalogPage() {
                   <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
                     {hit.officialName}
                   </p>
-                  <div className="mt-4 flex items-center justify-between border-t border-border pt-3.5">
-                    <span className="truncate pr-3 text-xs text-muted-foreground">
+                  <div className="mt-4 flex min-w-0 items-center justify-between border-t border-border pt-3.5">
+                    <span className="min-w-0 truncate pr-3 text-xs text-muted-foreground">
                       {hit.categoryName}
                     </span>
                     <span className="shrink-0 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">

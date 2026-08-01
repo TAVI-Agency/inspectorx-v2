@@ -1,11 +1,18 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { CLayout } from './pages/c/CLayout'
 import { CCatalogPage } from './pages/c/CCatalogPage'
+import { CProductsPage } from './pages/c/CProductsPage'
+import { CChangesPage } from './pages/c/CChangesPage'
+import { CQuestionsPage } from './pages/c/CQuestionsPage'
+import { CCheckAnnouncePage } from './pages/c/CCheckAnnouncePage'
+import { CSettingsPage } from './pages/c/CSettingsPage'
+import { CHelpPage } from './pages/c/CHelpPage'
 import { CProductPage } from './pages/c/CProductPage'
 import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
-import { CCabinetPage } from './pages/c/CCabinetPage'
+import { CLawyerQueuePage } from './pages/c/CLawyerQueuePage'
+import { CLawyerReviewsPage } from './pages/c/CLawyerReviewsPage'
 import { CAuthPage } from './pages/c/CAuthPage'
 import { CConfirmEmailPage } from './pages/c/CConfirmEmailPage'
 import { CForgotPasswordPage } from './pages/c/CForgotPasswordPage'
@@ -20,10 +27,20 @@ const router = createBrowserRouter([
     element: <CLayout />,
     children: [
       { path: '/catalog', element: <CCatalogPage /> },
+      { path: '/products', element: <CProductsPage /> },
+      { path: '/changes', element: <CChangesPage /> },
+      { path: '/questions', element: <CQuestionsPage /> },
+      { path: '/checks/packaging', element: <CCheckAnnouncePage check="packaging" /> },
+      { path: '/checks/documents', element: <CCheckAnnouncePage check="documents" /> },
+      { path: '/settings', element: <CSettingsPage /> },
+      { path: '/help', element: <CHelpPage /> },
       { path: '/product/:productId', element: <CProductPage /> },
       { path: '/service/:serviceId', element: <CServicePage /> },
       { path: '/pricing', element: <CPricingPage /> },
-      { path: '/cabinet', element: <CCabinetPage /> },
+      // Старый кабинет разобран на разделы — ведём в портфель
+      { path: '/cabinet', element: <Navigate to="/products" replace /> },
+      { path: '/lawyer/queue', element: <CLawyerQueuePage /> },
+      { path: '/lawyer/reviews', element: <CLawyerReviewsPage /> },
       { path: '/login', element: <CAuthPage mode="login" /> },
       { path: '/register', element: <CAuthPage mode="register" /> },
       { path: '/auth/confirm', element: <CConfirmEmailPage /> },

@@ -16,6 +16,7 @@ import type {
   RequirementRow,
   SearchHit,
   StageInfo,
+  UserQuestion,
 } from '../types'
 import { ok } from '../types'
 
@@ -972,6 +973,47 @@ export const changeFixtures: ChangeFixture[] = [
     title: 'Проект: обязательное указание доли сухого молока в составе',
     isDraftNpa: true,
     discussionUrl: 'https://regulation.gov.uz',
+  },
+]
+
+// ── Демо-вопросы («Мои вопросы» в мок-режиме без входа) ────────────
+// Реальные вопросы живут в user_questions; фикстуры показывают путь
+// эскалации AI → юрист → официальный запрос на витрине.
+
+export const demoQuestions: UserQuestion[] = [
+  {
+    id: 'mock-question-transit',
+    questionText: 'Нужна ли маркировка стиков при транзите через Узбекистан?',
+    status: 'expert_answered',
+    answerText:
+      'При таможенной процедуре транзита требования обязательной маркировки не применяются: товар не выпускается в обращение на территории республики. Важно: транзитная партия должна быть опломбирована, а маршрут — согласован в транзитной декларации. Если часть партии останется в Узбекистане, на неё маркировка обязательна до выпуска.',
+    answeredAt: isoDaysFromNow(-1),
+    createdAt: isoDaysFromNow(-3),
+    isUrgent: false,
+    legalReviewOnly: true,
+    productId: CIGARETTES_PRODUCT_ID,
+  },
+  {
+    id: 'mock-question-milk-cert',
+    questionText: 'Какой сертификат нужен на молоко для экспорта в Казахстан?',
+    status: 'ai_answered',
+    answerText:
+      'Для экспорта молока в Казахстан нужны: ветеринарный сертификат (выдаёт Комитет ветеринарии, на каждую партию) и декларация о соответствии O‘zDSt 1112:2020. Казахстан признаёт узбекскую декларацию в рамках соглашений СНГ, отдельная казахстанская сертификация на границе не требуется.',
+    answeredAt: isoDaysFromNow(-5),
+    createdAt: isoDaysFromNow(-5),
+    isUrgent: false,
+    legalReviewOnly: false,
+    productId: MILK_PRODUCT_ID,
+  },
+  {
+    id: 'mock-question-gr',
+    questionText:
+      'Считается ли обезжиренное молоко «молочным напитком» для целей маркировки Asl Belgisi?',
+    status: 'gr_sent',
+    createdAt: isoDaysFromNow(-8),
+    isUrgent: false,
+    legalReviewOnly: false,
+    productId: MILK_PRODUCT_ID,
   },
 ]
 
