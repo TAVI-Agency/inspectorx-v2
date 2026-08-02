@@ -139,10 +139,11 @@ class InMemoryStore:
 
     def list_run_item_texts(self, run_id: str) -> list[dict]:
         """Тот же контракт, что `SupabaseBuildStore.list_run_item_texts`
-        (Задача 25) — `text` = `expected_item` (см. докстринг
-        `BuildStore.list_run_item_texts` в `orchestrator.py`): `ItemRecord`
-        не несёт `summary`, тестовый дублёр не притворяется, что может
-        больше, чем реальный `SupabaseBuildStore`.
+        (Задача 25, фикс-раунд ревью Задачи 27) — `text =
+        coalesce(item.summary_text, item.expected_item)` (см. докстринг
+        `BuildStore.list_run_item_texts` в `orchestrator.py`): симметричное
+        сравнение summary-vs-summary для dedup, `expected_item` — только
+        фолбэк, если 'summary' ещё не отработал.
 
         Фильтр `status in ('draft_loaded', 'published')` (Critical
         фикс-раунда ревью Задачи 25) — та же семантика, что и у
@@ -152,10 +153,13 @@ class InMemoryStore:
         `order("updated_at")` у `SupabaseBuildStore` для целей теста
         «первый найденный дубль побеждает»."""
         return [
-            {"item_id": item.id, "text": item.expected_item}
+            {"item_id": item.id, "text": item.summary_text or item.expected_item}
             for item in self.items.values()
             if item.run_id == run_id and item.status in ("draft_loaded", "published")
         ]
+
+    def set_item_summary(self, item_id: str, summary: str) -> None:
+        self.items[item_id].summary_text = summary
 
     def update_item_status(
         self, item_id, status, *, last_error=None, requirement_id=None
@@ -191,11 +195,14 @@ class InMemoryStore:
     def save_coverage_report(self, run_id: str, markdown: str) -> None:
         self.runs[run_id]["coverage_report"] = markdown
 
-    def list_item_verdicts(self, item_id: str) -> list[Verdict]:
-        result: list[Verdict] = []
-        for stored_item_id, _step, verdicts in self.verdicts:
+    def list_item_verdicts(self, item_id: str) -> list[tuple[str, Verdict]]:
+        """`[(step, Verdict), ...]` в порядке вставки в `self.verdicts`
+        (обычный список — append-only, тот же хронологический порядок, что
+        и `order("created_at")` у `SupabaseBuildStore`)."""
+        result: list[tuple[str, Verdict]] = []
+        for stored_item_id, step, verdicts in self.verdicts:
             if stored_item_id == item_id:
-                result.extend(verdicts)
+                result.extend((step, v) for v in verdicts)
         return result
 
     def publish_requirement(self, requirement_id: str) -> None:

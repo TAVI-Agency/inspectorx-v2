@@ -69,6 +69,12 @@ class ItemRecord:
     status: str = "pending"
     retry_count: int = 0
     last_error: str | None = None
+    # Саммари требования (шаг 'summary', steps_norm.py:SummaryStep) — пишется
+    # через BuildStore.set_item_summary (Задача 27, фикс-раунд ревью:
+    # честный дедуп по summary, не по expected_item, см. докстринг
+    # BuildStore.list_run_item_texts в orchestrator.py). `None`, пока шаг
+    # 'summary' не отработал (или партиальный rerun_item начался не с начала).
+    summary_text: str | None = None
 
 
 @dataclass

@@ -447,6 +447,8 @@ def test_rerun_item_can_also_escalate_if_tail_keeps_failing():
     orchestrator.rerun_item("item-1", from_step="translate")
 
     assert always_fails.call_count == MAX_STEP_RETRIES
+    assert store.items["item-1"].status == "needs_attention"
+    assert store.items["item-1"].last_error == "снова не прошло"
 
 
 # ── менеджер исключений (Задача 27): вызов ТОЛЬКО на N подряд фейлов ────
@@ -502,7 +504,9 @@ def test_manager_retry_reformulated_triggers_exactly_one_extra_attempt_then_succ
     # 3 обычных провала + РОВНО одна доп. попытка от менеджера — не больше.
     assert flaky.call_count == MAX_STEP_RETRIES + 1
     assert len(manager.calls) == 1  # доп. попытка НЕ триггерит менеджера снова
-    assert manager.calls[0][1] == ["e3"]  # история — причина последнего провала
+    # Minor фикс-раунда ревью Задачи 27: history — ВСЕ причины подряд, не
+    # только последняя (менеджеру нужен весь ход попыток).
+    assert manager.calls[0][1] == ["e1", "e2", "e3"]
     assert report.needs_attention == 0
     item = next(iter(store.items.values()))
     assert item.status in ("draft_loaded", "published")
@@ -603,3 +607,29 @@ def test_run_group_no_publish_flag_leaves_item_draft_loaded():
     assert report.draft_loaded == 1
     item = next(iter(store.items.values()))
     assert item.status == "draft_loaded"
+
+
+def test_run_group_publish_before_coverage_reflects_final_demotion_status():
+    """Фикс-раунд ревью Задачи 27 (Important №2): publish_ready идёт ПЕРЕД
+    coverage_report внутри run_group — айтем, которого publish_ready
+    демотирует в needs_attention (последний вердикт хотя бы одного шага —
+    fail), обязан попасть в coverage-отчёт КАК needs_attention, а не closed
+    (устаревший «до публикации» снимок — сам предмет этого фикса)."""
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    bad_verdict = Verdict(passed=False, reason="не прошло на публикации", model="gpt-5-high-reasoning")
+    steps = make_steps({
+        "sanctions": ScriptedStep(StepResult(status="ok", verdicts=[bad_verdict])),
+    })
+    orchestrator = Orchestrator(store, steps=steps)
+
+    report = orchestrator.run_group("map-1")  # publish=True (дефолт)
+
+    assert report.published == 0
+    assert report.needs_attention == 1
+    assert report.coverage is not None
+    assert report.coverage.needs_attention == 1
+    assert report.coverage.closed == 0
+    item = next(iter(store.items.values()))
+    assert item.status == "needs_attention"
+    assert "последний вердикт" in item.last_error
