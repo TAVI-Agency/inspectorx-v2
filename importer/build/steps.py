@@ -128,7 +128,8 @@ def load_default_steps() -> None:
     18–25) — сейчас `steps_norm` ('norm'/'summary'), `steps_classify`
     ('category'), `steps_rule` ('rule'), `steps_scope_lifecycle`
     ('scope'/'lifecycle'), `steps_sanctions` ('sanctions'), `steps_cases`
-    ('cases') и `steps_samples_lawyer` ('samples'/'lawyer')."""
+    ('cases'), `steps_samples_lawyer` ('samples'/'lawyer') и `steps_translate`
+    ('translate')."""
     from importer.build import steps_norm  # noqa: F401
     from importer.build import steps_classify  # noqa: F401
     from importer.build import steps_rule  # noqa: F401
@@ -136,3 +137,4 @@ def load_default_steps() -> None:
     from importer.build import steps_sanctions  # noqa: F401
     from importer.build import steps_cases  # noqa: F401
     from importer.build import steps_samples_lawyer  # noqa: F401
+    from importer.build import steps_translate  # noqa: F401
