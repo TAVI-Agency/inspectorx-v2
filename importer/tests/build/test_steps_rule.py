@@ -17,6 +17,12 @@ Verifier — «критическая точка» ADR-0003 решение 5.
 - мутационный пин-тест: смешанный набор (не все правила отклонены) должен
   давать fail — отличает `any(rejected)` от `all(rejected)`, тот же приём,
   что и пин-тесты 'norm' в test_steps_norm.py;
+- фикс-раунд ревью: Verifier бросает исключение (например, невалидный JSON
+  от LLM) НЕ на первом, а на одном из СРЕДНИХ правил -> уже собранные к
+  этому моменту вердикты предыдущих правил не теряются, попадают в
+  `StepResult(fail).verdicts` (докстринг модуля обещает "все вердикты
+  попадают в StepResult.verdicts независимо от статуса" — это должно быть
+  правдой и при обрыве цикла верификации, не только при штатном отклонении);
 - шаг применяется не ко всем категориям: `category_slug != 'marking'`
   (включая отсутствие ключа вовсе) -> StepResult(ok), пустой список правил,
   `ctx.data['skipped_rule_step'] = True`, ноль обращений к LLM — это НЕ fail
@@ -297,6 +303,41 @@ def test_rule_step_any_rejected_not_all_rejected_causes_fail_mutation_pin():
     assert len(result.verdicts) == 3
     assert [v.passed for v in result.verdicts] == [True, False, True]
     assert "rules" not in ctx.data
+
+
+# ── шаг 'rule': исключение Verifier'а посреди цикла — вердикты не теряются ─
+
+
+def test_rule_step_verifier_exception_mid_loop_preserves_collected_verdicts():
+    """Фикс-раунд ревью Задачи 19: Verifier бросает исключение (здесь —
+    невалидный JSON от LLM, `AgentLLMError`) на 2-м из 3 правил. До фикса
+    исключение долетало до внешнего `try/except` в `__call__`, который
+    возвращал `StepResult(fail)` с ПУСТЫМ `verdicts` — уже собранный
+    вердикт 1-го правила терялся, хотя докстринг модуля обещает, что все
+    вердикты попадают в результат независимо от статуса."""
+    llm = ScriptedLLM([
+        rule_maker_response(
+            {"field": "состав", "lang": "uz", "required": True},
+            {"barcode": "EAN-13"},
+            {"field": "срок годности", "lang": "ru", "required": True},
+        ),
+        verdict_json(True, "первое правило подтверждено"),
+        "это не JSON — верификатор второго правила ломается",
+    ])
+    step = RuleStep(llm)
+    ctx = item_ctx()
+
+    result = step(ctx)
+
+    assert result.status == "fail"
+    assert len(result.verdicts) == 1
+    assert result.verdicts[0].passed is True
+    assert result.error is not None
+    assert "2" in result.error  # указан номер правила, на котором сломался verifier
+    assert "rules" not in ctx.data
+    # верификатор третьего правила вообще не должен был вызываться —
+    # цикл прерывается немедленно на исключении
+    assert len(llm.calls) == 3
 
 
 # ── интеграция: Orchestrator — verifier-фейл x3 -> needs_attention ──────
