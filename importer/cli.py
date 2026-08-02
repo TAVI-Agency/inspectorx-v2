@@ -16,6 +16,7 @@ from importer.build.orchestrator import (
     SupabaseBuildStore,
 )
 from importer.build.registry import build_step_registry
+from importer.build.trace import cost_report
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
@@ -86,6 +87,10 @@ def main(argv=None):
         "publish", help="публикация draft_loaded-айтемов прогона по вердиктам (Задача 27)"
     )
     p_build_publish.add_argument("--run", dest="run_id", required=True)
+    p_build_cost = build_sub.add_parser(
+        "cost", help="стоимость прогона по ролям: role | calls | in_tokens | out_tokens | cost_usd (Задача 29)"
+    )
+    p_build_cost.add_argument("--run", dest="run_id", required=True)
     p_build_map = build_sub.add_parser(
         "map", help="Cartographer: построить draft-карту группы (Задача 15)"
     )
@@ -166,6 +171,9 @@ def main(argv=None):
         elif args.build_cmd == "publish":
             count = publish_ready(store, args.run_id)
             print(f"опубликовано: {count}")
+        elif args.build_cmd == "cost":
+            report = cost_report(store, args.run_id)
+            print(report.markdown)
         elif args.build_cmd == "status":
             summary = store.run_summary(args.run_id)
             if not summary:

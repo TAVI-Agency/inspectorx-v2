@@ -17,13 +17,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import yaml
 
 from importer.build.legalx import LegalXClient, NormFragment
 from importer.build.llm_client import AgentLLMClient, AgentLLMError
 from importer.build.profiles import ModelTier, Profile
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл agents<->trace
+    from importer.build.trace import Tracer
 
 _MODELS_PATH = Path(__file__).parent / "models.yaml"
 
@@ -75,6 +78,34 @@ def _parse_json_answer(answer: str, *, who: str) -> dict:
         raise AgentLLMError(f"{who}: LLM вернула не-JSON: {answer!r}") from exc
 
 
+def _trace_llm_call(
+    tracer: "Tracer | None",
+    role: str,
+    llm: AgentLLMClient,
+    model: str,
+    prompt: str,
+    answer: str,
+) -> None:
+    """Задача 29 (`trace.py`): если `tracer` не задан — no-op (агенты работают
+    ровно как до трейсинга, никакой обязательности). Иначе пишет вызов под
+    `role` — реальные токены берутся из `llm.last_usage`, если клиент их
+    считает (`llm_client.py: RunnerAgentLLM`); клиенты без такого атрибута
+    (например, скриптованные тестовые дублёры) заставляют оценить токены
+    той же грубой эвристикой `len(...)//4`, что и `RunnerAgentLLM` для
+    str-раннеров (см. докстринг `trace.py`) — оценка НЕ помечается отдельной
+    колонкой/полем, только здесь и в докстринге `RunnerAgentLLM.complete`."""
+    if tracer is None:
+        return
+    usage = getattr(llm, "last_usage", None)
+    if usage:
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+    else:
+        input_tokens = len(prompt) // 4
+        output_tokens = len(answer) // 4
+    tracer.record(role, model, input_tokens, output_tokens)
+
+
 @dataclass
 class RetrieverResult:
     outcome: Literal["found", "no_norm", "not_found"]
@@ -97,10 +128,15 @@ class Retriever:
         legalx: LegalXClient,
         llm: AgentLLMClient,
         models: ModelsConfig | None = None,
+        *,
+        tracer: "Tracer | None" = None,
+        role: str = "retriever",
     ):
         self._legalx = legalx
         self._llm = llm
         self._models = models or load_models_config()
+        self._tracer = tracer
+        self._role = role
 
     def run(self, query: str, jurisdiction: str, profile: Profile) -> RetrieverResult:
         model = self._models.tiers[profile.tier]
@@ -152,6 +188,7 @@ class Retriever:
             'запроса для повторного поиска: {"reformulated_query": "..."}.'
         )
         answer = self._llm.complete(prompt, model)
+        _trace_llm_call(self._tracer, self._role, self._llm, model, prompt, answer)
         data = _parse_json_answer(answer, who="Retriever")
         if data.get("no_norm") is True:
             return None
@@ -180,9 +217,18 @@ class Verifier:
     выбирает сам: её вычисляет вызывающий код через `verifier_model_for`,
     Verifier лишь обязан её использовать и вернуть в `Verdict.model`."""
 
-    def __init__(self, llm: AgentLLMClient, model: str):
+    def __init__(
+        self,
+        llm: AgentLLMClient,
+        model: str,
+        *,
+        tracer: "Tracer | None" = None,
+        role: str = "verifier",
+    ):
         self._llm = llm
         self._model = model
+        self._tracer = tracer
+        self._role = role
 
     def run(self, question: str, fragment: str, source: str, profile: Profile) -> Verdict:
         prompt = (
@@ -195,6 +241,7 @@ class Verifier:
             '{"passed": true|false, "reason": "..."}.'
         )
         answer = self._llm.complete(prompt, self._model)
+        _trace_llm_call(self._tracer, self._role, self._llm, self._model, prompt, answer)
         data = _parse_json_answer(answer, who="Verifier")
         if "passed" not in data:
             raise AgentLLMError(f"Verifier: в ответе LLM нет поля 'passed': {answer!r}")
@@ -204,9 +251,18 @@ class Verifier:
 class Classifier:
     """Классифицирует текст по `Profile.response_schema`. Модель — по тиру профиля."""
 
-    def __init__(self, llm: AgentLLMClient, models: ModelsConfig | None = None):
+    def __init__(
+        self,
+        llm: AgentLLMClient,
+        models: ModelsConfig | None = None,
+        *,
+        tracer: "Tracer | None" = None,
+        role: str = "classifier",
+    ):
         self._llm = llm
         self._models = models or load_models_config()
+        self._tracer = tracer
+        self._role = role
 
     def run(self, text: str, profile: Profile) -> dict:
         model = self._models.tiers[profile.tier]
@@ -217,17 +273,29 @@ class Classifier:
             f"{json.dumps(profile.response_schema, ensure_ascii=False)}"
         )
         answer = self._llm.complete(prompt, model)
+        _trace_llm_call(self._tracer, self._role, self._llm, model, prompt, answer)
         return _parse_json_answer(answer, who="Classifier")
 
 
 class Summarizer:
     """Сжимает фрагмент в краткое резюме по `Profile.system_prompt`. Модель — по тиру профиля."""
 
-    def __init__(self, llm: AgentLLMClient, models: ModelsConfig | None = None):
+    def __init__(
+        self,
+        llm: AgentLLMClient,
+        models: ModelsConfig | None = None,
+        *,
+        tracer: "Tracer | None" = None,
+        role: str = "summarizer",
+    ):
         self._llm = llm
         self._models = models or load_models_config()
+        self._tracer = tracer
+        self._role = role
 
     def run(self, fragment: str, profile: Profile) -> str:
         model = self._models.tiers[profile.tier]
         prompt = f"{profile.system_prompt}\n\nФрагмент: {fragment}\n\nСформулируй краткое резюме."
-        return self._llm.complete(prompt, model).strip()
+        answer = self._llm.complete(prompt, model)
+        _trace_llm_call(self._tracer, self._role, self._llm, model, prompt, answer)
+        return answer.strip()
