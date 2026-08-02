@@ -118,6 +118,27 @@ class BuildStore(Protocol):
 
     def create_items(self, run_id: str, payload: list[dict]) -> list[ItemRecord]: ...
 
+    def list_run_item_texts(self, run_id: str) -> list[dict]:
+        """Тексты айтемов ПРОГОНА `run_id` для шага 'dedup' (Задача 25,
+        `steps_dedup.py`) — сравнение текущего айтема с уже обработанными
+        айтемами того же прогона. Каждый элемент — `{"item_id", "text"}`.
+
+        ОГРАНИЧЕНИЕ `SupabaseBuildStore`: `pipeline.items` (миграция
+        `20260803170000_pipeline_schema.sql`) хранит только `expected_item`
+        (входной текст из карты) — колонки под финальный `summary` шага
+        'summary' в БД нет (он живёт только в `ItemContext.data` конкретного
+        прогона, персистентности не переживает). Идеальный вход для дедупа —
+        `summary`, если он уже есть, иначе `expected_item` (см. докстринг
+        `steps_dedup.py`); `SupabaseBuildStore` может отдать только
+        `expected_item` для ВСЕХ айтемов прогона, включая те, где summary уже
+        произведён. Это огрубляет качество сравнения (два по-разному
+        сформулированных summary одного требования при похожих
+        `expected_item` могут не найти друг друга и наоборот) — известное
+        ограничение, снимается, если `summary` когда-нибудь получит колонку
+        в `pipeline.items`. `InMemoryStore` (тесты) отдаёт то же самое поле
+        `expected_item` — тот же контракт, не более богатый тестовый дублёр."""
+        ...
+
     def update_item_status(
         self, item_id: str, status: str, *, last_error: str | None = None
     ) -> ItemRecord: ...
@@ -385,6 +406,16 @@ class SupabaseBuildStore:
         ]
         rows = self._db.table("items").insert(rows_to_insert).execute().data
         return [_item_from_row(row) for row in rows]
+
+    def list_run_item_texts(self, run_id: str) -> list[dict]:
+        """См. докстринг `BuildStore.list_run_item_texts` — ограничение:
+        `text` здесь всегда `expected_item`, `pipeline.items` не хранит
+        `summary`."""
+        rows = (
+            self._db.table("items").select("id, expected_item")
+            .eq("run_id", run_id).execute().data
+        )
+        return [{"item_id": row["id"], "text": row["expected_item"]} for row in rows]
 
     def update_item_status(
         self, item_id: str, status: str, *, last_error: str | None = None

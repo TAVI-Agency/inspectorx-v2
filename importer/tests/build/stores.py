@@ -127,6 +127,18 @@ class InMemoryStore:
             created.append(item)
         return created
 
+    def list_run_item_texts(self, run_id: str) -> list[dict]:
+        """Тот же контракт, что `SupabaseBuildStore.list_run_item_texts`
+        (Задача 25) — `text` = `expected_item` (см. докстринг
+        `BuildStore.list_run_item_texts` в `orchestrator.py`): `ItemRecord`
+        не несёт `summary`, тестовый дублёр не притворяется, что может
+        больше, чем реальный `SupabaseBuildStore`."""
+        return [
+            {"item_id": item.id, "text": item.expected_item}
+            for item in self.items.values()
+            if item.run_id == run_id
+        ]
+
     def update_item_status(self, item_id, status, *, last_error=None) -> ItemRecord:
         item = self.items[item_id]
         item.status = status
