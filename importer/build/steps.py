@@ -125,6 +125,8 @@ def load_default_steps() -> None:
     конструктор — `load_default_steps` им не нужна, реестр они не трогают).
 
     Список модулей растёт по мере реализации следующих шагов (Задачи
-    18–25) — сейчас `steps_norm` ('norm'/'summary') и `steps_classify` ('category')."""
+    18–25) — сейчас `steps_norm` ('norm'/'summary'), `steps_classify`
+    ('category') и `steps_rule` ('rule')."""
     from importer.build import steps_norm  # noqa: F401
     from importer.build import steps_classify  # noqa: F401
+    from importer.build import steps_rule  # noqa: F401
