@@ -1,13 +1,35 @@
 """CLI импортёра: import-report / review list / review show / build ...."""
 import argparse
 import json
+import os
 from pathlib import Path
 
-from importer.build.orchestrator import MapNotApprovedError, Orchestrator, SupabaseBuildStore
+from importer.build.cartographer import Cartographer
+from importer.build.llm_client import RunnerAgentLLM
+from importer.build.orchestrator import (
+    MapAlreadyApprovedError,
+    MapNotApprovedError,
+    Orchestrator,
+    SupabaseBuildStore,
+)
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
 from importer.pipeline import run_import
+
+
+def _cartographer_llm_runner(prompt: str, model: str) -> str:
+    """Заглушка runner'а для CLI `build map`: живое LLM-подключение
+    (Cartographer — expensive-тир, deep-research) не входит в эту задачу —
+    решение контроллера (task-15-brief.md) отнесло смоук на пилотной группе
+    2402 к пилотному прогону Задачи 27. В тестах Cartographer используется
+    скриптованный `AgentLLMClient` (см. `importer/tests/build/test_cartographer.py`),
+    сеть не трогается вообще."""
+    raise NotImplementedError(
+        "Живой LLM-runner для Cartographer ещё не подключён — 'build map' "
+        "заработает после пилотного прогона Задачи 27 (инъекция runner'а, "
+        "см. importer/build/llm_client.py:RunnerAgentLLM)"
+    )
 
 
 def main(argv=None):
@@ -32,6 +54,19 @@ def main(argv=None):
     p_build_status = build_sub.add_parser("status", help="статус айтемов запуска")
     p_build_status.add_argument("--run", dest="run_id", required=True)
     build_sub.add_parser("attention", help="список айтемов needs_attention")
+    p_build_map = build_sub.add_parser(
+        "map", help="Cartographer: построить draft-карту группы (Задача 15)"
+    )
+    p_build_map.add_argument("--group", dest="group_ref", required=True)
+    p_build_map.add_argument("--jurisdiction", required=True)
+    p_build_approve = build_sub.add_parser(
+        "approve-map", help="апрув draft-карты владельцем: draft -> approved (стоп-точка ①)"
+    )
+    p_build_approve.add_argument("--map", dest="map_id", required=True)
+    p_build_reject = build_sub.add_parser(
+        "reject-map", help="отклонить draft-карту: draft -> rejected"
+    )
+    p_build_reject.add_argument("--map", dest="map_id", required=True)
 
     args = parser.parse_args(argv)
     ix = ix_client()
@@ -69,11 +104,37 @@ def main(argv=None):
                 print(f"по запуску {args.run_id} айтемов не найдено")
             for status, count in sorted(summary.items()):
                 print(f"{status}: {count}")
-        else:  # attention
+        elif args.build_cmd == "attention":
             items = store.list_needs_attention()
             for item in items:
                 print(f"{item.id}  [{item.last_error}] {item.expected_item[:70]}")
             print(f"\nвсего needs_attention: {len(items)}")
+        elif args.build_cmd == "map":
+            cartographer = Cartographer(store, RunnerAgentLLM(_cartographer_llm_runner))
+            try:
+                report = cartographer.build_map(args.group_ref, args.jurisdiction)
+            except MapAlreadyApprovedError as exc:
+                print(f"ошибка: {exc}")
+                raise SystemExit(1)
+            print(
+                f"map={report.map_id} group={report.group_ref} "
+                f"jurisdiction={report.jurisdiction} items={report.items_count} "
+                "status=draft"
+            )
+            if report.candidate_categories:
+                print("кандидаты новых категорий (НЕ попали в карту, нужен апрув владельца):")
+                for c in report.candidate_categories:
+                    print(f"  slug={c.get('category_slug')!r} item={str(c.get('expected_item'))[:70]}")
+        elif args.build_cmd == "approve-map":
+            approved_by = os.environ.get("USER") or "owner"
+            record = store.set_map_status(args.map_id, "approved", approved_by=approved_by)
+            print(
+                f"map={record.id} status={record.status} "
+                f"approved_by={record.approved_by} approved_at={record.approved_at}"
+            )
+        else:  # reject-map
+            record = store.set_map_status(args.map_id, "rejected")
+            print(f"map={record.id} status={record.status}")
         return
 
     if args.rev_cmd == "list":
