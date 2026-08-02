@@ -316,6 +316,51 @@ def test_no_norm_from_norm_step_is_terminal_and_skips_remaining_steps():
         assert steps[name].call_count == 0
 
 
+def test_no_norm_from_non_norm_step_is_treated_as_fail_not_terminal():
+    """no_norm легален ТОЛЬКО от шага 'norm' (решение контроллера, ревью
+    Задачи 14). Любой другой шаг, вернувший no_norm, — ошибка контракта
+    степ-функции: трактуется как fail и уходит в обычный retry/эскалацию,
+    статус айтема НЕ становится 'no_norm'."""
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    steps = make_steps({"summary": ScriptedStep(StepResult(status="no_norm"))})
+    orchestrator = Orchestrator(store, steps=steps)
+
+    report = orchestrator.run_group("map-1")
+
+    assert steps["summary"].call_count == MAX_STEP_RETRIES  # fail-ветка, ретраится
+    assert report.no_norm == 0
+    assert report.needs_attention == 1
+    assert report.published == 0
+    item = next(iter(store.items.values()))
+    assert item.status == "needs_attention"
+    assert "no_norm" in item.last_error
+    assert "summary" in item.last_error
+    # шаги ПОСЛЕ 'summary' не вызывались вообще
+    idx = STEP_ORDER.index("summary")
+    for name in STEP_ORDER[idx + 1:]:
+        assert steps[name].call_count == 0
+
+
+def test_no_norm_from_non_norm_step_can_recover_on_retry():
+    """Раз no_norm от НЕ-norm шага — это fail, он ретраится как обычный
+    fail: если следующая попытка того же шага даёт 'ok', конвейер идёт дальше."""
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    flaky = ScriptedStep(StepResult(status="no_norm"), StepResult(status="ok"))
+    steps = make_steps({"category": flaky})
+    orchestrator = Orchestrator(store, steps=steps)
+
+    report = orchestrator.run_group("map-1")
+
+    assert flaky.call_count == 2
+    assert report.published == 1
+    assert report.no_norm == 0
+    item = next(iter(store.items.values()))
+    assert item.status == "published"
+    assert item.retry_count == 1
+
+
 # ── вердикты пишутся через store ─────────────────────────────────────────
 
 

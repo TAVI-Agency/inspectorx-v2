@@ -157,18 +157,29 @@ class Orchestrator:
                 if result.verdicts:
                     self._store.save_verdicts(ctx.item.id, step_name, result.verdicts)
 
-                if result.status == "ok":
+                status = result.status
+                error = result.error
+                if status == "no_norm" and step_name != "norm":
+                    # no_norm легален ТОЛЬКО от шага 'norm' (решение
+                    # контроллера) — от любого другого шага это ошибка
+                    # контракта степ-функции, не валидный терминальный исход.
+                    # Трактуем как обычный fail — идёт в retry/эскалацию.
+                    status = "fail"
+                    error = f"шаг {step_name!r} вернул no_norm — только 'norm' может"
+
+                if status == "ok":
                     break
 
-                if result.status == "no_norm":
-                    # Терминальный валидный исход — остальные шаги пропускаются.
+                if status == "no_norm":
+                    # Терминальный валидный исход (только от 'norm') —
+                    # остальные шаги пропускаются.
                     self._store.update_item_status(ctx.item.id, "no_norm")
                     return "no_norm"
 
-                # result.status == "fail"
+                # status == "fail"
                 consecutive_fails += 1
                 if consecutive_fails >= MAX_STEP_RETRIES:
-                    reason = result.error or (
+                    reason = error or (
                         f"шаг {step_name!r}: {consecutive_fails} провалов подряд"
                     )
                     escalate(ctx.item, reason, self._store)
