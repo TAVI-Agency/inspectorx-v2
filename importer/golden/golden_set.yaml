@@ -1,0 +1,394 @@
+status: draft — ожидает подтверждения владельцем (гейт ②)
+generated_at: '2026-08-02'
+source: 'локальная Supabase (supabase db reset --local), published UZ — сид v1 (сигареты) + аптека ОКЭД
+  47.73 + кафе ОКЭД 56.10. Авто-DRAFT (переопределение шага 1 контроллером, task-28-brief.md): разметка
+  «вместе с Абдурахмоном» в этой сессии невозможна — сет собран из уже проверенного и опубликованного
+  контента (это и есть ручной эталон), подтверждение пачкой владельцем — на гейте ②.'
+counters:
+  total: 20
+  categories:
+    currency: 2
+    customs: 2
+    fiscal: 2
+    licensing: 4
+    marking: 3
+    origin: 2
+    sps: 3
+    tbt: 2
+  distinct_categories: 8
+  by_kind:
+    product: 13
+    service: 7
+  with_sanction: 5
+  without_sanction: 15
+  with_source_act: 17
+  without_source_act: 3
+  with_lifecycle_dates: 0
+items:
+- id: g01
+  expected_item: Пройти таможенное оформление
+  category_slug: customs
+  canonical_question: 'Какая норма права устанавливает требование: «Пройти таможенное оформление»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 24
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 10ada300-ac64-dd8e-fc42-7c1191591a6b
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g02
+  expected_item: Сдать регистрационный лист при выезде из пункта пропуска
+  category_slug: customs
+  canonical_question: 'Какая норма права устанавливает требование: «Сдать регистрационный лист при выезде
+    из пункта пропуска»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 24
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 685bc4dc-b805-25d9-c1fb-2d3fb17cf1ef
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g03
+  expected_item: Количество сигарет
+  category_slug: tbt
+  canonical_question: 'Какая норма права устанавливает требование: «Количество сигарет»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 33
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 4218bf4c-6c1f-7ca4-c7c4-78b09347f6a9
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g04
+  expected_item: Запрещенные ингредиенты в производстве
+  category_slug: tbt
+  canonical_question: 'Какая норма права устанавливает требование: «Запрещенные ингредиенты в производстве»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 18
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 640a34db-798e-c499-eae9-38021ec5852a
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g05
+  expected_item: Получить сертификат происхождения
+  category_slug: origin
+  canonical_question: 'Какая норма права устанавливает требование: «Получить сертификат происхождения»?'
+  source_act:
+    act: null
+    article: null
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 60510014-d12e-3e07-a359-4ccd3d88c886
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g06
+  expected_item: Подать заявку на сертификат происхождения через "Единое окно"
+  category_slug: origin
+  canonical_question: 'Какая норма права устанавливает требование: «Подать заявку на сертификат происхождения
+    через "Единое окно"»?'
+  source_act:
+    act: null
+    article: null
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: d41fae17-6261-6450-bbb7-afdbd982fbd0
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g07
+  expected_item: Зарегистрировать внешнеторговый контракт в ЕЭИСВО
+  category_slug: currency
+  canonical_question: 'Какая норма права устанавливает требование: «Зарегистрировать внешнеторговый контракт
+    в ЕЭИСВО»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 24
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 3dbba131-2a9e-7242-4b37-795cf2a9c4de
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g08
+  expected_item: Внести предоплату за услуги таможенного склада
+  category_slug: currency
+  canonical_question: 'Какая норма права устанавливает требование: «Внести предоплату за услуги таможенного
+    склада»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 24
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: e079f7cf-673f-dc52-9909-6a7768e30261
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g09
+  expected_item: Средство цифровой маркировки
+  category_slug: marking
+  canonical_question: 'Какая норма права устанавливает требование: «Средство цифровой маркировки»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 35 (37b7)
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 933571b3-6cfe-a070-63cd-9b26aff21d01
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g10
+  expected_item: Медицинское предупреждение
+  category_slug: marking
+  canonical_question: 'Какая норма права устанавливает требование: «Медицинское предупреждение»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 34
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: ff506fbc-4e73-e17b-fdac-429f234f3f3c
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g11
+  expected_item: Выбрать транспортное средство
+  category_slug: fiscal
+  canonical_question: 'Какая норма права устанавливает требование: «Выбрать транспортное средство»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 24
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 1c9d4884-f341-0b57-aa53-1372bebe85a9
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g12
+  expected_item: Получить разрешение таможни на выпуск груза
+  category_slug: licensing
+  canonical_question: 'Какая норма права устанавливает требование: «Получить разрешение таможни на выпуск
+    груза»?'
+  source_act:
+    act: null
+    article: null
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 1be3e249-699e-37b0-fc10-26df5c7beab7
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g13
+  expected_item: Получить санитарно-эпидемиологическое заключение
+  category_slug: sps
+  canonical_question: 'Какая норма права устанавливает требование: «Получить санитарно-эпидемиологическое
+    заключение»?'
+  source_act:
+    act: ПКМ-290, ТР
+    article: п. 24
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 25cc8e11-3a82-d618-6df4-deb953f932e7
+    kind: product
+    code: '2404110001'
+    name: 2404 11 000 1 | содержащая "гомогенизированный" или "восстановленный" табак или табачную "расширенную"
+      жилку
+- id: g14
+  expected_item: Продавать только маркированные лекарства (Asl Belgisi)
+  category_slug: marking
+  canonical_question: 'Какая норма права устанавливает требование: «Продавать только маркированные лекарства
+    (Asl Belgisi)»?'
+  source_act:
+    act: Постановление Кабинета Министров №149 от 02.04.2022 (маркировка лекарств Asl Belgisi)
+    article: обязательная маркировка
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: ПП-190
+  origin:
+    requirement_id: d9bc0854-ec95-3bc3-5e53-a313bb744b2a
+    kind: service
+    code: '47.73'
+    name: Розничная аптека
+- id: g15
+  expected_item: Установить онлайн-кассу с контролем рецептурного отпуска и платёжный терминал
+  category_slug: fiscal
+  canonical_question: 'Какая норма права устанавливает требование: «Установить онлайн-кассу с контролем
+    рецептурного отпуска и платёжный терминал»?'
+  source_act:
+    act: Налоговый кодекс Республики Узбекистан
+    article: обязанность применения ККМ
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: ст. 164 КоАО
+  origin:
+    requirement_id: a6941960-ee38-e21e-9d65-caeea6da2b97
+    kind: service
+    code: '47.73'
+    name: Розничная аптека
+- id: g16
+  expected_item: Получить лицензию на розничную реализацию лекарственных средств
+  category_slug: licensing
+  canonical_question: 'Какая норма права устанавливает требование: «Получить лицензию на розничную реализацию
+    лекарственных средств»?'
+  source_act:
+    act: Закон ЗРУ-701 от 14.07.2021 «О лицензировании, разрешительных и уведомительных процедурах»
+    article: прил. №1
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: ст. 165 КоАО
+  origin:
+    requirement_id: 0b91bfb2-55ed-0be1-0880-6b2a4b23b4b3
+    kind: service
+    code: '47.73'
+    name: Розничная аптека
+- id: g17
+  expected_item: Назначить заведующего аптекой с высшим фармацевтическим образованием
+  category_slug: licensing
+  canonical_question: 'Какая норма права устанавливает требование: «Назначить заведующего аптекой с высшим
+    фармацевтическим образованием»?'
+  source_act:
+    act: Постановление Кабинета Министров №80 от 21.02.2022 (паспорта лицензируемых видов деятельности)
+    article: лицензионные требования
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: ПКМ №80
+  origin:
+    requirement_id: a9fb161f-363a-7ef4-ef84-984daced669e
+    kind: service
+    code: '47.73'
+    name: Розничная аптека
+- id: g18
+  expected_item: Уведомить лицензиара о прекращении деятельности
+  category_slug: licensing
+  canonical_question: 'Какая норма права устанавливает требование: «Уведомить лицензиара о прекращении
+    деятельности»?'
+  source_act:
+    act: Закон ЗРУ-701 от 14.07.2021 «О лицензировании, разрешительных и уведомительных процедурах»
+    article: прекращение лицензии
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: 01298207-f442-e82f-5a56-0e60fe7b8488
+    kind: service
+    code: '47.73'
+    name: Розничная аптека
+- id: g19
+  expected_item: Привести помещение аптеки в соответствие с СанПиН
+  category_slug: sps
+  canonical_question: 'Какая норма права устанавливает требование: «Привести помещение аптеки в соответствие
+    с СанПиН»?'
+  source_act:
+    act: СанПиН №0337-16 «Санитарные требования к аптечным организациям»
+    article: нормативы помещений
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: ст. 128 КоАО
+  origin:
+    requirement_id: a5abcabc-97eb-1d69-de1f-6a8d6e364dcf
+    kind: service
+    code: '47.73'
+    name: Розничная аптека
+- id: g20
+  expected_item: Обращаться с пищевыми отходами по установленному порядку
+  category_slug: sps
+  canonical_question: 'Какая норма права устанавливает требование: «Обращаться с пищевыми отходами по
+    установленному порядку»?'
+  source_act:
+    act: Постановление Кабинета Министров №589 от 16.09.2025 (пищевые отходы предприятий общественного
+      питания)
+    article: порядок обращения с пищевыми отходами
+  lifecycle_dates:
+    effective_from: null
+    transition_until: null
+    valid_to: null
+  sanction_article: null
+  origin:
+    requirement_id: f4bebc31-336e-2184-16df-b4e6e77c28b6
+    kind: service
+    code: '56.10'
+    name: Кафе (общественное питание)

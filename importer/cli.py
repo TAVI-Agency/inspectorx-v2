@@ -6,6 +6,7 @@ from pathlib import Path
 
 from importer.build.cartographer import Cartographer
 from importer.build.coverage import coverage_report, publish_ready
+from importer.build.eval_golden import HeuristicBaselineLLM, load_golden_set, run_eval
 from importer.build.legalx import get_client as get_legalx_client
 from importer.build.llm_client import RunnerAgentLLM
 from importer.build.orchestrator import (
@@ -98,6 +99,19 @@ def main(argv=None):
         "reject-map", help="отклонить draft-карту: draft -> rejected"
     )
     p_build_reject.add_argument("--map", dest="map_id", required=True)
+    p_build_eval_golden = build_sub.add_parser(
+        "eval-golden",
+        help="eval golden set (Задача 28, СТОП-ТОЧКА ②): retrieval_hit/verifier_agreement/"
+             "category_accuracy/lifecycle_date_accuracy против generic-агентов",
+    )
+    p_build_eval_golden.add_argument(
+        "--limit", type=int, default=None, help="прогнать только первые N айтемов golden-набора"
+    )
+    p_build_eval_golden.add_argument(
+        "--save-baseline", action="store_true",
+        help="записать текущий прогон в importer/golden/baseline.json (следующий прогон "
+             "покажет дельту против него)",
+    )
 
     args = parser.parse_args(argv)
     ix = ix_client()
@@ -186,9 +200,39 @@ def main(argv=None):
                 f"map={record.id} status={record.status} "
                 f"approved_by={record.approved_by} approved_at={record.approved_at}"
             )
-        else:  # reject-map
+        elif args.build_cmd == "reject-map":
             record = store.set_map_status(args.map_id, "rejected")
             print(f"map={record.id} status={record.status}")
+        else:  # eval-golden
+            golden_path = Path("importer/golden/golden_set.yaml")
+            baseline_path = Path("importer/golden/baseline.json")
+            items = load_golden_set(golden_path)
+            if args.limit:
+                items = items[: args.limit]
+            baseline = (
+                json.loads(baseline_path.read_text(encoding="utf-8"))
+                if baseline_path.exists() else None
+            )
+            # Живого LLM-ключа в контуре нет (тот же принцип отсрочки, что и
+            # у 'build run'/'build map' выше) — HeuristicBaselineLLM НЕ
+            # семантика, только smoke-проверка проводки golden->агент->
+            # метрика (см. докстринг importer/build/eval_golden.py).
+            print("backend=mock (LEGALX_BACKEND) + HeuristicBaselineLLM "
+                  "(живого LLM-ключа нет — числа НЕ мера качества, только smoke)")
+            report = run_eval(
+                items, legalx=get_legalx_client(), llm=HeuristicBaselineLLM(),
+                valid_category_slugs=store.list_category_slugs(),
+                backend="mock", baseline=baseline,
+            )
+            print(report.markdown)
+            print(json.dumps(report.to_json_dict(), ensure_ascii=False, indent=2))
+            if args.save_baseline:
+                baseline_path.parent.mkdir(parents=True, exist_ok=True)
+                baseline_path.write_text(
+                    json.dumps(report.to_json_dict(), ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                print(f"baseline сохранён -> {baseline_path}")
         return
 
     if args.rev_cmd == "list":
