@@ -12,7 +12,12 @@
   `draft → approved` и заполняет `approved_at`/`approved_by` (это то, что
   дёргает CLI `build approve-map`); `'rejected'` — без этих полей;
 - повторный `build_map` на ту же `(group_ref, jurisdiction)` — upsert:
-  перезаписывает draft; поверх уже `approved` карты — `MapAlreadyApprovedError`.
+  перезаписывает draft; поверх уже `approved` карты — `MapAlreadyApprovedError`;
+- интеграционная связка build_map → approve-map → run_group на ОДНОМ
+  сторе (`InMemoryStore` из `importer/tests/build/stores.py`, том же, что
+  и `test_orchestrator.py`) — доказательство, что карта Cartographer'а
+  реально прогоняется Orchestrator'ом (фикс-раунд ревью Задачи 15,
+  Important: раздельные дублёры BuildStore не ловили это рассинхрон).
 
 LLM — только инжектируемый скрипт ответов (тот же паттерн, что и
 `test_agents.py:ScriptedLLM`), никакого сетевого мокинга.
@@ -20,14 +25,15 @@ LLM — только инжектируемый скрипт ответов (т�
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, replace
 
 import pytest
 
 from importer.build.agents import load_models_config
 from importer.build.cartographer import Cartographer, CartographerReport
 from importer.build.llm_client import AgentLLMError
-from importer.build.orchestrator import MapAlreadyApprovedError, MapRecord
+from importer.build.orchestrator import MapAlreadyApprovedError, Orchestrator
+from importer.build.steps import STEP_ORDER, StepResult
+from importer.tests.build.stores import InMemoryStore
 
 
 # ── тестовые дублёры ────────────────────────────────────────────────────
@@ -45,64 +51,6 @@ class ScriptedLLM:
         if not self._responses:
             raise AssertionError("ScriptedLLM: запросили ответ сверх скрипта — лишний вызов LLM")
         return self._responses.pop(0)
-
-
-CATEGORY_SLUGS = [
-    "sps", "tbt", "marking", "licensing", "fiscal", "currency", "customs", "origin",
-]
-
-
-@dataclass
-class FakeStore:
-    """Фейковый BuildStore: только методы, которые реально использует
-    Cartographer (`save_map`, `list_category_slugs`) и CLI approve/reject
-    (`set_map_status`, `load_map`) — без сети и без БД."""
-
-    category_slugs: list[str] = field(default_factory=lambda: list(CATEGORY_SLUGS))
-    maps: dict[str, MapRecord] = field(default_factory=dict)
-    _by_key: dict[tuple[str, str], str] = field(default_factory=dict)
-    _next_id: int = 0
-
-    def _gen_id(self) -> str:
-        self._next_id += 1
-        return f"map-{self._next_id}"
-
-    def list_category_slugs(self) -> list[str]:
-        return list(self.category_slugs)
-
-    def load_map(self, map_id: str) -> MapRecord:
-        return self.maps[map_id]
-
-    def save_map(self, group_ref: str, jurisdiction: str, payload: list[dict]) -> str:
-        key = (group_ref, jurisdiction)
-        existing_id = self._by_key.get(key)
-        if existing_id is not None:
-            existing = self.maps[existing_id]
-            if existing.status == "approved":
-                raise MapAlreadyApprovedError(
-                    f"карта {group_ref}/{jurisdiction} (id={existing_id}) уже approved — "
-                    "повторный build_map запрещён"
-                )
-            self.maps[existing_id] = replace(existing, payload=payload, status="draft")
-            return existing_id
-        map_id = self._gen_id()
-        self._by_key[key] = map_id
-        self.maps[map_id] = MapRecord(
-            id=map_id, group_ref=group_ref, jurisdiction=jurisdiction,
-            status="draft", payload=payload,
-        )
-        return map_id
-
-    def set_map_status(self, map_id: str, status: str, *, approved_by: str | None = None) -> MapRecord:
-        record = self.maps[map_id]
-        updated = replace(
-            record,
-            status=status,
-            approved_by=approved_by if status == "approved" else record.approved_by,
-            approved_at="2026-08-02T00:00:00+00:00" if status == "approved" else record.approved_at,
-        )
-        self.maps[map_id] = updated
-        return updated
 
 
 def map_item(**over) -> dict:
@@ -123,7 +71,7 @@ def valid_response(*items: dict) -> str:
 
 
 def test_build_map_saves_draft_with_all_valid_items():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM([valid_response(map_item(), map_item(expected_item="ставка НДС на импорт", category_slug="fiscal"))])
     report = Cartographer(store, llm).build_map("2402", "UZ")
 
@@ -142,7 +90,7 @@ def test_build_map_saves_draft_with_all_valid_items():
 
 
 def test_build_map_uses_expensive_tier_model():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM([valid_response()])
     Cartographer(store, llm).build_map("2402", "UZ")
 
@@ -152,7 +100,7 @@ def test_build_map_uses_expensive_tier_model():
 
 
 def test_build_map_prompt_mentions_group_jurisdiction_and_benchmark_scope():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM([valid_response()])
     Cartographer(store, llm).build_map("2402", "UZ")
 
@@ -166,7 +114,7 @@ def test_build_map_prompt_mentions_group_jurisdiction_and_benchmark_scope():
 
 
 def test_build_map_moves_unknown_slug_item_to_candidates_and_excludes_from_map():
-    store = FakeStore()
+    store = InMemoryStore()
     known_item = map_item()
     unknown_item = map_item(
         expected_item="эко-сбор за упаковку", category_slug="environmental",
@@ -186,7 +134,7 @@ def test_build_map_moves_unknown_slug_item_to_candidates_and_excludes_from_map()
 
 
 def test_build_map_all_items_unknown_slug_saves_empty_draft_with_all_as_candidates():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM([valid_response(map_item(category_slug="environmental"))])
     report = Cartographer(store, llm).build_map("2402", "UZ")
 
@@ -201,21 +149,21 @@ def test_build_map_all_items_unknown_slug_saves_empty_draft_with_all_as_candidat
 
 
 def test_build_map_garbage_llm_answer_raises():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM(["это не JSON"])
     with pytest.raises(AgentLLMError):
         Cartographer(store, llm).build_map("2402", "UZ")
 
 
 def test_build_map_non_list_json_raises():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM([json.dumps({"expected_item": "x", "category_slug": "marking"})])
     with pytest.raises(AgentLLMError):
         Cartographer(store, llm).build_map("2402", "UZ")
 
 
 def test_build_map_item_missing_required_field_raises():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM([json.dumps([{"expected_item": "без категории"}])])
     with pytest.raises(AgentLLMError):
         Cartographer(store, llm).build_map("2402", "UZ")
@@ -225,7 +173,7 @@ def test_build_map_item_missing_required_field_raises():
 
 
 def test_build_map_second_call_overwrites_existing_draft():
-    store = FakeStore()
+    store = InMemoryStore()
     llm = ScriptedLLM([
         valid_response(map_item(expected_item="первая версия")),
         valid_response(map_item(expected_item="вторая версия")),
@@ -242,7 +190,7 @@ def test_build_map_second_call_overwrites_existing_draft():
 
 
 def test_build_map_raises_when_existing_map_already_approved():
-    store = FakeStore()
+    store = InMemoryStore()
     # второй ответ скриптован, т.к. build_map зовёт LLM ДО попытки сохранить —
     # узнать, что карта уже approved, можно только на save_map.
     llm = ScriptedLLM([valid_response(), valid_response()])
@@ -263,7 +211,7 @@ def test_build_map_raises_when_existing_map_already_approved():
 
 
 def test_set_map_status_approve_fills_approved_at_and_by():
-    store = FakeStore()
+    store = InMemoryStore()
     map_id = store.save_map("2402", "UZ", [map_item()])
 
     record = store.set_map_status(map_id, "approved", approved_by="owner")
@@ -274,7 +222,7 @@ def test_set_map_status_approve_fills_approved_at_and_by():
 
 
 def test_set_map_status_reject_does_not_fill_approved_fields():
-    store = FakeStore()
+    store = InMemoryStore()
     map_id = store.save_map("2402", "UZ", [map_item()])
 
     record = store.set_map_status(map_id, "rejected")
@@ -282,3 +230,40 @@ def test_set_map_status_reject_does_not_fill_approved_fields():
     assert record.status == "rejected"
     assert record.approved_by is None
     assert record.approved_at is None
+
+
+# ── интеграция: build_map → approve-map → run_group на ОДНОМ сторе ──────
+
+
+def test_cartographer_map_can_be_approved_and_run_by_orchestrator():
+    """Связка, ради которой существует единый `InMemoryStore` (фикс-раунд
+    ревью Задачи 15): Cartographer строит draft-карту → владелец её
+    апрувит (`set_map_status`, то же, что дёргает CLI `build approve-map`)
+    → `Orchestrator.run_group` реально проходит по её payload и публикует
+    айтемы. Шаги конвейера — фейковые callable (без LLM), как и в
+    `test_orchestrator.py`; сама Cartographer-часть — на скриптованном LLM."""
+    store = InMemoryStore()
+    llm = ScriptedLLM([valid_response(
+        map_item(expected_item="акцизная марка на пачке сигарет", category_slug="marking"),
+        map_item(expected_item="ставка НДС на импорт", category_slug="fiscal"),
+    )])
+
+    cart_report = Cartographer(store, llm).build_map("2402", "UZ")
+    assert store.load_map(cart_report.map_id).status == "draft"
+
+    # run_group отказывается работать по draft-карте — стоп-точка ①
+    # (MapNotApprovedError) уже покрыта test_orchestrator.py; здесь важно
+    # само прохождение после апрува.
+    approved = store.set_map_status(cart_report.map_id, "approved", approved_by="owner")
+    assert approved.status == "approved"
+    assert approved.approved_by == "owner"
+    assert approved.approved_at is not None
+
+    steps = {name: (lambda ctx: StepResult(status="ok")) for name in STEP_ORDER}
+    run_report = Orchestrator(store, steps=steps).run_group(cart_report.map_id)
+
+    assert run_report.total_items == 2
+    assert run_report.published == 2
+    assert run_report.needs_attention == 0
+    published_items = {item.expected_item for item in store.items.values() if item.status == "published"}
+    assert published_items == {"акцизная марка на пачке сигарет", "ставка НДС на импорт"}
