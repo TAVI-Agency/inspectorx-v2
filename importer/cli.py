@@ -1,8 +1,9 @@
-"""CLI импортёра: import-report / review list / review show."""
+"""CLI импортёра: import-report / review list / review show / build ...."""
 import argparse
 import json
 from pathlib import Path
 
+from importer.build.orchestrator import MapNotApprovedError, Orchestrator, SupabaseBuildStore
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
@@ -24,6 +25,14 @@ def main(argv=None):
     p_show = rev_sub.add_parser("show")
     p_show.add_argument("item_id")
 
+    p_build = sub.add_parser("build", help="Build-конвейер: оркестратор pipeline.items (Задача 14)")
+    build_sub = p_build.add_subparsers(dest="build_cmd", required=True)
+    p_build_run = build_sub.add_parser("run", help="прогнать конвейер по утверждённой карте")
+    p_build_run.add_argument("--map", dest="map_id", required=True)
+    p_build_status = build_sub.add_parser("status", help="статус айтемов запуска")
+    p_build_status.add_argument("--run", dest="run_id", required=True)
+    build_sub.add_parser("attention", help="список айтемов needs_attention")
+
     args = parser.parse_args(argv)
     ix = ix_client()
 
@@ -41,6 +50,30 @@ def main(argv=None):
             print(f"  без узбекского оригинала (добивка фазы 3): {s.uz_backfill}")
         for reason, n in sorted(s.reasons.items(), key=lambda kv: -kv[1]):
             print(f"  review:{reason} = {n}")
+        return
+
+    if args.cmd == "build":
+        store = SupabaseBuildStore(ix)
+        if args.build_cmd == "run":
+            try:
+                report = Orchestrator(store).run_group(args.map_id)
+            except MapNotApprovedError as exc:
+                print(f"ошибка: {exc}")
+                raise SystemExit(1)
+            print(f"run={report.run_id} total={report.total_items} "
+                  f"published={report.published} no_norm={report.no_norm} "
+                  f"needs_attention={report.needs_attention}")
+        elif args.build_cmd == "status":
+            summary = store.run_summary(args.run_id)
+            if not summary:
+                print(f"по запуску {args.run_id} айтемов не найдено")
+            for status, count in sorted(summary.items()):
+                print(f"{status}: {count}")
+        else:  # attention
+            items = store.list_needs_attention()
+            for item in items:
+                print(f"{item.id}  [{item.last_error}] {item.expected_item[:70]}")
+            print(f"\nвсего needs_attention: {len(items)}")
         return
 
     if args.rev_cmd == "list":
