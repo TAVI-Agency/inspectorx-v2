@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 
 from importer.build.cartographer import Cartographer
+from importer.build.coverage import coverage_report, publish_ready
+from importer.build.legalx import get_client as get_legalx_client
 from importer.build.llm_client import RunnerAgentLLM
 from importer.build.orchestrator import (
     MapAlreadyApprovedError,
@@ -12,6 +14,7 @@ from importer.build.orchestrator import (
     Orchestrator,
     SupabaseBuildStore,
 )
+from importer.build.registry import build_step_registry
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
@@ -22,13 +25,29 @@ def _cartographer_llm_runner(prompt: str, model: str) -> str:
     """Заглушка runner'а для CLI `build map`: живое LLM-подключение
     (Cartographer — expensive-тир, deep-research) не входит в эту задачу —
     решение контроллера (task-15-brief.md) отнесло смоук на пилотной группе
-    2402 к пилотному прогону Задачи 27. В тестах Cartographer используется
-    скриптованный `AgentLLMClient` (см. `importer/tests/build/test_cartographer.py`),
-    сеть не трогается вообще."""
+    2402 к пилотному прогону Задачи 27. Пилотный прогон Задачи 27 —
+    СИНТЕТИЧЕСКИЙ (решение контроллера, task-27-brief.md): карта пишется
+    руками через `store.save_map`, не через этот runner. В тестах
+    Cartographer используется скриптованный `AgentLLMClient` (см.
+    `importer/tests/build/test_cartographer.py`), сеть не трогается вообще."""
     raise NotImplementedError(
         "Живой LLM-runner для Cartographer ещё не подключён — 'build map' "
-        "заработает после пилотного прогона Задачи 27 (инъекция runner'а, "
-        "см. importer/build/llm_client.py:RunnerAgentLLM)"
+        "заработает после получения живого LLM-ключа (вне Задачи 27, см. "
+        "importer/build/llm_client.py:RunnerAgentLLM)"
+    )
+
+
+def _build_llm_runner(prompt: str, model: str) -> str:
+    """Заглушка runner'а для CLI `build run`: тот же принцип отсрочки, что
+    и `_cartographer_llm_runner` — живого LLM-ключа нет (решение
+    контроллера Задачи 27), падает только при РЕАЛЬНОМ вызове модели, не
+    при построении реестра шагов (`build_step_registry`). Синтетический
+    прогон Задачи 27 (`scripts/pilot_synthetic.py`) инжектирует свой
+    scripted-runner напрямую в Python, минуя эту CLI-заглушку."""
+    raise NotImplementedError(
+        "Живой LLM-runner для Build-конвейера ещё не подключён — 'build run' "
+        "заработает после получения живого LLM-ключа (см. "
+        "importer/build/llm_client.py:RunnerAgentLLM)"
     )
 
 
@@ -51,9 +70,21 @@ def main(argv=None):
     build_sub = p_build.add_subparsers(dest="build_cmd", required=True)
     p_build_run = build_sub.add_parser("run", help="прогнать конвейер по утверждённой карте")
     p_build_run.add_argument("--map", dest="map_id", required=True)
+    p_build_run.add_argument(
+        "--no-publish", action="store_true",
+        help="не публиковать автоматически после coverage (осторожный прогон)",
+    )
     p_build_status = build_sub.add_parser("status", help="статус айтемов запуска")
     p_build_status.add_argument("--run", dest="run_id", required=True)
     build_sub.add_parser("attention", help="список айтемов needs_attention")
+    p_build_coverage = build_sub.add_parser(
+        "coverage", help="coverage-отчёт по прогону: карта vs факт (Задача 27)"
+    )
+    p_build_coverage.add_argument("--run", dest="run_id", required=True)
+    p_build_publish = build_sub.add_parser(
+        "publish", help="публикация draft_loaded-айтемов прогона по вердиктам (Задача 27)"
+    )
+    p_build_publish.add_argument("--run", dest="run_id", required=True)
     p_build_map = build_sub.add_parser(
         "map", help="Cartographer: построить draft-карту группы (Задача 15)"
     )
@@ -90,14 +121,37 @@ def main(argv=None):
     if args.cmd == "build":
         store = SupabaseBuildStore(ix)
         if args.build_cmd == "run":
+            # group_ref/jurisdiction карты — фабрике шагов (build_step_registry,
+            # Задача 27): конструкторные зависимости шагов (jurisdiction у
+            # NormStep/SanctionsStep/CasesStep/AssembleStep, group_ref у
+            # ScopeStep/LoadStep, target_lang у TranslateStep) обязаны прийти
+            # ИЗ карты этого прогона, не из заглушек глобального реестра
+            # steps.py (load_default_steps/_STUB_GROUP_REF/DEFAULT_JURISDICTION).
+            map_record = store.load_map(args.map_id)
+            registry = build_step_registry(
+                store, _build_llm_runner, get_legalx_client(),
+                group_ref=map_record.group_ref, jurisdiction=map_record.jurisdiction,
+            )
             try:
-                report = Orchestrator(store).run_group(args.map_id)
+                report = Orchestrator(store, steps=registry).run_group(
+                    args.map_id, publish=not args.no_publish
+                )
             except MapNotApprovedError as exc:
                 print(f"ошибка: {exc}")
                 raise SystemExit(1)
             print(f"run={report.run_id} total={report.total_items} "
-                  f"published={report.published} no_norm={report.no_norm} "
-                  f"needs_attention={report.needs_attention}")
+                  f"draft_loaded={report.draft_loaded} published={report.published} "
+                  f"no_norm={report.no_norm} needs_attention={report.needs_attention}")
+            if report.coverage:
+                print()
+                print(report.coverage.markdown)
+        elif args.build_cmd == "coverage":
+            report = coverage_report(store, args.run_id)
+            store.save_coverage_report(args.run_id, report.markdown)
+            print(report.markdown)
+        elif args.build_cmd == "publish":
+            count = publish_ready(store, args.run_id)
+            print(f"опубликовано: {count}")
         elif args.build_cmd == "status":
             summary = store.run_summary(args.run_id)
             if not summary:

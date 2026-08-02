@@ -11,6 +11,16 @@
 себя через `register_step` в своих модулях (Задачи 17–25); в этой задаче
 реестр пуст намеренно, тесты `Orchestrator` подставляют собственные
 фейковые `callable` напрямую в конструктор, минуя реестр.
+
+## `coverage` — вне `STEP_ORDER` (Задача 27)
+
+Изначально `coverage` был последним элементом этого списка (Задачи 14–26),
+но семантически это RUN-level проверка («карта vs факт»), а не per-item шаг
+конвейера: у неё нет входа/выхода в терминах `ItemContext`, она сравнивает
+СРАЗУ ВСЕ айтемы прогона со всей картой. Задача 27 убрала его отсюда и
+превратила в run-level функцию `coverage_report(store, run_id)`
+(`importer/build/coverage.py`), которую `Orchestrator.run_group` зовёт ПОСЛЕ
+цикла по айтемам — см. `orchestrator.py`.
 """
 from __future__ import annotations
 
@@ -19,12 +29,13 @@ from typing import Callable, Literal
 
 from importer.build.agents import Verdict
 
-# Порядок шагов конвейера Build — РОВНО как в брифе Задачи 14. Менять список
-# шагов — ревизия мастер-плана, а не побочный эффект правки кода.
+# Порядок шагов конвейера Build — РОВНО как в брифе Задачи 14, ЗА ВЫЧЕТОМ
+# 'coverage' (Задача 27 — см. докстринг выше). Менять список шагов — ревизия
+# мастер-плана, а не побочный эффект правки кода.
 STEP_ORDER: list[str] = [
     "norm", "summary", "category", "rule", "scope", "lifecycle",
     "sanctions", "cases", "samples", "lawyer", "translate", "dedup",
-    "assemble", "load", "coverage",
+    "assemble", "load",
 ]
 
 StepStatus = Literal["ok", "fail", "no_norm"]
