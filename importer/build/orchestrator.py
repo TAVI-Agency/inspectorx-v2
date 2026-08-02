@@ -23,6 +23,7 @@ from importer.build.steps import (
     ItemContext,
     ItemRecord,
     StepFn,
+    StepResult,
     get_step,
 )
 
@@ -189,6 +190,29 @@ class Orchestrator:
                 ) from exc
         return get_step(name)
 
+    @staticmethod
+    def _call_step(step_fn: StepFn, step_name: str, ctx: ItemContext) -> StepResult:
+        """Вызывает `step_fn(ctx)` со страховкой от НЕОЖИДАННЫХ исключений
+        (фикс-раунд ревью Задачи 20): каждая шаговая функция уже ловит свои
+        ожидаемые типы сама (`AgentLLMError`/`ValueError` — см. докстринги
+        `steps_norm.py`/`steps_classify.py`/`steps_rule.py`/
+        `steps_scope_lifecycle.py`), но это дисциплина конкретного шага, а не
+        гарантия интерфейса `StepFn`. Что угодно ещё — например,
+        `postgrest.APIError` у `SupabaseBuildStore` внутри шага, который сам
+        стучится в БД (`ScopeStep.list_group_product_types`) — раньше долетало
+        сюда необработанным и роняло ВЕСЬ `run_group` (все айтемы прогона), а
+        не только текущий шаг текущего айтема. Здесь — последний рубеж:
+        `Exception` превращается в обычный `StepResult(fail)`, дальше по коду
+        идёт обычный путь retry/эскалации (`MAX_STEP_RETRIES`), как и любой
+        другой fail."""
+        try:
+            return step_fn(ctx)
+        except Exception as exc:  # noqa: BLE001 — намеренно широкий catch, см. докстринг
+            return StepResult(
+                status="fail",
+                error=f"unhandled exception in step {step_name!r}: {exc}",
+            )
+
     def _run_from(self, ctx: ItemContext, start_index: int) -> str:
         """Гонит `ctx.item` по STEP_ORDER начиная с `start_index`. Возвращает
         терминальный статус: 'published' | 'no_norm' | 'needs_attention'."""
@@ -196,7 +220,7 @@ class Orchestrator:
             step_fn = self._step(step_name)
             consecutive_fails = 0
             while True:
-                result = step_fn(ctx)
+                result = self._call_step(step_fn, step_name, ctx)
                 if result.verdicts:
                     self._store.save_verdicts(ctx.item.id, step_name, result.verdicts)
 

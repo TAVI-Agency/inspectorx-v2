@@ -59,6 +59,22 @@ def ok_step() -> ScriptedStep:
     return ScriptedStep(StepResult(status="ok"))
 
 
+class RaisingStep:
+    """Фейковый шаг, который бросает ПРОИЗВОЛЬНОЕ исключение вместо
+    возврата `StepResult` — имитирует шаг, который сам не поймал
+    неожиданную ошибку (например, `postgrest.APIError` внутри
+    `BuildStore`-вызова шага, не `AgentLLMError`/`ValueError`, которые ловят
+    сами шаги). Фиксирует число вызовов."""
+
+    def __init__(self, exc: Exception):
+        self._exc = exc
+        self.call_count = 0
+
+    def __call__(self, ctx: ItemContext) -> StepResult:
+        self.call_count += 1
+        raise self._exc
+
+
 def make_steps(overrides: dict[str, ScriptedStep] | None = None) -> dict[str, ScriptedStep]:
     steps = {name: ok_step() for name in STEP_ORDER}
     if overrides:
@@ -238,6 +254,65 @@ def test_escalate_writes_reason_to_last_error_and_sets_needs_attention():
 
     assert store.items["item-1"].status == "needs_attention"
     assert store.items["item-1"].last_error == "3 провала verifier подряд"
+
+
+# ── страховка от НЕОЖИДАННЫХ исключений шага (фикс-раунд ревью Задачи 20) ──
+
+
+def test_step_raising_unexpected_exception_retries_then_escalates_run_group_survives():
+    """Шаг бросает произвольный RuntimeError (не StepResult(fail)) — раньше
+    это долетало необработанным до `run_group` и роняло ВЕСЬ прогон.
+    Теперь: та же механика retry/эскалации, что и у обычного `fail`, а
+    `run_group` не падает и возвращает отчёт."""
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    raising = RaisingStep(RuntimeError("не пойми что сломалось"))
+    steps = make_steps({"scope": raising})
+    orchestrator = Orchestrator(store, steps=steps)
+
+    report = orchestrator.run_group("map-1")  # не должно бросить исключение
+
+    assert raising.call_count == MAX_STEP_RETRIES  # ровно N=3, тот же лимит, что и у fail
+    assert report.needs_attention == 1
+    assert report.published == 0
+    item = next(iter(store.items.values()))
+    assert item.status == "needs_attention"
+    assert "scope" in item.last_error
+    assert "не пойми что сломалось" in item.last_error
+    # шаги ПОСЛЕ 'scope' не вызывались вообще — конвейер не публикует
+    idx = STEP_ORDER.index("scope")
+    for name in STEP_ORDER[idx + 1:]:
+        assert steps[name].call_count == 0
+
+
+def test_step_raising_unexpected_exception_on_one_item_does_not_block_others():
+    """Тот же принцип, что и `test_run_group_continues_to_next_item_after_one_item_escalates`
+    для обычного fail: исключение одного шага одного айтема не должно
+    останавливать обработку остальных айтемов того же прогона."""
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map(
+        payload=[
+            {"expected_item": "требование A"},
+            {"expected_item": "требование B"},
+        ]
+    )
+
+    def flaky_norm(ctx):
+        if ctx.item.expected_item == "требование A":
+            raise RuntimeError("сеть отвалилась")
+        return StepResult(status="ok")
+
+    steps = make_steps({"norm": flaky_norm})
+    orchestrator = Orchestrator(store, steps=steps)
+
+    report = orchestrator.run_group("map-1")
+
+    assert report.total_items == 2
+    assert report.needs_attention == 1
+    assert report.published == 1
+    statuses = {item.expected_item: item.status for item in store.items.values()}
+    assert statuses["требование A"] == "needs_attention"
+    assert statuses["требование B"] == "published"
 
 
 # ── no_norm: терминальный исход, остальные шаги пропускаются ────────────
