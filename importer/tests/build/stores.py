@@ -42,6 +42,10 @@ class InMemoryStore:
     """Фейковый `BuildStore`: полная реализация Protocol (Задачи 14 + 15)."""
 
     category_slugs: list[str] = field(default_factory=lambda: list(DEFAULT_CATEGORY_SLUGS))
+    # group_ref -> кандидаты catalog.product_types (Задача 20, шаг 'scope') —
+    # инжектируется явно в конструктор теста, дефолт пуст (без группы —
+    # пустой список кандидатов, а не KeyError).
+    product_types_by_group: dict[str, list[dict]] = field(default_factory=dict)
     maps: dict[str, MapRecord] = field(default_factory=dict)
     items: dict[str, ItemRecord] = field(default_factory=dict)
     runs: dict[str, dict] = field(default_factory=dict)
@@ -59,6 +63,9 @@ class InMemoryStore:
 
     def list_category_slugs(self) -> list[str]:
         return list(self.category_slugs)
+
+    def list_group_product_types(self, group_ref: str) -> list[dict]:
+        return list(self.product_types_by_group.get(group_ref, []))
 
     def load_map(self, map_id: str) -> MapRecord:
         return self.maps[map_id]
