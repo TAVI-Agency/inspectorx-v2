@@ -205,13 +205,27 @@ class RuleStep:
         verified_rules: list[dict] = []
         any_rejected = False
 
-        for rule in rules:
-            verdict = verifier.run(
-                question="Правило точно соответствует норме (не искажает и не додумывает)?",
-                fragment=json.dumps(rule, ensure_ascii=False, sort_keys=True),
-                source=norm_fragment.content,
-                profile=self._profile,
-            )
+        for index, rule in enumerate(rules, start=1):
+            try:
+                verdict = verifier.run(
+                    question="Правило точно соответствует норме (не искажает и не додумывает)?",
+                    fragment=json.dumps(rule, ensure_ascii=False, sort_keys=True),
+                    source=norm_fragment.content,
+                    profile=self._profile,
+                )
+            except (AgentLLMError, ValueError) as exc:
+                # Исключение здесь НЕ должно долетать до внешнего
+                # try/except в __call__ — тот вернул бы fail с ПУСТЫМИ
+                # verdicts, стерев уже собранные к этому моменту вердикты
+                # предыдущих правил (фикс-раунд ревью Задачи 19: докстринг
+                # обещает «все вердикты попадают в StepResult.verdicts
+                # независимо от статуса» — это обязано быть правдой и при
+                # обрыве цикла на середине, не только при штатном fail).
+                return StepResult(
+                    status="fail",
+                    verdicts=verdicts,
+                    error=f"шаг 'rule': verifier error on rule {index}: {exc}",
+                )
             verdicts.append(verdict)
             if verdict.passed:
                 verified_rules.append({"rule": rule, "verified": True})
