@@ -55,6 +55,16 @@ class InMemoryStore:
     _by_map_key: dict[tuple[str, str], str] = field(default_factory=dict)
     _next_id: int = 0
 
+    # ── Задача 26: Assembler/Load — таблицы public.* поверх словарей ──────
+    authorities: dict[str, dict] = field(default_factory=dict)
+    requirements: dict[str, dict] = field(default_factory=dict)
+    # ключ — (requirement_id, lang), тот же составной PK, что и в БД
+    requirement_contents: dict[tuple[str, str], dict] = field(default_factory=dict)
+    requirement_details: dict[tuple[str, str], dict] = field(default_factory=dict)
+    requirement_applicability: dict[str, list[dict]] = field(default_factory=dict)
+    requirement_rules: dict[str, list[dict]] = field(default_factory=dict)
+    _by_external_key: dict[str, str] = field(default_factory=dict)
+
     def _gen_id(self, prefix: str) -> str:
         self._next_id += 1
         return f"{prefix}-{self._next_id}"
@@ -147,11 +157,15 @@ class InMemoryStore:
             if item.run_id == run_id and item.status in ("draft_loaded", "published")
         ]
 
-    def update_item_status(self, item_id, status, *, last_error=None) -> ItemRecord:
+    def update_item_status(
+        self, item_id, status, *, last_error=None, requirement_id=None
+    ) -> ItemRecord:
         item = self.items[item_id]
         item.status = status
         if last_error is not None:
             item.last_error = last_error
+        if requirement_id is not None:
+            item.requirement_id = requirement_id
         self.status_history.append((item_id, status))
         return item
 
@@ -165,3 +179,59 @@ class InMemoryStore:
 
     def finish_run(self, run_id: str, status: str) -> None:
         self.runs[run_id]["status"] = status
+
+    # ── Задача 26: Assembler/Load ─────────────────────────────────────────
+
+    def find_or_create_authority(self, name: str) -> str:
+        for authority_id, row in self.authorities.items():
+            if row.get("name_ru") == name:
+                return authority_id
+        authority_id = self._gen_id("authority")
+        self.authorities[authority_id] = {"id": authority_id, "name_ru": name}
+        return authority_id
+
+    def set_item_note(self, item_id: str, note: str) -> None:
+        self.items[item_id].last_error = note
+
+    def save_requirement_draft(self, card: dict) -> str:
+        requirement = dict(card["requirement"])
+        external_key = requirement.get("external_key")
+
+        existing_id = self._by_external_key.get(external_key) if external_key else None
+        if existing_id is not None:
+            requirement_id = existing_id
+            self.requirements[requirement_id] = {
+                **self.requirements[requirement_id], **requirement, "id": requirement_id,
+            }
+        else:
+            requirement_id = self._gen_id("requirement")
+            self.requirements[requirement_id] = {**requirement, "id": requirement_id}
+            if external_key:
+                self._by_external_key[external_key] = requirement_id
+
+        # replace-семантика (докстринг steps_load.py) — полностью пересобираем
+        # per-lang строки этого требования на каждый вызов, не merge построчно.
+        self._replace_lang_rows(
+            self.requirement_contents, requirement_id, card.get("contents") or {}
+        )
+        self._replace_lang_rows(
+            self.requirement_details, requirement_id, card.get("details") or {}
+        )
+
+        applicability = card.get("applicability")
+        self.requirement_applicability[requirement_id] = (
+            [dict(applicability)] if applicability else []
+        )
+
+        self.requirement_rules[requirement_id] = list(card.get("rules") or [])
+
+        return requirement_id
+
+    @staticmethod
+    def _replace_lang_rows(
+        table: dict[tuple[str, str], dict], requirement_id: str, new_rows: dict[str, dict]
+    ) -> None:
+        for key in [k for k in table if k[0] == requirement_id]:
+            table.pop(key)
+        for lang, row in new_rows.items():
+            table[(requirement_id, lang)] = {**row, "requirement_id": requirement_id, "lang": lang}

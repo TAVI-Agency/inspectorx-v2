@@ -154,14 +154,56 @@ class BuildStore(Protocol):
         ...
 
     def update_item_status(
-        self, item_id: str, status: str, *, last_error: str | None = None
-    ) -> ItemRecord: ...
+        self,
+        item_id: str,
+        status: str,
+        *,
+        last_error: str | None = None,
+        requirement_id: str | None = None,
+    ) -> ItemRecord:
+        """`requirement_id` (Задача 26, шаг 'load') — необязательный kwarg,
+        та же обратная совместимость, что и `last_error`: существующие
+        вызовы без него продолжают работать, только 'load' привязывает
+        айтем к созданному/обновлённому `public.requirements` этим
+        параметром."""
+        ...
 
     def bump_retry(self, item_id: str) -> int: ...
 
     def save_verdicts(self, item_id: str, step: str, verdicts: list[Verdict]) -> None: ...
 
     def finish_run(self, run_id: str, status: str) -> None: ...
+
+    # ── Задача 26: Assembler/Load ────────────────────────────────────────
+
+    def find_or_create_authority(self, name: str) -> str:
+        """Резолвит `authority_name` (текст, который вернул Assembler) в
+        `authorities.id` — по `name_ru`, вставляя новую строку, если такого
+        ведомства ещё нет. Шаг 'load' (`steps_load.py`) вызывает это ПЕРЕД
+        `save_requirement_draft`, т.к. `requirements.authority_id` — FK, не
+        текстовое поле."""
+        ...
+
+    def set_item_note(self, item_id: str, note: str) -> None:
+        """Пишет `note` в `pipeline.items.last_error` БЕЗ смены статуса —
+        отдельно от `update_item_status(..., last_error=...)`, потому что
+        это не диагностика провала последней попытки шага, а постоянная
+        пометка айтема (сейчас единственное применение — 'load' помечает
+        дубль `'duplicate_of=<id>'` перед переводом в `draft_loaded`, см.
+        `steps_load.py`)."""
+        ...
+
+    def save_requirement_draft(self, card: dict) -> str:
+        """Пишет карточку, собранную Assembler'ом (`assembler.py:
+        AssembleStep._build_card`), в БД: upsert `public.requirements` по
+        `card['requirement']['external_key']`, затем ПОЛНАЯ замена строк
+        `requirement_contents`/`requirement_details`/
+        `requirement_applicability`/`requirement_rules` этого требования
+        (replace-семантика — не merge построчно, см. докстринг
+        `steps_load.py`). `card['citations']` НЕ используется — известный
+        пробел (нет ETL LegalX-фрагмент -> локальный `act_paragraphs`, см.
+        докстринг `assembler.py`). Возвращает `requirements.id`."""
+        ...
 
 
 def escalate(item: ItemRecord, reason: str, store: BuildStore) -> None:
@@ -439,11 +481,18 @@ class SupabaseBuildStore:
         return [{"item_id": row["id"], "text": row["expected_item"]} for row in rows]
 
     def update_item_status(
-        self, item_id: str, status: str, *, last_error: str | None = None
+        self,
+        item_id: str,
+        status: str,
+        *,
+        last_error: str | None = None,
+        requirement_id: str | None = None,
     ) -> ItemRecord:
         patch: dict = {"status": status}
         if last_error is not None:
             patch["last_error"] = last_error
+        if requirement_id is not None:
+            patch["requirement_id"] = requirement_id
         row = self._db.table("items").update(patch).eq("id", item_id).execute().data[0]
         return _item_from_row(row)
 
@@ -472,6 +521,90 @@ class SupabaseBuildStore:
         self._db.table("runs").update(
             {"status": status, "finished_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", run_id).execute()
+
+    # ── Задача 26: Assembler/Load ─────────────────────────────────────────
+
+    def find_or_create_authority(self, name: str) -> str:
+        existing = (
+            self._client.table("authorities").select("id")
+            .eq("name_ru", name).execute().data
+        )
+        if existing:
+            return existing[0]["id"]
+        inserted = (
+            self._client.table("authorities").insert({"name_ru": name}).execute().data[0]
+        )
+        return inserted["id"]
+
+    def set_item_note(self, item_id: str, note: str) -> None:
+        self._db.table("items").update({"last_error": note}).eq("id", item_id).execute()
+
+    def save_requirement_draft(self, card: dict) -> str:
+        requirement = dict(card["requirement"])
+        external_key = requirement.get("external_key")
+
+        existing = []
+        if external_key:
+            existing = (
+                self._client.table("requirements").select("id")
+                .eq("external_key", external_key).execute().data
+            )
+        if existing:
+            requirement_id = existing[0]["id"]
+            self._client.table("requirements").update(requirement).eq(
+                "id", requirement_id
+            ).execute()
+        else:
+            inserted = self._client.table("requirements").insert(requirement).execute().data[0]
+            requirement_id = inserted["id"]
+
+        # replace-семантика (докстринг steps_load.py): удаляем старый набор
+        # строк требования, затем вставляем актуальный из card.
+        self._client.table("requirement_contents").delete().eq(
+            "requirement_id", requirement_id
+        ).execute()
+        contents_rows = [
+            {**row, "requirement_id": requirement_id, "lang": lang}
+            for lang, row in (card.get("contents") or {}).items()
+        ]
+        if contents_rows:
+            self._client.table("requirement_contents").insert(contents_rows).execute()
+
+        self._client.table("requirement_details").delete().eq(
+            "requirement_id", requirement_id
+        ).execute()
+        details_rows = [
+            {**row, "requirement_id": requirement_id, "lang": lang}
+            for lang, row in (card.get("details") or {}).items()
+        ]
+        if details_rows:
+            self._client.table("requirement_details").insert(details_rows).execute()
+
+        self._client.table("requirement_applicability").delete().eq(
+            "requirement_id", requirement_id
+        ).execute()
+        applicability = card.get("applicability")
+        if applicability:
+            self._client.table("requirement_applicability").insert(
+                {**applicability, "requirement_id": requirement_id}
+            ).execute()
+
+        self._client.table("requirement_rules").delete().eq(
+            "requirement_id", requirement_id
+        ).execute()
+        rules = card.get("rules") or []
+        if rules:
+            rule_rows = [
+                {
+                    "requirement_id": requirement_id,
+                    "rule": r["rule"],
+                    "verified": r["verified"],
+                }
+                for r in rules
+            ]
+            self._client.table("requirement_rules").insert(rule_rows).execute()
+
+        return requirement_id
 
     # ── доп. запросы для CLI (вне BuildStore Protocol, нужны только `build
     # status` / `build attention`) ─────────────────────────────────────────
