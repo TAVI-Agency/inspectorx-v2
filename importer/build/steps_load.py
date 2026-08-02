@@ -29,6 +29,16 @@ merge построчно): повторный `load` того же айтема 
 не оставляет «осиротевших» старых строк (например, старый uz-перевод после
 того, как язык перевода сменился).
 
+**Фикс-раунд ревью Задачи 26 (Important): published не откатывается.**
+Карточка от 'assemble' несёт `status='draft'` ВСЕГДА, но апсерт может
+попасть в уже `published` строку (тот же `external_key` — например,
+ре-ревью флоу Задачи 27+ гоняет 'load' повторно по уже опубликованному
+требованию, обновляя контент). `save_requirement_draft` в этом случае
+**не откатывает статус** обратно в `draft` — контент обновляется как
+обычно (ре-ревью флоу контролирует корректность контента выше по потоку),
+только `status` строки остаётся `published`; факт сохранения помечается
+через `store.set_item_note(item_id, 'existing published, status preserved')`.
+
 ## Дедуп-скип
 
 Если `ctx.data['dedup']['duplicate_of']` задан (шаг 'dedup', Задача 25) —
@@ -128,7 +138,9 @@ class LoadStep:
         )
 
         resolved_card = {**card, "requirement": requirement}
-        requirement_id = self._store.save_requirement_draft(resolved_card)
+        requirement_id = self._store.save_requirement_draft(
+            resolved_card, item_id=ctx.item.id
+        )
 
         self._store.update_item_status(
             ctx.item.id, "draft_loaded", requirement_id=requirement_id
@@ -156,7 +168,7 @@ def _default_store() -> BuildStore:
                 "заработает после пилотного прогона Задачи 27"
             )
 
-        def save_requirement_draft(self, card: dict) -> str:
+        def save_requirement_draft(self, card: dict, *, item_id: str) -> str:
             raise NotImplementedError(
                 "Живой BuildStore для шага 'load' ещё не подключён — "
                 "заработает после пилотного прогона Задачи 27"

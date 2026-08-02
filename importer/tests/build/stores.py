@@ -193,15 +193,21 @@ class InMemoryStore:
     def set_item_note(self, item_id: str, note: str) -> None:
         self.items[item_id].last_error = note
 
-    def save_requirement_draft(self, card: dict) -> str:
+    def save_requirement_draft(self, card: dict, *, item_id: str) -> str:
         requirement = dict(card["requirement"])
         external_key = requirement.get("external_key")
 
         existing_id = self._by_external_key.get(external_key) if external_key else None
         if existing_id is not None:
             requirement_id = existing_id
+            existing_row = self.requirements[requirement_id]
+            if existing_row.get("status") == "published":
+                # published сохраняется — контент обновляем, статус не
+                # трогаем (докстринг BuildStore.save_requirement_draft).
+                requirement = {**requirement, "status": "published"}
+                self.set_item_note(item_id, "existing published, status preserved")
             self.requirements[requirement_id] = {
-                **self.requirements[requirement_id], **requirement, "id": requirement_id,
+                **existing_row, **requirement, "id": requirement_id,
             }
         else:
             requirement_id = self._gen_id("requirement")

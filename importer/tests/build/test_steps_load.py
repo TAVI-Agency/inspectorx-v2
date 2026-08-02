@@ -182,6 +182,36 @@ def test_repeated_load_of_same_item_upserts_no_duplicates():
     assert store.requirement_contents[(requirement_id_2, "ru")]["title"] == "Обновлённый заголовок"
 
 
+def test_repeated_load_of_published_requirement_does_not_revert_status():
+    """Фикс-раунд ревью Задачи 26 (Important): 'assemble' всегда кладёт
+    status='draft' в карточку, но повторный load может попасть в УЖЕ
+    published строку (ре-ревью флоу Задачи 27+ обновляет контент
+    опубликованного требования). status ОБЯЗАН остаться 'published' —
+    контент обновляется как обычно, публикация не откатывается."""
+    store = InMemoryStore()
+    store.items["item-1"] = ItemRecord(id="item-1", run_id="run-1", expected_item="акцизная марка")
+    step = make_step(store)
+
+    step(item_ctx(card=make_card()))
+    requirement_id = next(iter(store.requirements))
+    store.requirements[requirement_id]["status"] = "published"  # опубликовано вручную/Задачей 27
+
+    store.items["item-1"] = ItemRecord(
+        id="item-1", run_id="run-1", expected_item="акцизная марка", status="in_progress",
+    )
+    updated_card = make_card()
+    updated_card["contents"]["ru"]["title"] = "Обновлённый после публикации заголовок"
+    step(item_ctx(card=updated_card))
+
+    # статус сохранён, контент — обновлён
+    assert store.requirements[requirement_id]["status"] == "published"
+    assert store.requirement_contents[(requirement_id, "ru")]["title"] == (
+        "Обновлённый после публикации заголовок"
+    )
+    assert store.items["item-1"].last_error == "existing published, status preserved"
+    assert store.items["item-1"].status == "draft_loaded"
+
+
 def test_external_key_is_stable_across_reruns():
     store = InMemoryStore()
     store.items["item-1"] = ItemRecord(id="item-1", run_id="run-1", expected_item="акцизная марка")
