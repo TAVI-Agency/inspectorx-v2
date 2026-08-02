@@ -34,24 +34,40 @@
 markdown-отчёт. Coverage НИЧЕГО не перезапускает и не публикует сама — это
 чисто информативная сверка (см. докстринг `manager.py`).
 
-## `publish_ready` — публикация по вердиктам, не по мнению менеджера
+## `publish_ready` — публикация по ПОСЛЕДНЕМУ вердикту каждого шага
 
-Для каждого `draft_loaded`-айтема прогона: ВСЕ сохранённые вердикты
-(`store.list_item_verdicts(item_id)`) обязаны быть `passed=True` — иначе
-консервативный отказ: требование остаётся `draft`, айтем эскалируется в
-`needs_attention` (публикация не идёт, обычный цикл ре-ревью подхватит его
-позже). Пустой список вердиктов (шаг ни разу не вызвал Verifier — например,
-'scope'/'lawyer' у этого требования) — вакуально «все pass», айтем
-публикуем. Айтем без `requirement_id` (дедуп-дубль, `steps_load.py`
-DEDUP-скип — см. докстринг `steps_load.py`) — публиковать нечего (нет своей
-строки `requirements`), но сам айтем всё равно помечается `published` как
-терминальная отметка «айтем дошёл до конца, дальше делать нечего» (dedup-
-дубль и так смердился в канонический item отдельной строкой).
+**Фикс-раунд ревью Задачи 27 (Important)**: первая версия требовала
+`passed=True` у КАЖДОГО исторического вердикта айтема — это блокировало
+публикацию НАВСЕГДА, стоило хоть одному шагу провалиться на первой попытке
+и пройти вторым/третьим ретраем (обычный, штатный путь
+`Orchestrator._run_from`: fail → retry → pass — `pipeline.verdicts` копится
+append-only, старый провалившийся вердикт остаётся в таблице НАВСЕГДА, даже
+после успешного ретрая). Продуктовое решение контроллера: «нерешённый fail»
+— это ПОСЛЕДНИЙ по времени вердикт ДАННОГО ШАГА, а не любой исторический.
+
+Реализация: `store.list_item_verdicts(item_id)` отдаёт `[(step, Verdict), ...]`
+в хронологическом порядке; группируем по `step`, для каждого шага берём
+ПОСЛЕДНИЙ вердикт (более поздний перезаписывает более ранний в `dict`
+однопроходным циклом) — публикация идёт, только если ПОСЛЕДНИЙ вердикт
+КАЖДОГО шага `passed=True`. Шаги без единого вердикта вообще (Verifier ни
+разу не вызывался — например, 'scope'/'lawyer' не имеют Verifier по
+дизайну) в группировку не попадают — вакуально «pass» для НИХ, но не
+маскируют fail других шагов.
+
+Хотя бы один шаг, чей ПОСЛЕДНИЙ вердикт — fail: требование остаётся
+`draft`, айтем эскалируется в `needs_attention` (публикация не идёт,
+обычный цикл ре-ревью — `rerun_item` — подхватит его позже). Айтем без
+`requirement_id` (дедуп-дубль, `steps_load.py` DEDUP-скип — см. докстринг
+`steps_load.py`) — публиковать нечего (нет своей строки `requirements`), но
+сам айтем всё равно помечается `published` как терминальная отметка «айтем
+дошёл до конца, дальше делать нечего» (dedup-дубль и так смердился в
+канонический item отдельной строкой).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from importer.build.agents import Verdict
 from importer.build.manager import ExceptionManagerLike
 from importer.build.orchestrator import BuildStore
 from importer.build.steps import ItemRecord
@@ -194,20 +210,32 @@ def coverage_report(
     )
 
 
+def _last_verdict_per_step(pairs: list[tuple[str, Verdict]]) -> dict[str, Verdict]:
+    """`pairs` — `[(step, Verdict), ...]` в хронологическом порядке
+    (`store.list_item_verdicts`). Более поздняя запись того же `step`
+    ПЕРЕЗАПИСЫВАЕТ более раннюю — однопроходная свёртка «последний вердикт
+    каждого шага» (см. докстринг модуля, Important фикс-раунда ревью)."""
+    last_by_step: dict[str, Verdict] = {}
+    for step, verdict in pairs:
+        last_by_step[step] = verdict
+    return last_by_step
+
+
 def publish_ready(store: BuildStore, run_id: str) -> int:
-    """Публикует `draft_loaded`-айтемы прогона `run_id`, у которых все
-    вердикты pass — см. докстринг модуля. Возвращает число реально
-    опубликованных айтемов (`item.status -> 'published'`)."""
+    """Публикует `draft_loaded`-айтемы прогона `run_id`, у которых ПОСЛЕДНИЙ
+    вердикт КАЖДОГО шага — pass (не вся история, см. докстринг модуля,
+    Important фикс-раунда ревью). Возвращает число реально опубликованных
+    айтемов (`item.status -> 'published'`)."""
     items = store.list_run_items(run_id)
     published_count = 0
     for item in items:
         if item.status != "draft_loaded":
             continue
-        verdicts = store.list_item_verdicts(item.id)
-        if not all(v.passed for v in verdicts):
+        last_by_step = _last_verdict_per_step(store.list_item_verdicts(item.id))
+        if not all(v.passed for v in last_by_step.values()):
             store.update_item_status(
                 item.id, "needs_attention",
-                last_error="публикация отклонена: есть непройденный вердикт",
+                last_error="публикация отклонена: последний вердикт хотя бы одного шага — fail",
             )
             continue
         if item.requirement_id:

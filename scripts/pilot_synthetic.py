@@ -62,9 +62,17 @@ draft-карта на 3 айтема:
   диспетчера); на любой нераспознанный промпт — `AssertionError` с текстом
   промпта, чтобы пилот падал ГРОМКО, а не тихо возвращал мусор.
 - `FakeEmbedder` (`importer/build/embeddings.py`, уже существует, не новый
-  код) — детерминированный bag-of-words хэш: айтемы 1 и 2 получают
-  ОДИНАКОВЫЙ scripted-саммари текст -> идентичный вектор -> cosine=1.0 ->
-  дедуп находит дубль БЕЗ обращения к LLM (порог `DUP_THRESHOLD_HIGH=0.9`).
+  код) — детерминированный bag-of-words хэш: айтемы 1 и 2 получают ДВЕ
+  РАЗНЫЕ (по-настоящему перефразированные, не побайтово совпадающие)
+  scripted-саммари — косинусная близость ~0.82 (проверено отдельно) ПОПАДАЕТ
+  в спорную зону между `DUP_THRESHOLD_LOW=0.75` и `DUP_THRESHOLD_HIGH=0.9`
+  (`steps_dedup.py`) — решает scripted Classifier (профиль 'dedup',
+  `{"is_duplicate": true}`) — это демонстрация РЕАЛЬНОГО пути дедупа
+  спорных пар, не срабатывание по точному совпадению текста/эмбеддинга.
+  Симметричное сравнение (summary текущего айтема vs summary кандидатов, не
+  summary vs `expected_item`) стало возможно только после фикс-раунда ревью
+  Задачи 27 (`pipeline.items.summary_text`,
+  `20260803210000_pipeline_item_summary.sql`).
 - Санкции намеренно «не найдены» для ВСЕХ айтемов (упрощение синтетического
   прогона, не баг): `FakeLegalX.search_norms` отдаёт пусто на запрос с
   префиксом «ответственность за нарушение» -> шаг 'sanctions' сигналит
@@ -75,7 +83,8 @@ draft-карта на 3 айтема:
 ## Запуск
 
 Предпосылка — локальный Supabase поднят И актуален (все миграции этой ветки,
-включая `20260803200000_pipeline_coverage_report.sql`, накатаны):
+включая `20260803200000_pipeline_coverage_report.sql` и
+`20260803210000_pipeline_item_summary.sql`, накатаны):
 
     supabase db start   # если ещё не поднят
     supabase db reset --local
@@ -117,20 +126,27 @@ ITEM_3 = (
     "(нормы нет в законодательстве Узбекистана)"
 )
 
-# ВАЖНО про дедуп (объясняет, почему саммари — буквально ITEM_1, а не своя
-# формулировка): `BuildStore.list_run_item_texts` (см. докстринг в
-# orchestrator.py) — ИЗВЕСТНОЕ ограничение: кандидаты отдаются по
-# `expected_item` (входной текст карты), НЕ по `summary`, которого
-# `pipeline.items` не хранит. Шаг 'dedup' сравнивает ТЕКУЩИЙ айтем по его
-# `summary` с КАНДИДАТАМИ по их `expected_item` — асимметрично. Чтобы дедуп
-# айтема 2 (перефраз айтема 1 другими словами — "маркировка"/"этикетке"/
-# "ввозимого" вместо "указание"/"контрэтикетке"/"импортного") детерминированно
-# сработал через простой bag-of-words `FakeEmbedder` (без стемминга/синонимов),
-# canned-саммари здесь — РОВНО текст ITEM_1: он и есть "канонический" вариант
-# формулировки этого требования, к которому должны сойтись оба похожих
-# айтема — реалистичный исход саммаризации короткого однострочного
-# требования, а не хак ради теста.
-WINE_SUMMARY_RU = ITEM_1
+# Дедуп (Задача 27, фикс-раунд ревью, Important №3): pipeline.items теперь
+# ХРАНИТ summary_text (BuildStore.set_item_summary, миграция
+# 20260803210000_pipeline_item_summary.sql) — list_run_item_texts сравнивает
+# СИММЕТРИЧНО (summary текущего айтема vs summary кандидатов, не summary vs
+# expected_item, как раньше). Поэтому саммари айтемов 1 и 2 — ДВЕ РАЗНЫЕ,
+# по-настоящему перефразированные строки (не побайтовое совпадение): их
+# косинусная близость через FakeEmbedder (bag-of-words, без стемминга) —
+# ~0.82 (проверено отдельно: importer.build.embeddings.cosine_similarity) —
+# ПОПАДАЕТ в спорную зону между DUP_THRESHOLD_LOW=0.75 и DUP_THRESHOLD_HIGH=0.9
+# (steps_dedup.py), где решает scripted Classifier (профиль 'dedup', маркер
+# "решаешь спорную пару" в диспетчере ниже) — это и есть демонстрация
+# РЕАЛЬНОГО пути дедупа спорных пар, не срабатывание по точному совпадению
+# текста.
+WINE_SUMMARY_ITEM_1 = (
+    "Импортное вино маркируется указанием страны происхождения на "
+    "контрэтикетке на узбекском и русском языках."
+)
+WINE_SUMMARY_ITEM_2 = (
+    "На контрэтикетке импортного вина маркируется страна происхождения "
+    "на узбекском и русском языках."
+)
 WINE_SUMMARY_UZ = (
     "Import qilingan sharob kontr-etiketkasida kelib chiqish davlati "
     "o'zbek va rus tillarida ko'rsatilishi shart."
@@ -253,6 +269,13 @@ def make_scripted_runner() -> tuple[Callable[[str, str], str], ScriptedRunnerSta
     нераспознанный промпт -> `AssertionError` (пилот обязан падать громко,
     не тихо генерировать мусор)."""
     stats = ScriptedRunnerStats(calls=[])
+    # Summarizer.run получает ОДИНАКОВЫЙ prompt-шаблон для айтемов 1 и 2 (тот
+    # же fragment.content — FakeLegalX отдаёт один и тот же WINE_FRAGMENT для
+    # обоих) — стейтфул-счётчик различает 1-й/2-й вызов, чтобы вернуть ДВЕ
+    # РАЗНЫЕ (но похожие) формулировки саммари, см. комментарий у
+    # WINE_SUMMARY_ITEM_1/2 выше.
+    summary_call_index = {"n": 0}
+    summary_variants = [WINE_SUMMARY_ITEM_1, WINE_SUMMARY_ITEM_2]
 
     def runner(prompt: str, model: str) -> str:
         stats.calls.append((model, prompt[:80].replace("\n", " ")))
@@ -282,9 +305,20 @@ def make_scripted_runner() -> tuple[Callable[[str, str], str], ScriptedRunnerSta
         if "Проверь независимо" in prompt:
             return json.dumps({"passed": True, "reason": "синтетический прогон: подтверждено скриптом"})
 
-        # agents.py:Summarizer.run — шаг 'summary' (steps_norm.py).
+        # agents.py:Summarizer.run — шаг 'summary' (steps_norm.py). 1-й вызов
+        # (айтем 1) -> WINE_SUMMARY_ITEM_1, 2-й (айтем 2) -> WINE_SUMMARY_ITEM_2
+        # (айтем 3 до 'summary' не доходит — терминируется на 'norm').
         if "Сформулируй краткое резюме." in prompt:
-            return WINE_SUMMARY_RU
+            idx = min(summary_call_index["n"], len(summary_variants) - 1)
+            summary_call_index["n"] += 1
+            return summary_variants[idx]
+
+        # steps_dedup.py:DEDUP_PROFILE — шаг 'dedup', спорная пара (score
+        # между DUP_THRESHOLD_LOW и DUP_THRESHOLD_HIGH): подтверждаем дубль —
+        # демонстрация РЕАЛЬНОГО пути дедупа через Classifier, не только
+        # порог по эмбеддингу.
+        if "решаешь спорную пару" in prompt:
+            return json.dumps({"is_duplicate": True})
 
         # steps_classify.py:CLASSIFY_PROFILE — шаг 'category'.
         if "Ты классифицируешь требование" in prompt:

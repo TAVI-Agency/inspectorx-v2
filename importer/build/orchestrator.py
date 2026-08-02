@@ -153,20 +153,19 @@ class BuildStore(Protocol):
         `InMemoryStore`, где порядок и так стабилен — словарь сохраняет
         порядок вставки).
 
-        ОГРАНИЧЕНИЕ `SupabaseBuildStore`: `pipeline.items` (миграция
-        `20260803170000_pipeline_schema.sql`) хранит только `expected_item`
-        (входной текст из карты) — колонки под финальный `summary` шага
-        'summary' в БД нет (он живёт только в `ItemContext.data` конкретного
-        прогона, персистентности не переживает). Идеальный вход для дедупа —
-        `summary`, если он уже есть, иначе `expected_item` (см. докстринг
-        `steps_dedup.py`); `SupabaseBuildStore` может отдать только
-        `expected_item` для ВСЕХ айтемов прогона, включая те, где summary уже
-        произведён. Это огрубляет качество сравнения (два по-разному
-        сформулированных summary одного требования при похожих
-        `expected_item` могут не найти друг друга и наоборот) — известное
-        ограничение, снимается, если `summary` когда-нибудь получит колонку
-        в `pipeline.items`. `InMemoryStore` (тесты) отдаёт то же самое поле
-        `expected_item` — тот же контракт, не более богатый тестовый дублёр."""
+        `text = coalesce(summary_text, expected_item)` (Задача 27, фикс-раунд
+        ревью): `pipeline.items.summary_text` (миграция
+        `20260803210000_pipeline_item_summary.sql`) пишет шаг 'summary'
+        (`steps_norm.py:SummaryStep`, через `BuildStore.set_item_summary`)
+        сразу после успешной верификации саммари. Раньше (до этой миграции)
+        колонки под `summary` в БД не было, `SupabaseBuildStore` мог отдать
+        только `expected_item` для ВСЕХ айтемов — асимметричное сравнение
+        (текущий айтем по `summary`, кандидаты по `expected_item`) срывало
+        дедуп парафразов одного требования (см. `docs`/отчёт Задачи 27,
+        фикс-раунд ревью, Important №3). Теперь сравнение симметрично:
+        айтем без `summary_text` (partial `rerun_item`, начатый не с начала)
+        честно фолбэкается на `expected_item` — тот же принцип, что и у
+        текущего айтема в `steps_dedup.py:DedupStep._run`."""
         ...
 
     def update_item_status(
@@ -187,6 +186,15 @@ class BuildStore(Protocol):
     def bump_retry(self, item_id: str) -> int: ...
 
     def save_verdicts(self, item_id: str, step: str, verdicts: list[Verdict]) -> None: ...
+
+    def set_item_summary(self, item_id: str, summary: str) -> None:
+        """Пишет `pipeline.items.summary_text` (Задача 27, фикс-раунд
+        ревью) — вызывается `steps_norm.py:SummaryStep` сразу после
+        успешной верификации саммари. Единственный потребитель —
+        `list_run_item_texts` (см. её докстринг): позволяет шагу 'dedup'
+        сравнивать айтемы СИММЕТРИЧНО (`summary` vs `summary`), не
+        `summary` текущего айтема vs `expected_item` кандидатов."""
+        ...
 
     def finish_run(self, run_id: str, status: str) -> None: ...
 
@@ -214,12 +222,21 @@ class BuildStore(Protocol):
         отчётом, который видел оператор во время прогона."""
         ...
 
-    def list_item_verdicts(self, item_id: str) -> list[Verdict]:
-        """ВСЕ вердикты айтема за весь прогон (все шаги, все попытки —
-        `pipeline.verdicts` копится append-only, `save_verdicts` ничего не
-        удаляет) — вход `publish_ready` (`coverage.py`): публикация идёт,
-        только если КАЖДЫЙ сохранённый вердикт `passed=True` (консервативная
-        политика — см. докстринг `coverage.py:publish_ready`)."""
+    def list_item_verdicts(self, item_id: str) -> list[tuple[str, Verdict]]:
+        """ВСЕ вердикты айтема за весь прогон как пары `(step, Verdict)`, В
+        ХРОНОЛОГИЧЕСКОМ ПОРЯДКЕ (`pipeline.verdicts` копится append-only,
+        `save_verdicts` ничего не удаляет; `SupabaseBuildStore` сортирует по
+        `created_at`, `InMemoryStore` — порядок вставки) — вход
+        `publish_ready` (`coverage.py`).
+
+        **Фикс-раунд ревью Задачи 27 (Important)**: раньше `publish_ready`
+        требовал `passed=True` у КАЖДОГО исторического вердикта — блокировал
+        публикацию НАВСЕГДА, если шаг хоть раз провалился и потом прошёл
+        ретраем (обычный, штатный путь `Orchestrator._run_from`: fail →
+        retry → pass). Теперь `list_item_verdicts` отдаёт `step` вместе с
+        `Verdict` именно для того, чтобы `publish_ready` мог взять ПОСЛЕДНИЙ
+        по времени вердикт КАЖДОГО шага (не всю историю) — см. докстринг
+        `coverage.py:publish_ready`."""
         ...
 
     def publish_requirement(self, requirement_id: str) -> None:
@@ -307,9 +324,34 @@ class Orchestrator:
         self._manager: ExceptionManagerLike = manager or NullExceptionManager()
 
     def run_group(self, map_id: str, *, publish: bool = True) -> RunReport:
-        """Прогоняет все айтемы утверждённой карты по STEP_ORDER, затем (Задача
-        27) считает coverage-отчёт и — если `publish=True` (дефолт) —
-        публикует чистые `draft_loaded`-айтемы (`coverage.publish_ready`).
+        """Прогоняет все айтемы утверждённой карты по STEP_ORDER, затем
+        (Задача 27, порядок зафиксирован фикс-раундом ревью, Important №2):
+        1) если `publish=True` (дефолт) — публикует чистые `draft_loaded`-
+           айтемы (`coverage.publish_ready`) — публикация идёт ПЕРЕД coverage,
+           а не после;
+        2) считает coverage-отчёт (`coverage.coverage_report`, с менеджером
+           исключений на найденных пробелах) и сохраняет его.
+
+        Почему publish ПЕРЕД coverage, не наоборот: coverage — «снимок
+        состояния прогона для оператора» — обязан отражать ФИНАЛЬНЫЕ статусы,
+        а не промежуточные. Если считать coverage ДО публикации, айтем,
+        которого `publish_ready` в ЭТОТ ЖЕ вызов демотирует в
+        `needs_attention` (последний вердикт хотя бы одного шага — fail, см.
+        `coverage.publish_ready`), в отчёте попал бы в «closed» — устаревший
+        снимок, ещё до того, как отчёт вообще показан оператору. При старом
+        порядке (coverage до publish) это давало РОВНО такое расхождение —
+        зафиксировано регрессионным тестом
+        `test_run_group_publish_before_coverage_reflects_final_demotion_status`.
+
+        Айтемы, которые менеджер исключений посоветовал ретраить
+        (`retry_reformulated`) уже НА ЭТАПЕ coverage (не на этапе ретраев
+        самого шага — это другая, более ранняя точка вызова, см.
+        `_handle_exhausted_retries`) — coverage их НЕ перезапускает и не
+        публикует сама (докстринг `manager.py`/`coverage.py`: менеджер в
+        coverage только советует). Починка такого айтема — `rerun_item` (вне
+        `run_group`) с последующим ЯВНЫМ `build publish --run <id>`, не
+        автоматика внутри этого вызова.
+
         Карта в статусе, отличном от 'approved', — стоп-точка ①:
         `MapNotApprovedError` ДО создания run/items (ничего не пишется в БД
         по неапрувленной карте)."""
@@ -331,15 +373,16 @@ class Orchestrator:
 
         # Локальный импорт — coverage.py импортирует BuildStore ИЗ этого
         # модуля на уровне модуля; импорт на верхнем уровне orchestrator.py
-        # создал бы цикл. coverage считается ВСЕГДА (независимо от
-        # `publish`) — публикация лишь опциональный шаг поверх него.
+        # создал бы цикл.
         from importer.build.coverage import coverage_report, publish_ready
-
-        coverage = coverage_report(self._store, run_id, manager=self._manager)
-        self._store.save_coverage_report(run_id, coverage.markdown)
 
         if publish:
             publish_ready(self._store, run_id)
+
+        # coverage — ПОСЛЕДНИЙ шаг: считается уже по финальным статусам
+        # (после публикации, если она была) — источник истины для отчёта.
+        coverage = coverage_report(self._store, run_id, manager=self._manager)
+        self._store.save_coverage_report(run_id, coverage.markdown)
 
         return RunReport(
             run_id=run_id,
@@ -420,6 +463,7 @@ class Orchestrator:
         for step_name in STEP_ORDER[start_index:]:
             step_fn = self._step(step_name)
             consecutive_fails = 0
+            fail_history: list[str] = []  # причины ВСЕХ провалов ЭТОГО шага подряд, не только последней
             while True:
                 result = self._call_step(step_fn, step_name, ctx)
                 if result.verdicts:
@@ -446,11 +490,14 @@ class Orchestrator:
 
                 # status == "fail"
                 consecutive_fails += 1
+                reason = error or (
+                    f"шаг {step_name!r}: провал попытки {consecutive_fails}"
+                )
+                fail_history.append(reason)
                 if consecutive_fails >= MAX_STEP_RETRIES:
-                    reason = error or (
-                        f"шаг {step_name!r}: {consecutive_fails} провалов подряд"
+                    outcome = self._handle_exhausted_retries(
+                        step_fn, step_name, ctx, reason, fail_history
                     )
-                    outcome = self._handle_exhausted_retries(step_fn, step_name, ctx, reason)
                     if outcome is None:
                         break  # доп. попытка менеджера удалась — к следующему шагу
                     return outcome  # 'no_norm' | 'needs_attention'
@@ -461,12 +508,22 @@ class Orchestrator:
         return "draft_loaded"
 
     def _handle_exhausted_retries(
-        self, step_fn: StepFn, step_name: str, ctx: ItemContext, reason: str,
+        self,
+        step_fn: StepFn,
+        step_name: str,
+        ctx: ItemContext,
+        reason: str,
+        fail_history: list[str],
     ) -> str | None:
         """Вызывается РОВНО один раз на исчерпанные `MAX_STEP_RETRIES` подряд
         фейлы шага (решение контроллера Задачи 27: менеджер исключений
         вызывается «ТОЛЬКО при N подряд фейлов»). Спрашивает
-        `self._manager.review(...)`:
+        `self._manager.review(ctx.item, fail_history)` — `fail_history`
+        (Minor фикс-раунда ревью) несёт причины ВСЕХ `MAX_STEP_RETRIES`
+        провалов подряд этого шага, не только последнего: менеджеру нужен
+        весь ход попыток, чтобы отличить «один и тот же провал N раз» от
+        «разные причины на каждой попытке» — по одной последней причине
+        этого не увидеть.
 
         - `'retry_reformulated'` -> кладёт `note` в `ctx.data['manager_note']`
           и делает РОВНО ОДНУ дополнительную попытку того же шага (менеджер
@@ -482,7 +539,7 @@ class Orchestrator:
 
         Менеджер НЕ публикует (докстринг `manager.py`) — здесь только выбор
         между доп. попыткой и эскалацией."""
-        decision = self._manager.review(ctx.item, [reason])
+        decision = self._manager.review(ctx.item, fail_history)
         if decision.get("action") != "retry_reformulated":
             escalate(ctx.item, reason, self._store)
             return "needs_attention"
@@ -537,6 +594,7 @@ def _item_from_row(row: dict) -> ItemRecord:
         status=row.get("status", "pending"),
         retry_count=row.get("retry_count", 0),
         last_error=row.get("last_error"),
+        summary_text=row.get("summary_text"),
     )
 
 
@@ -630,21 +688,29 @@ class SupabaseBuildStore:
         return [_item_from_row(row) for row in rows]
 
     def list_run_item_texts(self, run_id: str) -> list[dict]:
-        """См. докстринг `BuildStore.list_run_item_texts` — ограничение:
-        `text` здесь всегда `expected_item`, `pipeline.items` не хранит
-        `summary`. Фильтр `status in ('draft_loaded', 'published')`
-        (Critical фикс-раунда ревью Задачи 25) — `pending`/`in_progress`/
-        `needs_attention`/`no_norm` не кандидаты, черновика в БД у них ещё
-        (или уже никогда) не будет. `order("updated_at")` — детерминизм
-        «первый найденный дубль побеждает» (Minor того же ревью)."""
+        """См. докстринг `BuildStore.list_run_item_texts` — `text =
+        coalesce(summary_text, expected_item)` (Задача 27, фикс-раунд ревью:
+        симметричное сравнение summary-vs-summary для dedup, не
+        summary-vs-expected_item). Фильтр `status in ('draft_loaded',
+        'published')` (Critical фикс-раунда ревью Задачи 25) —
+        `pending`/`in_progress`/`needs_attention`/`no_norm` не кандидаты,
+        черновика в БД у них ещё (или уже никогда) не будет. `order("updated_at")`
+        — детерминизм «первый найденный дубль побеждает» (Minor того же
+        ревью)."""
         rows = (
-            self._db.table("items").select("id, expected_item")
+            self._db.table("items").select("id, expected_item, summary_text")
             .eq("run_id", run_id)
             .in_("status", ["draft_loaded", "published"])
             .order("updated_at")
             .execute().data
         )
-        return [{"item_id": row["id"], "text": row["expected_item"]} for row in rows]
+        return [
+            {"item_id": row["id"], "text": row.get("summary_text") or row["expected_item"]}
+            for row in rows
+        ]
+
+    def set_item_summary(self, item_id: str, summary: str) -> None:
+        self._db.table("items").update({"summary_text": summary}).eq("id", item_id).execute()
 
     def update_item_status(
         self,
@@ -703,10 +769,16 @@ class SupabaseBuildStore:
     def save_coverage_report(self, run_id: str, markdown: str) -> None:
         self._db.table("runs").update({"coverage_report": markdown}).eq("id", run_id).execute()
 
-    def list_item_verdicts(self, item_id: str) -> list[Verdict]:
-        rows = self._db.table("verdicts").select("*").eq("item_id", item_id).execute().data
+    def list_item_verdicts(self, item_id: str) -> list[tuple[str, Verdict]]:
+        rows = (
+            self._db.table("verdicts").select("*").eq("item_id", item_id)
+            .order("created_at").execute().data
+        )
         return [
-            Verdict(passed=row["verdict"] == "pass", reason=row.get("reason") or "", model=row.get("model") or "")
+            (
+                row["step"],
+                Verdict(passed=row["verdict"] == "pass", reason=row.get("reason") or "", model=row.get("model") or ""),
+            )
             for row in rows
         ]
 

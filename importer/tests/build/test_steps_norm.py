@@ -79,6 +79,19 @@ class ScriptedLLM:
         return self._responses.pop(0)
 
 
+class SpySummaryStore:
+    """Минимальный BuildStore-дублёр для изолированных юнит-тестов
+    'summary' (Задача 27, фикс-раунд ревью) — эти тесты не гоняют
+    Orchestrator/полноценный InMemoryStore (айтем никогда не был бы
+    `create_items`-нут), нужен только `set_item_summary`."""
+
+    def __init__(self):
+        self.summaries: dict[str, str] = {}
+
+    def set_item_summary(self, item_id: str, summary: str) -> None:
+        self.summaries[item_id] = summary
+
+
 def fragment(**over) -> NormFragment:
     base = dict(
         fragment_id="frag-1", act_id="act-1", act_title="ПКМ-290",
@@ -294,7 +307,8 @@ def test_summary_step_happy_path_fills_context_and_returns_ok():
         "простыми словами: нужна акцизная марка",
         verdict_json(True, "саммари точное"),
     ])
-    step = SummaryStep(llm)
+    store = SpySummaryStore()
+    step = SummaryStep(llm, store)
     ctx = item_ctx()
     ctx.data["norm_fragment"] = fragment()
 
@@ -304,6 +318,8 @@ def test_summary_step_happy_path_fills_context_and_returns_ok():
     assert ctx.data["summary"] == "простыми словами: нужна акцизная марка"
     assert len(result.verdicts) == 1
     assert result.verdicts[0].passed is True
+    # Задача 27, фикс-раунд ревью: саммари персистится через set_item_summary
+    assert store.summaries[ctx.item.id] == "простыми словами: нужна акцизная марка"
 
 
 def test_summary_step_uses_cheap_tier_and_verifier_gets_expensive_tier():
@@ -311,7 +327,7 @@ def test_summary_step_uses_cheap_tier_and_verifier_gets_expensive_tier():
         "саммари",
         verdict_json(True),
     ])
-    step = SummaryStep(llm)
+    step = SummaryStep(llm, SpySummaryStore())
     ctx = item_ctx()
     ctx.data["norm_fragment"] = fragment()
 
@@ -330,7 +346,8 @@ def test_summary_step_verifier_fail_returns_fail_and_does_not_populate_summary()
         "саммари, которое искажает норму",
         verdict_json(False, "саммари добавляет то, чего нет в норме"),
     ])
-    step = SummaryStep(llm)
+    store = SpySummaryStore()
+    step = SummaryStep(llm, store)
     ctx = item_ctx()
     ctx.data["norm_fragment"] = fragment()
 
@@ -340,6 +357,8 @@ def test_summary_step_verifier_fail_returns_fail_and_does_not_populate_summary()
     assert len(result.verdicts) == 1
     assert result.verdicts[0].passed is False
     assert "summary" not in ctx.data
+    # Verifier отклонил — set_item_summary НЕ вызван (нечего персистить)
+    assert store.summaries == {}
 
 
 # ── шаг 'summary': без предварительного 'norm' ───────────────────────────
@@ -347,7 +366,7 @@ def test_summary_step_verifier_fail_returns_fail_and_does_not_populate_summary()
 
 def test_summary_step_without_norm_fragment_returns_fail_not_raise():
     llm = ScriptedLLM([])
-    step = SummaryStep(llm)
+    step = SummaryStep(llm, SpySummaryStore())
 
     result = step(item_ctx())
 
@@ -374,7 +393,7 @@ def test_norm_and_summary_steps_integrate_with_orchestrator_verdict_attribution(
         verdict_json(True, "саммари точное"),
     ])
     norm_step = NormStep(legalx, llm)
-    summary_step = SummaryStep(llm)
+    summary_step = SummaryStep(llm, store)
 
     steps = {name: (lambda ctx: StepResult(status="ok")) for name in STEP_ORDER}
     steps["norm"] = norm_step
@@ -389,6 +408,9 @@ def test_norm_and_summary_steps_integrate_with_orchestrator_verdict_attribution(
     summary_verdicts = next(v for (_id, s, v) in store.verdicts if s == "summary")
     assert norm_verdicts[0].passed is True
     assert summary_verdicts[0].passed is True
+    # Задача 27, фикс-раунд ревью: саммари персистится в pipeline.items.summary_text
+    item = next(iter(store.items.values()))
+    assert item.summary_text == "простыми словами: нужна акцизная марка"
 
 
 def test_norm_step_not_found_escalates_to_needs_attention_via_orchestrator():

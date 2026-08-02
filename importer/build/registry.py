@@ -85,7 +85,7 @@ def build_step_registry(
 
     steps: dict[str, StepFn] = {
         "norm": NormStep(legalx, llm, jurisdiction=jurisdiction, models=models),
-        "summary": SummaryStep(llm, models=models),
+        "summary": SummaryStep(llm, store, models=models),
         "category": ClassifyStep(llm, store, models),
         "rule": RuleStep(llm, models=models),
         "scope": ScopeStep(llm, store, group_ref=group_ref, models=models),

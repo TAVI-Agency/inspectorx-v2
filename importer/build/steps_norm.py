@@ -87,6 +87,7 @@ from importer.build.agents import (
 )
 from importer.build.legalx import LegalXClient, NormFragment, get_client
 from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgentLLM
+from importer.build.orchestrator import BuildStore
 from importer.build.profiles import Profile
 from importer.build.question_writer import MapItem, write_questions
 from importer.build.steps import ItemContext, StepResult, register_step
@@ -211,16 +212,26 @@ class NormStep:
 
 
 class SummaryStep:
-    """Шаговый callable 'summary' (см. докстринг модуля)."""
+    """Шаговый callable 'summary' (см. докстринг модуля).
+
+    `store` (Задача 27, фикс-раунд ревью, Important №3) — шаг персистит
+    саммари через `BuildStore.set_item_summary` сразу после успешной
+    верификации: `pipeline.items` раньше не хранил `summary` вообще, из-за
+    чего шаг 'dedup' (`steps_dedup.py`) сравнивал текущий айтем по
+    `summary`, а кандидатов — по `expected_item` (асимметрично, срывало
+    дедуп парафразов). См. докстринг `BuildStore.list_run_item_texts`
+    (`orchestrator.py`)."""
 
     def __init__(
         self,
         llm: AgentLLMClient,
+        store: BuildStore,
         *,
         models: ModelsConfig | None = None,
         profile: Profile = SUMMARY_PROFILE,
     ):
         self._llm = llm
+        self._store = store
         self._models = models or load_models_config()
         self._profile = profile
         self._summarizer = Summarizer(llm, self._models)
@@ -261,6 +272,7 @@ class SummaryStep:
             )
 
         ctx.data["summary"] = summary_text
+        self._store.set_item_summary(ctx.item.id, summary_text)
         return StepResult(status="ok", verdicts=[verdict])
 
 
@@ -277,6 +289,19 @@ def _default_llm_runner(prompt: str, model: str) -> str:
     )
 
 
+class _DummyStore:
+    """Заглушка BuildStore для регистрации 'summary' по умолчанию — падает
+    только при РЕАЛЬНОМ вызове `set_item_summary`, не при импорте/
+    регистрации шага (тот же паттерн, что и `_DummyStore` в
+    `steps_classify.py`/`steps_scope_lifecycle.py`/`steps_dedup.py`)."""
+
+    def set_item_summary(self, item_id: str, summary: str) -> None:
+        raise NotImplementedError(
+            "Живой BuildStore для шага 'summary' ещё не подключён — "
+            "заработает после инъекции через build_step_registry (Задача 27)"
+        )
+
+
 _default_llm = RunnerAgentLLM(_default_llm_runner)
 register_step("norm", NormStep(get_client(), _default_llm))
-register_step("summary", SummaryStep(_default_llm))
+register_step("summary", SummaryStep(_default_llm, _DummyStore()))

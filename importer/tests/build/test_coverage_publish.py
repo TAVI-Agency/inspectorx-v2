@@ -223,24 +223,47 @@ def test_publish_ready_publishes_item_with_all_passing_verdicts():
     assert store.items[item.id].status == "published"
 
 
-def test_publish_ready_blocks_item_with_any_failed_verdict():
+def test_publish_ready_publishes_item_whose_step_failed_then_passed_on_retry():
+    """Фикс-раунд ревью Задачи 27 (Important №1): «нерешённый fail» — это
+    ПОСЛЕДНИЙ по времени вердикт ДАННОГО ШАГА, не любой исторический.
+    Обычный, штатный путь `Orchestrator._run_from` — шаг провалился первой
+    попыткой (verdict fail), прошёл ретраем (verdict pass) — этот АЙТЕМ
+    ОБЯЗАН публиковаться: провалившийся вердикт первой попытки остаётся в
+    `pipeline.verdicts` НАВСЕГДА (append-only), но он больше не «последний»
+    для шага 'norm'."""
+    store = InMemoryStore()
+    map_id, run_id, items = _seed_run(store, payload=[{"expected_item": "починенный ретраем айтем"}])
+    item = items[0]
+    requirement_id = store.save_requirement_draft(_minimal_card(), item_id=item.id)
+    store.update_item_status(item.id, "draft_loaded", requirement_id=requirement_id)
+    store.save_verdicts(item.id, "norm", [Verdict(passed=False, reason="не подтвердил", model="gpt-5-high-reasoning")])
+    store.save_verdicts(item.id, "norm", [Verdict(passed=True, reason="ок со второй попытки", model="gpt-5-high-reasoning")])
+
+    count = publish_ready(store, run_id)
+
+    assert count == 1
+    assert store.requirements[requirement_id]["status"] == "published"
+    assert store.items[item.id].status == "published"
+
+
+def test_publish_ready_blocks_item_whose_last_verdict_of_some_step_is_fail():
+    """Симметричный случай предыдущего теста: ПОСЛЕДНИЙ вердикт шага
+    'category' — fail (даже если у другого шага 'norm' всё pass) — блок."""
     store = InMemoryStore()
     map_id, run_id, items = _seed_run(store, payload=[{"expected_item": "спорный айтем"}])
     item = items[0]
     requirement_id = store.save_requirement_draft(_minimal_card(), item_id=item.id)
     store.update_item_status(item.id, "draft_loaded", requirement_id=requirement_id)
-    # шаг прошёл со второй попытки, но ПЕРВАЯ (провальная) верификация тоже
-    # осталась в pipeline.verdicts (save_verdicts копится append-only) —
-    # консервативная политика: хотя бы один fail за весь прогон — не публикуем.
-    store.save_verdicts(item.id, "norm", [Verdict(passed=False, reason="не подтвердил", model="gpt-5-high-reasoning")])
-    store.save_verdicts(item.id, "norm", [Verdict(passed=True, reason="ок со второй попытки", model="gpt-5-high-reasoning")])
+    store.save_verdicts(item.id, "norm", [Verdict(passed=True, reason="ок", model="gpt-5-high-reasoning")])
+    store.save_verdicts(item.id, "category", [Verdict(passed=True, reason="первая попытка ок", model="gpt-5")])
+    store.save_verdicts(item.id, "category", [Verdict(passed=False, reason="повторная проверка не прошла", model="gpt-5")])
 
     count = publish_ready(store, run_id)
 
     assert count == 0
     assert store.requirements[requirement_id]["status"] == "draft"
     assert store.items[item.id].status == "needs_attention"
-    assert "непройденный вердикт" in store.items[item.id].last_error
+    assert "последний вердикт" in store.items[item.id].last_error
 
 
 def test_publish_ready_only_touches_draft_loaded_items():
