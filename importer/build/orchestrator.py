@@ -193,7 +193,7 @@ class BuildStore(Protocol):
         `steps_load.py`)."""
         ...
 
-    def save_requirement_draft(self, card: dict) -> str:
+    def save_requirement_draft(self, card: dict, *, item_id: str) -> str:
         """Пишет карточку, собранную Assembler'ом (`assembler.py:
         AssembleStep._build_card`), в БД: upsert `public.requirements` по
         `card['requirement']['external_key']`, затем ПОЛНАЯ замена строк
@@ -202,7 +202,17 @@ class BuildStore(Protocol):
         (replace-семантика — не merge построчно, см. докстринг
         `steps_load.py`). `card['citations']` НЕ используется — известный
         пробел (нет ETL LegalX-фрагмент -> локальный `act_paragraphs`, см.
-        докстринг `assembler.py`). Возвращает `requirements.id`."""
+        докстринг `assembler.py`). Возвращает `requirements.id`.
+
+        **Фикс-раунд ревью Задачи 26 (Important)**: `card['requirement']
+        ['status']` от Assembler'а ВСЕГДА `'draft'` — но апсерт может
+        попасть в УЖЕ `published` строку (повторный `load` того же
+        `external_key` после публикации — ре-ревью флоу, Задача 27+). Если
+        существующая строка `status == 'published'`, этот метод НЕ
+        перезаписывает статус (контент — обновляется как обычно, публикацию
+        откатывать нельзя без явного ревью выше по потоку) и пишет пометку
+        через `set_item_note(item_id, ...)` — `item_id` поэтому обязательный
+        параметр этого метода, не опциональный."""
         ...
 
 
@@ -539,18 +549,23 @@ class SupabaseBuildStore:
     def set_item_note(self, item_id: str, note: str) -> None:
         self._db.table("items").update({"last_error": note}).eq("id", item_id).execute()
 
-    def save_requirement_draft(self, card: dict) -> str:
+    def save_requirement_draft(self, card: dict, *, item_id: str) -> str:
         requirement = dict(card["requirement"])
         external_key = requirement.get("external_key")
 
         existing = []
         if external_key:
             existing = (
-                self._client.table("requirements").select("id")
+                self._client.table("requirements").select("id, status")
                 .eq("external_key", external_key).execute().data
             )
         if existing:
             requirement_id = existing[0]["id"]
+            if existing[0]["status"] == "published":
+                # published сохраняется — контент обновляем, статус не
+                # трогаем (докстринг Protocol.save_requirement_draft).
+                requirement = {**requirement, "status": "published"}
+                self.set_item_note(item_id, "existing published, status preserved")
             self._client.table("requirements").update(requirement).eq(
                 "id", requirement_id
             ).execute()

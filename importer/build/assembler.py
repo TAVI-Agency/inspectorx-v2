@@ -64,26 +64,37 @@ court_cases/templates/lawyer_instruction/status_note) — `card['details']['ru']
 
 ## Второй язык (`ctx.data['translations']`, если шаг 'translate' переводил)
 
-`card['details'][lang]` строится из РЕАЛЬНО переведённых полей
-(`translations['summary']`/`['lawyer_instruction']`/`['status_note']`/
-`['sanctions_measures']`), `translation_origin='machine'`.
+**Фикс-раунд ревью Задачи 26 (Important)**: первая версия переиспользовала
+RU `title_verb`/`sanction_summary_line` буквально в `card['contents'][lang]`,
+помечая их `translation_origin='machine'` — непереведённый текст под меткой
+«машинный перевод» вводит в заблуждение (пользователь на UZ/EN версии видел
+бы русский заголовок, подписанный как переведённый). Исправлено: Assembler
+**НЕ создаёт** `card['contents'][lang]` вовсе. Тизер второго языка
+отсутствует — витрина фолбэкнется на `contents['ru']` (решение
+контроллера); настоящий перевод title/sanction_summary остаётся
+ОТЛОЖЕННЫМ follow-up'ом (см. ниже), а не хаком с ложной меткой.
 
-`card['contents'][lang]` — ИЗВЕСТНЫЙ ПРОБЕЛ: 'translate' (Задача 24) в
-STEP_ORDER идёт ДО 'assemble' (Задача 26), поэтому `title_verb`/
-`sanction_summary_line` ещё не существуют в момент перевода — их переводить
-физически нечем (`translations` не несёт полей под них, см. докстринг
-`steps_translate.py:_build_payload`). Строка `contents[lang]` всё равно
-создаётся (иначе смена языка на витрине оставила бы карточку без тизера
-вообще) — переиспользует RU `title_verb`/`sanction_summary_line`
-БУКВАЛЬНО, без перевода, помеченная `translation_origin='machine'` по той
-же логике маркировки «не наш оригинальный русский текст» (решение
-контроллера: строка обязана существовать, а честной альтернативы —
-`verbatim`/новый статус вроде `stale` — в enum `translation_origin`
-(`20260717120000_translation_origin.sql`: только `verbatim`/`machine`) нет.
-Настоящее решение — перенести title/sanction_summary в payload шага
-'translate' (Задача 24) или переставить 'assemble' перед 'translate' в
-STEP_ORDER — вне рамок этой задачи (список шагов фиксирован брифом Задачи
-14, менять STEP_ORDER — ревизия мастер-плана).
+`card['details'][lang]` строится **ТОЛЬКО** из полей, которые
+`ctx.data['translations']` реально несёт (`steps_translate.py:_build_payload`
+переводит именно эти четыре: summary/lawyer_instruction/status_note/
+sanctions[].measure) — `description`/`how_to_comply`/`lawyer_instruction`/
+`status_note`/`sanctions` (санкции — те же article/amount, что и в RU, ТОЛЬКО
+`extra` заменён на перевод, см. `_translate_sanctions`). `documents`/
+`court_cases`/`templates` в `details[lang]` НЕ переносятся из RU (та же
+причина, что и у `contents[lang]` — это непереведённый RU-текст: названия
+шаблонов, судебных дел, заметки): `documents` остаётся `[]` (NOT NULL
+DEFAULT в схеме — не может быть `None`), `court_cases`/`templates` —
+`None` («данных пока нет на этом языке», честно, а не переиспользованный
+чужой язык). `translation_origin='machine'` — эти поля ДЕЙСТВИТЕЛЬНО
+переведены.
+
+Пробел (title/sanction_summary второго языка, `contents[lang]` отсутствует
+целиком) остаётся ОТКРЫТЫМ: 'translate' (Задача 24) в STEP_ORDER идёт ДО
+'assemble' (Задача 26), значит title_verb/sanction_summary_line физически
+не существуют в момент перевода. Кандидат-решение — перенести 'assemble'
+перед 'translate' в STEP_ORDER (список шагов фиксирован брифом Задачи 14—
+менять его сейчас, ОТДЕЛЬНОЙ ревизией мастер-плана, НЕ этим фикс-раундом) —
+NOT DONE здесь по прямому решению контроллера ревью.
 
 русские тексты (`contents['ru']`, `details['ru']`) — `translation_origin=None`
 (наши, не переводы, а не третье значение enum — их NULL, не `'verbatim'`:
@@ -452,26 +463,26 @@ class AssembleStep:
 
         translations = ctx.data.get("translations")
         if translations:
+            # Фикс-раунд ревью Задачи 26 (Important): НЕ создаём
+            # card['contents'][lang] — title/sanction_summary второго языка
+            # не существуют (translate идёт раньше assemble в STEP_ORDER,
+            # см. докстринг модуля «Второй язык») и переиспользование RU
+            # текста под меткой translation_origin='machine' вводит в
+            # заблуждение. details[lang] несёт ТОЛЬКО поля, которые
+            # ctx.data['translations'] реально перевёл — documents/
+            # court_cases/templates НЕ переносятся из RU (тот же непереведённый
+            # текст), остаются пустыми/None.
             lang = translations["lang"]
             translated_lawyer = translations.get("lawyer_instruction")
-            card["contents"][lang] = {
-                # ИЗВЕСТНЫЙ ПРОБЕЛ (докстринг модуля): title/sanction_summary
-                # переиспользуют RU буквально — 'translate' не переводил их
-                # (в STEP_ORDER идёт раньше 'assemble', эти поля тогда ещё
-                # не существовали).
-                "title": level0["title_verb"],
-                "sanction_summary": sanction_summary_line,
-                "translation_origin": "machine",
-            }
             card["details"][lang] = {
                 "description": translations.get("summary"),
                 "how_to_comply": list(translated_lawyer["steps"]) if translated_lawyer else [],
-                "documents": _documents_from_templates(templates),
+                "documents": [],
                 "sanctions": _translate_sanctions(
                     sanctions, translations.get("sanctions_measures") or []
                 ),
-                "court_cases": _court_cases_for_details(court_cases),
-                "templates": templates,
+                "court_cases": None,
+                "templates": None,
                 "lawyer_instruction": translated_lawyer,
                 "status_note": translations.get("status_note"),
                 "translation_origin": "machine",

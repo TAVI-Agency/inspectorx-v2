@@ -444,19 +444,50 @@ def test_translations_populate_details_second_lang_with_machine_origin():
     ]
 
 
-def test_translations_populate_contents_second_lang_with_machine_origin():
+def test_translations_second_lang_details_omit_untranslated_fields():
+    """Фикс-раунд ревью Задачи 26 (Important): `documents`/`court_cases`/
+    `templates` в details[lang] НЕ переносятся из RU — это непереведённый
+    текст (названия шаблонов, судебные дела), а не то, что реально перевёл
+    'translate'. `documents` — `[]` (NOT NULL DEFAULT в схеме, не `None`),
+    `court_cases`/`templates` — `None` («данных пока нет на этом языке»)."""
+    llm = ScriptedLLM(responses=[level0_response()])
+    step = AssembleStep(llm)
+    templates = [{"name": "Форма 3-НДС", "source_url": "https://gov.uz/form3", "note": "бланк"}]
+    court_cases = [
+        {
+            "case_url": "https://sudx.uz/case/1", "case_title": "Дело №1",
+            "summary_line": "штраф", "outcome": "штраф", "amount": 500000,
+        }
+    ]
+    ctx = item_ctx(templates=templates, court_cases=court_cases, translations=TRANSLATIONS)
+
+    step(ctx)
+
+    uz_details = ctx.data["card"]["details"]["uz"]
+    assert uz_details["documents"] == []
+    assert uz_details["court_cases"] is None
+    assert uz_details["templates"] is None
+    # RU details по-прежнему несут непереведённые (свои) данные как есть
+    ru_details = ctx.data["card"]["details"]["ru"]
+    assert ru_details["documents"] != []
+    assert ru_details["court_cases"] is not None
+    assert ru_details["templates"] is not None
+
+
+def test_translations_never_create_second_lang_contents():
+    """Фикс-раунд ревью Задачи 26 (Important): непереведённый RU title/
+    sanction_summary под меткой translation_origin='machine' вводит в
+    заблуждение — Assembler НЕ создаёт card['contents'][lang] вовсе.
+    Витрина фолбэкнется на contents['ru'] (решение контроллера)."""
     llm = ScriptedLLM(responses=[level0_response()])
     step = AssembleStep(llm)
     ctx = item_ctx(translations=TRANSLATIONS)
 
     step(ctx)
 
-    uz_contents = ctx.data["card"]["contents"]["uz"]
-    assert uz_contents["translation_origin"] == "machine"
-    # известный пробел (докстринг assembler.py): title/sanction_summary
-    # переиспользуют RU буквально — 'translate' их не переводил
-    assert uz_contents["title"] == ctx.data["card"]["contents"]["ru"]["title"]
-    assert uz_contents["sanction_summary"] == ctx.data["card"]["contents"]["ru"]["sanction_summary"]
+    card = ctx.data["card"]
+    assert set(card["contents"].keys()) == {"ru"}
+    assert "uz" not in card["contents"]
 
 
 def test_ru_content_and_details_have_null_translation_origin():
