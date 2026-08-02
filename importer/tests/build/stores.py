@@ -180,6 +180,28 @@ class InMemoryStore:
     def finish_run(self, run_id: str, status: str) -> None:
         self.runs[run_id]["status"] = status
 
+    # ── Задача 27: coverage/публикация/менеджер исключений ────────────────
+
+    def get_run(self, run_id: str) -> dict:
+        return dict(self.runs[run_id])
+
+    def list_run_items(self, run_id: str) -> list[ItemRecord]:
+        return [item for item in self.items.values() if item.run_id == run_id]
+
+    def save_coverage_report(self, run_id: str, markdown: str) -> None:
+        self.runs[run_id]["coverage_report"] = markdown
+
+    def list_item_verdicts(self, item_id: str) -> list[Verdict]:
+        result: list[Verdict] = []
+        for stored_item_id, _step, verdicts in self.verdicts:
+            if stored_item_id == item_id:
+                result.extend(verdicts)
+        return result
+
+    def publish_requirement(self, requirement_id: str) -> None:
+        self.requirements[requirement_id]["status"] = "published"
+        self.requirements[requirement_id]["published_at"] = datetime.now(timezone.utc).isoformat()
+
     # ── Задача 26: Assembler/Load ─────────────────────────────────────────
 
     def find_or_create_authority(self, name: str) -> str:

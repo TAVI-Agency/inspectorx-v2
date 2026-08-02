@@ -15,9 +15,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from importer.build.agents import Verdict
+from importer.build.manager import ExceptionManagerLike, NullExceptionManager
 from importer.build.steps import (
     STEP_ORDER,
     ItemContext,
@@ -26,6 +27,9 @@ from importer.build.steps import (
     StepResult,
     get_step,
 )
+
+if TYPE_CHECKING:  # без реального импорта на рантайме (цикл с coverage.py) — см. RunReport.coverage
+    from importer.build.coverage import CoverageReport
 
 # Сколько ПОДРЯД фейлов одного шага допускается, прежде чем айтем уходит в
 # needs_attention. Ретраи не «дожимают» до pass (ADR-0003, решение 4) —
@@ -62,14 +66,26 @@ class MapRecord:
 
 @dataclass
 class RunReport:
-    """Итог `run_group`: сколько айтемов куда пришли."""
+    """Итог `run_group`: сколько айтемов куда пришли.
+
+    Задача 27: `published`/`draft_loaded`/`no_norm`/`needs_attention` —
+    ФИНАЛЬНЫЙ снимок статусов `pipeline.items` этого прогона (пересчитан из
+    стора ПОСЛЕ coverage/публикации, не накопленный по ходу цикла) —
+    `draft_loaded` теперь отдельная категория от `published`: конвейер сам
+    доводит айтем только до `draft_loaded` (шаг 'load'), а `published` —
+    результат `publish_ready` (вызывается автоматически, если
+    `run_group(..., publish=True)`, дефолт). `coverage` — приложенный
+    coverage-отчёт (`importer/build/coverage.py:CoverageReport`), всегда
+    заполнен после `run_group` (coverage считается независимо от `publish`)."""
 
     run_id: str
     map_id: str
     total_items: int
     published: int = 0
+    draft_loaded: int = 0
     no_norm: int = 0
     needs_attention: int = 0
+    coverage: "CoverageReport | None" = None
 
 
 class BuildStore(Protocol):
@@ -174,6 +190,47 @@ class BuildStore(Protocol):
 
     def finish_run(self, run_id: str, status: str) -> None: ...
 
+    # ── Задача 27: coverage/публикация/менеджер исключений ────────────────
+
+    def get_run(self, run_id: str) -> dict:
+        """Строка `pipeline.runs` (как минимум `{"map_id", "status"}`) —
+        `coverage_report` (`coverage.py`) резолвит по ней `map_id` прогона,
+        чтобы сравнить факт (`pipeline.items`) с картой (`pipeline.maps.payload`)."""
+        ...
+
+    def list_run_items(self, run_id: str) -> list[ItemRecord]:
+        """ВСЕ айтемы прогона `run_id`, ЛЮБОГО статуса (в отличие от
+        `list_run_item_texts`, который отдаёт только `draft_loaded`/
+        `published` для дедупа) — вход `coverage_report`/`publish_ready`
+        (`coverage.py`): карта vs факт обязана видеть и `no_norm`, и
+        `needs_attention`, и незавершённые `pending`/`in_progress`, не
+        только успешно закрытые айтемы."""
+        ...
+
+    def save_coverage_report(self, run_id: str, markdown: str) -> None:
+        """Сохраняет markdown coverage-отчёта (`coverage.py:coverage_report`)
+        в `pipeline.runs.coverage_report` — переживает процесс, доступен
+        `build coverage --run <id>` без пересчёта, если нужно свериться с
+        отчётом, который видел оператор во время прогона."""
+        ...
+
+    def list_item_verdicts(self, item_id: str) -> list[Verdict]:
+        """ВСЕ вердикты айтема за весь прогон (все шаги, все попытки —
+        `pipeline.verdicts` копится append-only, `save_verdicts` ничего не
+        удаляет) — вход `publish_ready` (`coverage.py`): публикация идёт,
+        только если КАЖДЫЙ сохранённый вердикт `passed=True` (консервативная
+        политика — см. докстринг `coverage.py:publish_ready`)."""
+        ...
+
+    def publish_requirement(self, requirement_id: str) -> None:
+        """`publish_ready` (`coverage.py`): `public.requirements.status ->
+        'published'`, `published_at -> now()`. Публикация НЕ идёт через
+        `save_requirement_draft` (тот пишет `status` ровно как в карточке,
+        а Assembler всегда кладёт `'draft'`, см. `steps_load.py`) — это
+        отдельное, явное действие, которое дёргает только `publish_ready`
+        (и транзитивно — `build publish` CLI), никогда сам конвейер шагов."""
+        ...
+
     # ── Задача 26: Assembler/Load ────────────────────────────────────────
 
     def find_or_create_authority(self, name: str) -> str:
@@ -217,24 +274,45 @@ class BuildStore(Protocol):
 
 
 def escalate(item: ItemRecord, reason: str, store: BuildStore) -> None:
-    """Заглушка LLM-«менеджера исключений» (ADR-0003, решение 2): пишет
-    `reason` в `last_error` и переводит айтем в `needs_attention`.
-    Полноценный менеджер исключений — Задача 27."""
+    """Пишет `reason` в `last_error` и переводит айтем в `needs_attention` —
+    ветка «эскалация владельцу» решения менеджера исключений
+    (`manager.py:ExceptionManagerLike`, действие `'escalate_owner'`).
+
+    Раньше (до Задачи 27) это была единственная реакция `Orchestrator` на
+    исчерпанные ретраи шага; теперь — один из двух исходов
+    `Orchestrator._handle_exhausted_retries` (второй — `retry_reformulated`,
+    ОДНА дополнительная попытка шага перед эскалацией). Остаётся отдельной
+    функцией модуля (не методом) — используется и напрямую (см.
+    `test_orchestrator.py:test_escalate_writes_reason_to_last_error_and_sets_needs_attention`),
+    и внутри `_handle_exhausted_retries`."""
     store.update_item_status(item.id, "needs_attention", last_error=reason)
 
 
 class Orchestrator:
-    def __init__(self, store: BuildStore, steps: dict[str, StepFn] | None = None):
+    def __init__(
+        self,
+        store: BuildStore,
+        steps: dict[str, StepFn] | None = None,
+        manager: ExceptionManagerLike | None = None,
+    ):
         self._store = store
         # None -> берём шаги из глобального реестра steps.py (реальный
         # прогон); в тестах передаётся словарь фейковых callable напрямую,
         # реестр вообще не трогается.
         self._steps = steps
+        # None -> NullExceptionManager (Задача 27): не трогает LLM, решение
+        # всегда 'escalate_owner' — ровно старое поведение до менеджера
+        # исключений, чтобы существующие вызовы без manager= не заметили
+        # разницы (см. docstring NullExceptionManager в manager.py).
+        self._manager: ExceptionManagerLike = manager or NullExceptionManager()
 
-    def run_group(self, map_id: str) -> RunReport:
-        """Прогоняет все айтемы утверждённой карты по STEP_ORDER. Карта в
-        статусе, отличном от 'approved', — стоп-точка ①: `MapNotApprovedError`
-        ДО создания run/items (ничего не пишется в БД по неапрувленной карте)."""
+    def run_group(self, map_id: str, *, publish: bool = True) -> RunReport:
+        """Прогоняет все айтемы утверждённой карты по STEP_ORDER, затем (Задача
+        27) считает coverage-отчёт и — если `publish=True` (дефолт) —
+        публикует чистые `draft_loaded`-айтемы (`coverage.publish_ready`).
+        Карта в статусе, отличном от 'approved', — стоп-точка ①:
+        `MapNotApprovedError` ДО создания run/items (ничего не пишется в БД
+        по неапрувленной карте)."""
         map_record = self._store.load_map(map_id)
         if map_record.status != "approved":
             raise MapNotApprovedError(
@@ -244,15 +322,44 @@ class Orchestrator:
         run_id = self._store.create_run(map_id)
         items = self._store.create_items(run_id, map_record.payload)
 
-        report = RunReport(run_id=run_id, map_id=map_id, total_items=len(items))
         for item in items:
             item = self._store.update_item_status(item.id, "in_progress")
             ctx = ItemContext(item=item)
-            final_status = self._run_from(ctx, start_index=0)
-            self._tally(report, final_status)
+            self._run_from(ctx, start_index=0)
 
         self._store.finish_run(run_id, "done")
-        return report
+
+        # Локальный импорт — coverage.py импортирует BuildStore ИЗ этого
+        # модуля на уровне модуля; импорт на верхнем уровне orchestrator.py
+        # создал бы цикл. coverage считается ВСЕГДА (независимо от
+        # `publish`) — публикация лишь опциональный шаг поверх него.
+        from importer.build.coverage import coverage_report, publish_ready
+
+        coverage = coverage_report(self._store, run_id, manager=self._manager)
+        self._store.save_coverage_report(run_id, coverage.markdown)
+
+        if publish:
+            publish_ready(self._store, run_id)
+
+        return RunReport(
+            run_id=run_id,
+            map_id=map_id,
+            total_items=len(items),
+            coverage=coverage,
+            **self._final_status_counts(run_id),
+        )
+
+    def _final_status_counts(self, run_id: str) -> dict[str, int]:
+        """Пересчитывает published/draft_loaded/no_norm/needs_attention ИЗ
+        стора ПОСЛЕ coverage/публикации — источник истины один (реальные
+        статусы `pipeline.items`), не ручная бухгалтерия по ходу цикла: она
+        разъехалась бы с фактом, как только `publish_ready` меняет статус
+        айтема уже ПОСЛЕ того, как per-item цикл его протолкнул."""
+        counts = {"published": 0, "draft_loaded": 0, "no_norm": 0, "needs_attention": 0}
+        for item in self._store.list_run_items(run_id):
+            if item.status in counts:
+                counts[item.status] += 1
+        return counts
 
     def rerun_item(self, item_id: str, from_step: str) -> None:
         """Частичный Build для контура C: сбрасывает статус айтема в
@@ -302,7 +409,14 @@ class Orchestrator:
 
     def _run_from(self, ctx: ItemContext, start_index: int) -> str:
         """Гонит `ctx.item` по STEP_ORDER начиная с `start_index`. Возвращает
-        терминальный статус: 'published' | 'no_norm' | 'needs_attention'."""
+        терминальный статус: 'draft_loaded' | 'no_norm' | 'needs_attention'.
+
+        Задача 27: раньше конвейер по завершении STEP_ORDER безусловно писал
+        `'published'` — это конфликтовало с публикацией по вердиктам
+        (`coverage.publish_ready`): шаг 'load' уже пишет `'draft_loaded'`
+        сам (`steps_load.py`), и Orchestrator НЕ обязан переопределять его в
+        `'published'` — терминальный статус конвейера теперь `'draft_loaded'`,
+        публикация — отдельный, ЯВНЫЙ шаг поверх (`run_group`)."""
         for step_name in STEP_ORDER[start_index:]:
             step_fn = self._step(step_name)
             consecutive_fails = 0
@@ -336,22 +450,64 @@ class Orchestrator:
                     reason = error or (
                         f"шаг {step_name!r}: {consecutive_fails} провалов подряд"
                     )
-                    escalate(ctx.item, reason, self._store)
-                    return "needs_attention"  # к следующему item, конвейер не публикует
+                    outcome = self._handle_exhausted_retries(step_fn, step_name, ctx, reason)
+                    if outcome is None:
+                        break  # доп. попытка менеджера удалась — к следующему шагу
+                    return outcome  # 'no_norm' | 'needs_attention'
                 self._store.bump_retry(ctx.item.id)
                 # тот же шаг — ретрай (while продолжается)
 
-        self._store.update_item_status(ctx.item.id, "published")
-        return "published"
+        self._store.update_item_status(ctx.item.id, "draft_loaded")
+        return "draft_loaded"
 
-    @staticmethod
-    def _tally(report: RunReport, final_status: str) -> None:
-        if final_status == "published":
-            report.published += 1
-        elif final_status == "no_norm":
-            report.no_norm += 1
-        elif final_status == "needs_attention":
-            report.needs_attention += 1
+    def _handle_exhausted_retries(
+        self, step_fn: StepFn, step_name: str, ctx: ItemContext, reason: str,
+    ) -> str | None:
+        """Вызывается РОВНО один раз на исчерпанные `MAX_STEP_RETRIES` подряд
+        фейлы шага (решение контроллера Задачи 27: менеджер исключений
+        вызывается «ТОЛЬКО при N подряд фейлов»). Спрашивает
+        `self._manager.review(...)`:
+
+        - `'retry_reformulated'` -> кладёт `note` в `ctx.data['manager_note']`
+          и делает РОВНО ОДНУ дополнительную попытку того же шага (менеджер
+          НЕ спрашивается снова, даже если и эта попытка провалится —
+          иначе никакой верхней границы попыток бы не было). Успех ->
+          `None` (сигнал вызывающему коду: `break`, идти к следующему шагу
+          STEP_ORDER как обычно). `no_norm`/`fail` доп. попытки -> тот же
+          терминальный исход, что и у обычного исчерпания (`no_norm` для
+          шага 'norm', иначе `escalate`);
+        - `'escalate_owner'` (или любое иное/невалидное действие —
+          консервативный дефолт) -> `escalate(ctx.item, reason, store)`, ровно
+          как до Задачи 27.
+
+        Менеджер НЕ публикует (докстринг `manager.py`) — здесь только выбор
+        между доп. попыткой и эскалацией."""
+        decision = self._manager.review(ctx.item, [reason])
+        if decision.get("action") != "retry_reformulated":
+            escalate(ctx.item, reason, self._store)
+            return "needs_attention"
+
+        ctx.data["manager_note"] = decision.get("note")
+        retry_result = self._call_step(step_fn, step_name, ctx)
+        if retry_result.verdicts:
+            self._store.save_verdicts(ctx.item.id, step_name, retry_result.verdicts)
+
+        retry_status = retry_result.status
+        retry_error = retry_result.error
+        if retry_status == "no_norm" and step_name != "norm":
+            retry_status = "fail"
+            retry_error = f"шаг {step_name!r} вернул no_norm — только 'norm' может"
+
+        if retry_status == "ok":
+            return None
+        if retry_status == "no_norm":
+            self._store.update_item_status(ctx.item.id, "no_norm")
+            return "no_norm"
+
+        # Доп. попытка менеджера тоже провалилась — эскалация владельцу,
+        # менеджер второй раз не спрашивается.
+        escalate(ctx.item, retry_error or reason, self._store)
+        return "needs_attention"
 
 
 # ============================================================================
@@ -531,6 +687,34 @@ class SupabaseBuildStore:
         self._db.table("runs").update(
             {"status": status, "finished_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", run_id).execute()
+
+    # ── Задача 27: coverage/публикация/менеджер исключений ─────────────────
+
+    def get_run(self, run_id: str) -> dict:
+        rows = self._db.table("runs").select("*").eq("id", run_id).execute().data
+        if not rows:
+            raise ValueError(f"Прогон {run_id} не найден в pipeline.runs")
+        return rows[0]
+
+    def list_run_items(self, run_id: str) -> list[ItemRecord]:
+        rows = self._db.table("items").select("*").eq("run_id", run_id).execute().data
+        return [_item_from_row(row) for row in rows]
+
+    def save_coverage_report(self, run_id: str, markdown: str) -> None:
+        self._db.table("runs").update({"coverage_report": markdown}).eq("id", run_id).execute()
+
+    def list_item_verdicts(self, item_id: str) -> list[Verdict]:
+        rows = self._db.table("verdicts").select("*").eq("item_id", item_id).execute().data
+        return [
+            Verdict(passed=row["verdict"] == "pass", reason=row.get("reason") or "", model=row.get("model") or "")
+            for row in rows
+        ]
+
+    def publish_requirement(self, requirement_id: str) -> None:
+        self._client.table("requirements").update({
+            "status": "published",
+            "published_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", requirement_id).execute()
 
     # ── Задача 26: Assembler/Load ─────────────────────────────────────────
 

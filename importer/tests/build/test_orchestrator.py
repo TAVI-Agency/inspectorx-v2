@@ -94,10 +94,12 @@ def approved_map(**over) -> MapRecord:
 
 
 def test_step_order_matches_brief_exactly():
+    # 'coverage' убран из STEP_ORDER Задачей 27 — стал run-level функцией
+    # (coverage.coverage_report), а не per-item шагом, см. докстринг steps.py.
     assert STEP_ORDER == [
         "norm", "summary", "category", "rule", "scope", "lifecycle",
         "sanctions", "cases", "samples", "lawyer", "translate", "dedup",
-        "assemble", "load", "coverage",
+        "assemble", "load",
     ]
 
 
@@ -416,7 +418,10 @@ def test_rerun_item_runs_only_steps_from_given_step_onward():
         assert steps[name].call_count == 0
     for name in STEP_ORDER[idx:]:
         assert steps[name].call_count == 1
-    assert store.items["item-1"].status == "published"
+    # rerun_item НЕ вызывает coverage/publish_ready (Задача 27 — те привязаны
+    # к run_group, а не к частичному Build контура C) — терминальный статус
+    # конвейера сам по себе теперь 'draft_loaded', не 'published'.
+    assert store.items["item-1"].status == "draft_loaded"
     assert store.status_history[0] == ("item-1", "in_progress")
 
 
@@ -442,5 +447,159 @@ def test_rerun_item_can_also_escalate_if_tail_keeps_failing():
     orchestrator.rerun_item("item-1", from_step="translate")
 
     assert always_fails.call_count == MAX_STEP_RETRIES
-    assert store.items["item-1"].status == "needs_attention"
-    assert store.items["item-1"].last_error == "снова не прошло"
+
+
+# ── менеджер исключений (Задача 27): вызов ТОЛЬКО на N подряд фейлов ────
+
+
+class ScriptedManager:
+    """Фейковый `ExceptionManagerLike`: отдаёт решения по очереди (последнее
+    повторяется, если вызовов больше), фиксирует все `(item_id, history)`."""
+
+    def __init__(self, *decisions: dict):
+        self._decisions = list(decisions) or [{"action": "escalate_owner", "note": None}]
+        self.calls: list[tuple[str, list[str]]] = []
+
+    def review(self, item, history):
+        self.calls.append((item.id, list(history)))
+        idx = min(len(self.calls) - 1, len(self._decisions) - 1)
+        return self._decisions[idx]
+
+
+def test_manager_default_is_null_and_behaves_like_old_escalate():
+    """Orchestrator без явного manager= ведёт себя РОВНО как до Задачи 27:
+    NullExceptionManager не трогает LLM, решение всегда escalate_owner."""
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    always_fails = ScriptedStep(StepResult(status="fail", error="верификация не прошла"))
+    steps = make_steps({"sanctions": always_fails})
+    orchestrator = Orchestrator(store, steps=steps)  # manager= не передан
+
+    report = orchestrator.run_group("map-1")
+
+    assert always_fails.call_count == MAX_STEP_RETRIES  # без доп. попытки
+    assert report.needs_attention == 1
+    item = next(iter(store.items.values()))
+    assert item.status == "needs_attention"
+    assert item.last_error == "верификация не прошла"
+
+
+def test_manager_retry_reformulated_triggers_exactly_one_extra_attempt_then_succeeds():
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    flaky = ScriptedStep(
+        StepResult(status="fail", error="e1"),
+        StepResult(status="fail", error="e2"),
+        StepResult(status="fail", error="e3"),
+        StepResult(status="ok"),
+    )
+    steps = make_steps({"sanctions": flaky})
+    manager = ScriptedManager({"action": "retry_reformulated", "note": "уточни формулировку"})
+    orchestrator = Orchestrator(store, steps=steps, manager=manager)
+
+    report = orchestrator.run_group("map-1")
+
+    # 3 обычных провала + РОВНО одна доп. попытка от менеджера — не больше.
+    assert flaky.call_count == MAX_STEP_RETRIES + 1
+    assert len(manager.calls) == 1  # доп. попытка НЕ триггерит менеджера снова
+    assert manager.calls[0][1] == ["e3"]  # история — причина последнего провала
+    assert report.needs_attention == 0
+    item = next(iter(store.items.values()))
+    assert item.status in ("draft_loaded", "published")
+    # note менеджера доехал в ctx.data ПЕРЕД доп. попыткой
+    assert flaky.contexts[-1].data.get("manager_note") == "уточни формулировку"
+
+
+def test_manager_retry_reformulated_extra_attempt_fails_escalates_to_needs_attention():
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    always_fails = ScriptedStep(StepResult(status="fail", error="верификация не прошла"))
+    steps = make_steps({"sanctions": always_fails})
+    manager = ScriptedManager({"action": "retry_reformulated", "note": "note"})
+    orchestrator = Orchestrator(store, steps=steps, manager=manager)
+
+    report = orchestrator.run_group("map-1")
+
+    assert always_fails.call_count == MAX_STEP_RETRIES + 1  # доп. попытка тоже провалилась
+    # 2 вызова менеджера — ОБЕ разрешённые точки (докстринг manager.py): 1) сам
+    # ретрай-эскалатор (после MAX_STEP_RETRIES), 2) coverage_report, который
+    # run_group зовёт следом и находит этот же айтем в needs_attention-пробелах.
+    assert len(manager.calls) == 2
+    assert report.needs_attention == 1
+    item = next(iter(store.items.values()))
+    assert item.status == "needs_attention"
+
+
+def test_manager_escalate_owner_matches_old_behavior_and_no_extra_attempt():
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    always_fails = ScriptedStep(StepResult(status="fail", error="верификация не прошла"))
+    steps = make_steps({"sanctions": always_fails})
+    manager = ScriptedManager({"action": "escalate_owner", "note": None})
+    orchestrator = Orchestrator(store, steps=steps, manager=manager)
+
+    report = orchestrator.run_group("map-1")
+
+    assert always_fails.call_count == MAX_STEP_RETRIES  # без доп. попытки
+    # 2 вызова — ретрай-эскалатор + coverage_report (тот же принцип, что и
+    # в test_manager_retry_reformulated_extra_attempt_fails_escalates_to_needs_attention).
+    assert len(manager.calls) == 2
+    assert report.needs_attention == 1
+    item = next(iter(store.items.values()))
+    assert item.status == "needs_attention"
+    assert item.last_error == "верификация не прошла"
+
+
+def test_manager_retry_reformulated_extra_attempt_no_norm_from_norm_step_is_terminal():
+    """Доп. попытка МЕНЕДЖЕРА шага 'norm' тоже уважает контракт no_norm —
+    терминальный исход, не needs_attention."""
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    flaky = ScriptedStep(
+        StepResult(status="fail", error="e1"),
+        StepResult(status="fail", error="e2"),
+        StepResult(status="fail", error="e3"),
+        StepResult(status="no_norm"),
+    )
+    steps = make_steps({"norm": flaky})
+    manager = ScriptedManager({"action": "retry_reformulated", "note": "note"})
+    orchestrator = Orchestrator(store, steps=steps, manager=manager)
+
+    report = orchestrator.run_group("map-1")
+
+    assert flaky.call_count == MAX_STEP_RETRIES + 1
+    assert report.no_norm == 1
+    assert report.needs_attention == 0
+    item = next(iter(store.items.values()))
+    assert item.status == "no_norm"
+
+
+# ── run_group: coverage/публикация (Задача 27) ───────────────────────────
+
+
+def test_run_group_default_publishes_clean_items_and_attaches_coverage():
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    orchestrator = Orchestrator(store, steps=make_steps())
+
+    report = orchestrator.run_group("map-1")
+
+    assert report.published == 1
+    assert report.draft_loaded == 0
+    assert report.coverage is not None
+    assert report.coverage.closed == 1
+    item = next(iter(store.items.values()))
+    assert item.status == "published"
+
+
+def test_run_group_no_publish_flag_leaves_item_draft_loaded():
+    store = InMemoryStore()
+    store.maps["map-1"] = approved_map()
+    orchestrator = Orchestrator(store, steps=make_steps())
+
+    report = orchestrator.run_group("map-1", publish=False)
+
+    assert report.published == 0
+    assert report.draft_loaded == 1
+    item = next(iter(store.items.values()))
+    assert item.status == "draft_loaded"
