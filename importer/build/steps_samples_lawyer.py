@@ -61,19 +61,24 @@ Verifier-колонки (в отличие от строки Verifier (Samples))
 `ctx.data['lawyer_instruction'] = {"verdict", "steps"}`,
 `ctx.data['status_note']` — отдельно.
 
-### `status_note` — код детерминированно решает, обязателен ли он
+### `status_note` — код детерминированно решает, обязателен ли он, В ОКНЕ близости
 
 `docs/miro-agent-flow.csv` (Assembler): «что успеть до даты X» кладётся в
-detailed info, когда есть БЛИЖАЙШАЯ будущая дата. Код (не LLM) вычисляет
+detailed info, когда есть БЛИЖАЙШАЯ будущая дата — но «близкая» не значит
+«любая будущая»: дата 2031 года не должна гейтить `status_note` так же, как
+дата через неделю (Important ревью Задачи 23). Код (не LLM) вычисляет
 `_closest_future_lifecycle_date` по `ctx.data['lifecycle']['effective_from']`/
 `['valid_to']` относительно "сегодня" (`today` — параметр конструктора для
-детерминированных тестов, `date.today()` по умолчанию) и включает в промпт
-явную инструкцию — заполнить `status_note` (если дата есть) либо вернуть
-`status_note: null` (если дат нет). Ответ, который расходится с этим
-требованием (непустой `status_note` без близкой даты, либо пустой/null
-`status_note` при наличии близкой даты) — невалидный ответ, тот же путь
-ретрая, что и обычный невалидный контракт: не позволяем LLM ни выдумать
-несуществующий дедлайн, ни промолчать про реальный.
+детерминированных тестов, `date.today()` по умолчанию), но учитывает ТОЛЬКО
+даты внутри окна `STATUS_NOTE_WINDOW_DAYS` (см. докстринг константы — «почему
+180») — `today < date <= today + 180 дней`. Дата дальше окна трактуется как
+«близкой даты нет» (тот же код-путь, что и её полное отсутствие). Затем код
+включает в промпт явную инструкцию — заполнить `status_note` (если дата в
+окне есть) либо вернуть `status_note: null` (если дат в окне нет). Ответ,
+который расходится с этим требованием (непустой `status_note` без близкой
+даты в окне, либо пустой/null `status_note` при наличии такой даты) —
+невалидный ответ, тот же путь ретрая, что и обычный невалидный контракт: не
+позволяем LLM ни выдумать несуществующий дедлайн, ни промолчать про реальный.
 
 Невалидный ответ (любая из причин выше) -> один ретрай с указанием ошибки ->
 всё ещё невалиден -> `StepResult(fail)` (тот же паттерн, что и у Rule-maker/
@@ -97,7 +102,7 @@ detailed info, когда есть БЛИЖАЙШАЯ будущая дата. �
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from importer.build.agents import (
     Classifier,
@@ -199,7 +204,13 @@ def _context_text(ctx: ItemContext) -> str:
 
 def _validate_judge(data: object) -> dict | None:
     """Достаёт `{"needed", "document_type"}` из ответа судьи либо `None`,
-    если ответ не проходит контракт — сигнал «невалидный ответ»."""
+    если ответ не проходит контракт — сигнал «невалидный ответ». При
+    `needed=True` `document_type` ОБЯЗАН быть непустой строкой (Minor ревью
+    Задачи 23): иначе `document_type or context_text` в `SamplesStep._run`
+    подставил бы ПОЛНЫЙ контекст требования в веб-поиск вместо конкретного
+    типа документа, который и должен был назвать судья. У судьи, в отличие
+    от юриста/Rule-maker, нет ретрая — невалидный ответ сразу поднимает
+    `ValueError`, шаг завершается `StepResult(fail)` с понятной причиной."""
     if not isinstance(data, dict):
         return None
     needed = data.get("needed")
@@ -207,6 +218,8 @@ def _validate_judge(data: object) -> dict | None:
         return None
     document_type = data.get("document_type")
     if document_type is not None and not isinstance(document_type, str):
+        return None
+    if needed and not document_type:
         return None
     return {"needed": needed, "document_type": document_type}
 
@@ -276,8 +289,9 @@ class SamplesStep:
             ctx.data["templates"] = None
             return StepResult(status="ok")
 
-        document_type = judged["document_type"] or context_text
-        query = f"{SAMPLES_QUERY_PREFIX} {document_type}"
+        # document_type гарантированно непустая строка здесь — _validate_judge
+        # уже отбраковал needed=True с пустым/отсутствующим document_type.
+        query = f"{SAMPLES_QUERY_PREFIX} {judged['document_type']}"
         results = self._searcher.search(query)
 
         if not results:
@@ -352,14 +366,32 @@ LAWYER_PROFILE = Profile(
 )
 
 
+# Ширина окна «близости» для status_note (Important ревью Задачи 23: без
+# порога 2031 год гейтил бы status_note так же, как следующая неделя).
+# Полгода — переходные периоды нормативки в УЗ обычно исчисляются месяцами
+# (см. пример 6 месяцев в docstring 'lifecycle' в steps_scope_lifecycle.py:
+# `transition_until` — типичный переходный период), а не годами; за
+# горизонтом полугода нота «успеть до даты X» вводит пользователя в
+# заблуждение срочностью, которой в реальности нет. Продуктовое решение
+# контроллера, НЕ вывод из данных — при появлении статистики по фактическим
+# срокам переходных периодов (Задача 29, трейсинг) можно пересмотреть.
+STATUS_NOTE_WINDOW_DAYS = 180
+
+
 def _closest_future_lifecycle_date(lifecycle: dict | None, today: date) -> tuple[str, date] | None:
-    """Ближайшая БУДУЩАЯ дата среди `effective_from`/`valid_to` карточки
-    жизненного цикла (`docstring` модуля — только эти два поля, не
+    """Ближайшая БЛИЗКАЯ БУДУЩАЯ дата среди `effective_from`/`valid_to`
+    карточки жизненного цикла (`docstring` модуля — только эти два поля, не
     `transition_until`, решение контроллера задачи), либо `None`, если таких
-    дат нет (лежат в прошлом, отсутствуют, либо `lifecycle` вообще не
-    положен в `ctx` — партиальный `rerun_item` без шага 'lifecycle')."""
+    дат нет: лежат в прошлом, отсутствуют, `lifecycle` вообще не положен в
+    `ctx` (партиальный `rerun_item` без шага 'lifecycle'), ЛИБО лежат ДАЛЬШЕ
+    `STATUS_NOTE_WINDOW_DAYS` от `today` — дата дальше окна трактуется как
+    «близкой даты нет» (тот же код-путь, что и её полное отсутствие).
+
+    Окно: `today < date <= today + STATUS_NOTE_WINDOW_DAYS` (граница
+    ВКЛЮЧИТЕЛЬНО — дата ровно на 180-й день ещё считается близкой)."""
     if not lifecycle:
         return None
+    window_end = today + timedelta(days=STATUS_NOTE_WINDOW_DAYS)
     candidates: list[tuple[str, date]] = []
     for field_name in _LIFECYCLE_FUTURE_DATE_FIELDS:
         raw = lifecycle.get(field_name)
@@ -369,7 +401,7 @@ def _closest_future_lifecycle_date(lifecycle: dict | None, today: date) -> tuple
             parsed = date.fromisoformat(raw)
         except (TypeError, ValueError):
             continue
-        if parsed > today:
+        if today < parsed <= window_end:
             candidates.append((field_name, parsed))
     if not candidates:
         return None
