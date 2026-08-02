@@ -75,7 +75,10 @@
 - Сессии Claude: старые в `~/.claude/projects/`, новые в `~/.claude-personal/projects/`.
 - lex.uz: `/docs/-N` и `/docs/N` — разные документы; у каждой языковой версии свой doc_id;
   UZ-версию искать по ссылкам в шапке (`docContentHeader__item-link`).
-- Supabase CLI: `env -u SUPABASE_ACCESS_TOKEN`; MCP смотрит в чужой аккаунт — CLI/psql.
+- Supabase (обновлено 02.08.2026 после переезда проектов на основной аккаунт): токен
+  `SUPABASE_ACCESS_TOKEN` из `.env.importer` протух (`403`), CLI залогинен в посторонний
+  аккаунт, MCP не авторизован. Работает только `IX_SUPABASE_SERVICE_KEY` — через него и
+  ходить. Порядок починки — `INFRA_ACCOUNTS.md`.
 - Сетевые команды в песочнице падают — dangerouslyDisableSandbox.
 - gh: два аккаунта; репо видит только TAVI-Agency (`gh auth switch -u TAVI-Agency`).
 - Тесты: `.venv-importer/bin/python -m pytest importer/tests -q` из корня worktree.
