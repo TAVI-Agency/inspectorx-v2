@@ -103,6 +103,16 @@ class BuildStore(Protocol):
         попадает в карту."""
         ...
 
+    def list_group_product_types(self, group_ref: str) -> list[dict]:
+        """Типы каталога `catalog.product_types` (ADR-0004), чей код
+        (`hs_code` у товаров либо `unspsc_code` у услуг) начинается с
+        `group_ref` — кандидаты привязки шага 'scope' (Задача 20): каждый
+        элемент `{"id", "hs_code", "unspsc_code", "name_ru"}` (ровно как
+        строка таблицы — один из кодов всегда `None`, см. `check` в
+        `20260803100000_catalog_schema.sql`). Пустой список — валидный
+        исход (у группы пока нет привязанных типов в каталоге), не ошибка."""
+        ...
+
     def create_run(self, map_id: str) -> str: ...
 
     def create_items(self, run_id: str, payload: list[dict]) -> list[ItemRecord]: ...
@@ -326,6 +336,15 @@ class SupabaseBuildStore:
             .select("slug").eq("is_active", True).execute().data
         )
         return [row["slug"] for row in rows]
+
+    def list_group_product_types(self, group_ref: str) -> list[dict]:
+        rows = (
+            self._client.schema("catalog").table("product_types")
+            .select("id, hs_code, unspsc_code, name_ru")
+            .or_(f"hs_code.like.{group_ref}%,unspsc_code.like.{group_ref}%")
+            .execute().data
+        )
+        return rows
 
     def create_run(self, map_id: str) -> str:
         row = self._db.table("runs").insert({"map_id": map_id}).execute().data[0]
