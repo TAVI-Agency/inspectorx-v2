@@ -39,6 +39,13 @@ class MapNotApprovedError(Exception):
     ① (единственный ручной gate конвейера, ADR-0003 решение 2)."""
 
 
+class MapAlreadyApprovedError(Exception):
+    """`Cartographer.build_map` (Задача 15) вызван повторно на ту же
+    `(group_ref, jurisdiction)`, чья карта уже `approved` — `save_map`
+    перезаписывает только `draft`; апрувленную карту трогать нельзя,
+    новый цикл — явное решение владельца (реджект + новый `build_map`)."""
+
+
 @dataclass(frozen=True)
 class MapRecord:
     """Строка `pipeline.maps`, какой её видит `Orchestrator`."""
@@ -48,6 +55,8 @@ class MapRecord:
     jurisdiction: str
     status: str
     payload: list[dict]
+    approved_at: str | None = None
+    approved_by: str | None = None
 
 
 @dataclass
@@ -69,6 +78,30 @@ class BuildStore(Protocol):
     (`importer/tests/build/test_orchestrator.py`), никакой живой БД."""
 
     def load_map(self, map_id: str) -> MapRecord: ...
+
+    def save_map(self, group_ref: str, jurisdiction: str, payload: list[dict]) -> str:
+        """Cartographer (Задача 15): upsert по уникальному ключу
+        `(group_ref, jurisdiction)`. Существующая `draft`-карта
+        перезаписывается новым `payload` (тот же `id`); если существующая
+        карта уже `approved` — `MapAlreadyApprovedError`, ничего не
+        перезаписывается. Отсутствующая строка — обычная вставка новой
+        `draft`-карты. Возвращает `id` карты."""
+        ...
+
+    def set_map_status(
+        self, map_id: str, status: str, *, approved_by: str | None = None
+    ) -> MapRecord:
+        """CLI `build approve-map` / `build reject-map` (Задача 15):
+        `draft -> approved | rejected`. При `status='approved'` заполняет
+        `approved_at` (текущее время) и `approved_by`; при `'rejected'` эти
+        поля не трогает."""
+        ...
+
+    def list_category_slugs(self) -> list[str]:
+        """Активные слаги `public.requirement_categories` — ось валидации
+        Cartographer (Задача 15): `category_slug` вне этого списка не
+        попадает в карту."""
+        ...
 
     def create_run(self, map_id: str) -> str: ...
 
@@ -205,6 +238,18 @@ class Orchestrator:
 # ============================================================================
 
 
+def _map_from_row(row: dict) -> MapRecord:
+    return MapRecord(
+        id=row["id"],
+        group_ref=row["group_ref"],
+        jurisdiction=row["jurisdiction"],
+        status=row["status"],
+        payload=row["payload"],
+        approved_at=row.get("approved_at"),
+        approved_by=row.get("approved_by"),
+    )
+
+
 def _item_from_row(row: dict) -> ItemRecord:
     return ItemRecord(
         id=row["id"],
@@ -225,20 +270,62 @@ class SupabaseBuildStore:
     `importer/tests/build/test_orchestrator.py`."""
 
     def __init__(self, client):
+        self._client = client  # схема public по умолчанию — requirement_categories
         self._db = client.schema("pipeline")
 
     def load_map(self, map_id: str) -> MapRecord:
         rows = self._db.table("maps").select("*").eq("id", map_id).execute().data
         if not rows:
             raise ValueError(f"Карта {map_id} не найдена в pipeline.maps")
-        row = rows[0]
-        return MapRecord(
-            id=row["id"],
-            group_ref=row["group_ref"],
-            jurisdiction=row["jurisdiction"],
-            status=row["status"],
-            payload=row["payload"],
+        return _map_from_row(rows[0])
+
+    def save_map(self, group_ref: str, jurisdiction: str, payload: list[dict]) -> str:
+        existing = (
+            self._db.table("maps").select("id, status")
+            .eq("group_ref", group_ref).eq("jurisdiction", jurisdiction)
+            .execute().data
         )
+        if existing:
+            row = existing[0]
+            if row["status"] == "approved":
+                raise MapAlreadyApprovedError(
+                    f"Карта {group_ref}/{jurisdiction} (id={row['id']}) уже approved — "
+                    "повторный build_map запрещён, см. Cartographer (Задача 15)"
+                )
+            updated = (
+                self._db.table("maps")
+                .update({"payload": payload, "status": "draft"})
+                .eq("id", row["id"]).execute().data[0]
+            )
+            return updated["id"]
+        inserted = (
+            self._db.table("maps")
+            .insert({
+                "group_ref": group_ref,
+                "jurisdiction": jurisdiction,
+                "payload": payload,
+                "status": "draft",
+            })
+            .execute().data[0]
+        )
+        return inserted["id"]
+
+    def set_map_status(
+        self, map_id: str, status: str, *, approved_by: str | None = None
+    ) -> MapRecord:
+        patch: dict = {"status": status}
+        if status == "approved":
+            patch["approved_at"] = datetime.now(timezone.utc).isoformat()
+            patch["approved_by"] = approved_by
+        row = self._db.table("maps").update(patch).eq("id", map_id).execute().data[0]
+        return _map_from_row(row)
+
+    def list_category_slugs(self) -> list[str]:
+        rows = (
+            self._client.table("requirement_categories")
+            .select("slug").eq("is_active", True).execute().data
+        )
+        return [row["slug"] for row in rows]
 
     def create_run(self, map_id: str) -> str:
         row = self._db.table("runs").insert({"map_id": map_id}).execute().data[0]
