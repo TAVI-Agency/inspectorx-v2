@@ -34,6 +34,20 @@ status_note, sanctions[].measure) на целевой язык (uz/en/...). Verb
 - 'uz': перевод на узбекский (UZ-юрисдикция);
 - 'en': перевод на английский (AE-юрисдикция);
 - иные: пропуск, контент не требует перевода (КЗ: content уже ru, перевода не нужен).
+
+## Почему нет фильтра translation_origin='machine'
+
+Все поля, перечисленные в payload (summary, lawyer_instruction, status_note,
+sanctions[].measure), являются ИИ-текстами **по построению** — их произвели
+наши агенты в шагах STEP_ORDER ПЕРЕД шагом 'translate'. Verbatim-тексты
+(norm_fragment.content из LegalX) структурно не входят в payload и не
+переводятся, что гарантируется на уровне _build_payload() и доказывается
+пин-тестом `test_translate_step_verbatim_not_in_prompt`.
+
+Маркер `translation_origin='machine'` выставляет шаг 'load' (Задача 26) при
+записи строк uz/en из ctx.data['translations'] в таблицу requirement_contents.
+Фильтра в ctx.data здесь быть не должно — он артефакт БД, а не контракт
+конвейера.
 """
 from __future__ import annotations
 
@@ -144,7 +158,13 @@ class TranslateStep:
         return StepResult(status="ok", verdicts=[verdict])
 
     def _build_payload(self, ctx: ItemContext) -> dict:
-        """Собирает данные для перевода: только ИИ-тексты, не verbatim."""
+        """Собирает данные для перевода: только ИИ-тексты, не verbatim.
+
+        Все перечисленные поля (summary, lawyer_instruction, status_note,
+        sanctions[].measure) являются ИИ-генерируемыми текстами ПО ПОСТРОЕНИЮ
+        (произведены нашими агентами перед этим шагом). Verbatim-тексты из
+        LegalX (norm_fragment.content) структурно не входят в payload.
+        translation_origin='machine' будет выставлен шагом 'load' при записи в БД."""
         payload = {
             "summary": ctx.data.get("summary", ""),
             "lawyer_instruction": ctx.data.get("lawyer_instruction"),
