@@ -14,11 +14,17 @@
  *  - id типов — детерминированный uuid (md5-паттерн, как в generate_services_seed.mjs
  *    и generate_v1_content_migration.mjs), чтобы перегенерация не меняла id;
  *  - товары: тип каталога = HS6-префикс (первые 6 цифр 10-значного ТН ВЭД).
- *    Имя типа при нескольких товарах в группе — эвристика «имя с наименьшей
- *    длиной среди товаров группы» (решение задачи 5). Эвристика простая и на
- *    части групп даёт невыразительное имя («прочие», «белые») — это ожидаемо
- *    для 10-значных позиций тарифа, где name_ru — самый глубокий уровень
- *    описания, а не название товарной категории; см. отчёт task-5-report.md;
+ *    Имя типа — категорийное, из hierarchy_path (fix после ревью задачи 5:
+ *    первая версия брала «имя с наименьшей длиной среди товаров группы» и на
+ *    части групп давала невыразительное «прочие»/«прочее»). Берём для каждого
+ *    товара группы путь [category_name, ...levels] (от общего к частному) и
+ *    ищем самый длинный общий префикс путей всех товаров HS6-группы — это и
+ *    есть «ближайший к HS6 категорийный уровень, общий для всей группы».
+ *    Имя типа = последний элемент этого префикса (для группы из 1 товара он
+ *    совпадает с полным путём, включая исходный name_ru). Фолбэк на прежнюю
+ *    эвристику (имя с наименьшей длиной) — только если у товаров группы нет
+ *    hierarchy_path или общий префикс пуст (в текущих данных не встречается,
+ *    но код держит эту ветку на случай будущих товаров без разметки);
  *  - услуги: тип каталога = ОКЭД-код услуги, UNSPSC — из константы
  *    UNSPSC_BY_OKED. ОКЭД без записи в константе получают синтетический
  *    UNSPSC-код с пометкой «уточнить» (выводится в консоль и должно попасть
@@ -67,7 +73,9 @@ function dbQuery(sql) {
 
 // --- читаем текущие данные из локальной БД ---------------------------------
 
-const products = dbQuery('select hs_code, name_ru from public.products order by hs_code;')
+const products = dbQuery(
+  'select hs_code, name_ru, hierarchy_path from public.products order by hs_code;',
+)
 const services = dbQuery(
   "select oked_code, ikpu_code, name_ru from public.services order by oked_code;",
 )
@@ -82,25 +90,44 @@ for (const p of products)
 
 // --- типы товаров: группировка по HS6 ---------------------------------------
 
-const goodGroups = new Map() // hs6 -> [{ hs_code, name_ru }]
+const goodGroups = new Map() // hs6 -> [{ hs_code, name_ru, hierarchy_path }]
 for (const p of products) {
   const hs6 = p.hs_code.slice(0, 6)
   if (!goodGroups.has(hs6)) goodGroups.set(hs6, [])
   goodGroups.get(hs6).push(p)
 }
 
-const heuristicSamples = [] // для отчёта: как эвристика отработала на группах >1 товара
+// Прежняя эвристика — теперь только фолбэк, если у группы нет hierarchy_path
+// или общего категорийного уровня.
+const shortestNameOf = (items) => [...items].sort((a, b) => a.name_ru.length - b.name_ru.length)[0].name_ru
+
+// Путь товара «от общего к частному»: category_name, затем levels (v1-breadcrumb).
+const categoryPathOf = (p) => [p.hierarchy_path?.category_name, ...(p.hierarchy_path?.levels ?? [])].filter(Boolean)
+
+// Самый длинный общий префикс путей (поэлементное сравнение строк).
+function longestCommonPrefix(paths) {
+  if (paths.length === 0) return []
+  let prefix = paths[0]
+  for (const p of paths.slice(1)) {
+    let i = 0
+    while (i < prefix.length && i < p.length && prefix[i] === p[i]) i++
+    prefix = prefix.slice(0, i)
+    if (prefix.length === 0) break
+  }
+  return prefix
+}
+
+const namingSamples = [] // для отчёта: было (старая эвристика) -> стало (категорийное имя)
 const goodTypes = new Map() // hs6 -> { id, hs6, name }
 for (const [hs6, items] of goodGroups) {
-  const shortest = [...items].sort((a, b) => a.name_ru.length - b.name_ru.length)[0]
-  goodTypes.set(hs6, { id: uuid(`product_type:good:${hs6}`), hs6, name: shortest.name_ru })
-  if (items.length > 1 && heuristicSamples.length < 5)
-    heuristicSamples.push({
-      hs6,
-      count: items.length,
-      chosen: shortest.name_ru,
-      longest: [...items].sort((a, b) => b.name_ru.length - a.name_ru.length)[0].name_ru,
-    })
+  const paths = items.map(categoryPathOf)
+  const lcp = longestCommonPrefix(paths)
+  const oldName = shortestNameOf(items)
+  const usedFallback = lcp.length === 0
+  const name = usedFallback ? oldName : lcp[lcp.length - 1]
+  goodTypes.set(hs6, { id: uuid(`product_type:good:${hs6}`), hs6, name })
+  if (items.length > 1 && namingSamples.length < 5)
+    namingSamples.push({ hs6, count: items.length, oldName, newName: name, usedFallback })
 }
 
 // --- типы услуг: ОКЭД -> UNSPSC ---------------------------------------------
@@ -199,9 +226,11 @@ console.log(`OK -> ${target}`)
 console.log(
   `products=${products.length} good_types=${goodTypes.size} services=${services.length} service_types=${serviceTypes.length}`,
 )
-console.log('Эвристика «имя с наименьшей длиной» на группах с >1 товара (примеры):')
-for (const s of heuristicSamples)
-  console.log(`  hs6=${s.hs6} n=${s.count} chosen="${s.chosen}" (было бы длиннее: "${s.longest}")`)
+console.log('Категорийные имена типов на группах с >1 товара (было -> стало; примеры):')
+for (const s of namingSamples)
+  console.log(
+    `  hs6=${s.hs6} n=${s.count}${s.usedFallback ? ' [фолбэк]' : ''}: "${s.oldName}" -> "${s.newName}"`,
+  )
 if (needsReview.length) {
   console.log('УТОЧНИТЬ (ОКЭД без записи в UNSPSC_BY_OKED — код-заглушка):')
   for (const r of needsReview) console.log(`  oked=${r.oked} name="${r.name}" synthetic_unspsc=${r.syntheticUnspsc}`)
