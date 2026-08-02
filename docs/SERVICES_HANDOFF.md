@@ -37,8 +37,8 @@
 
 4. **Верификация**: tsc + oxlint + build чисто; браузер-панель на живых данных light/dark/mobile (лендинг не трогаем); пейволл-граница: аноним не видит details, демо-подписчик (`turdiev17.10+ixdemo@gmail.com` / `InspectorX-Demo-2026!`) видит.
 
-5. **Деплой**: коммиты в main → Vercel задеплоит сам (https://inspectorx-v2.vercel.app). ВАЖНО: коммиты в этом репо подписывать автором TAVI-Agency (иначе Hobby-блок Vercel).
+5. **Деплой**: коммиты в main → Vercel задеплоит сам (https://inspectorx-v2.vercel.app). ВАЖНО: коммиты в этом репо подписывать автором TAVI-Agency (иначе Hobby-блок Vercel). — *Неактуально с 02.08.2026: аккаунт на плане Vercel Pro, Hobby-блок коммерческого использования не применяется (ADR-0002, решение 6).*
 
-**Грабли окружения** (из памяти проекта): supabase CLI запускать с `env -u SUPABASE_ACCESS_TOKEN`; Supabase MCP смотрит в чужой аккаунт — пользоваться CLI/psql (service-ключ: `supabase projects api-keys --project-ref kcjlrvgjtoefqgzxuizz`); foreground bash в песочнице без сети — сетевые команды запускать с dangerouslyDisableSandbox или в фоне; порталы Base UI требуют класс темы на body (в CLayout уже сделано).
+**Грабли окружения** (из памяти проекта; блок про Supabase переписан 02.08.2026 после переезда проектов на основной аккаунт): доступ уровня аккаунта сейчас сломан — `SUPABASE_ACCESS_TOKEN` из `.env.importer` даёт `403`, CLI залогинен в посторонний аккаунт, MCP не авторизован, поэтому `supabase projects api-keys` не сработает; в БД ходить готовым `IX_SUPABASE_SERVICE_KEY` (он живой), порядок починки — `INFRA_ACCOUNTS.md`; foreground bash в песочнице без сети — сетевые команды запускать с dangerouslyDisableSandbox или в фоне; порталы Base UI требуют класс темы на body (в CLayout уже сделано).
 
 Работай автономно до конца; вопросы фаундеру — только бинарные и с рекомендацией. В конце покажи страницу аптеки в проде.

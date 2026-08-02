@@ -8,6 +8,8 @@ InspectorX v2 — compliance-платформа для Узбекистана: �
 
 Язык проекта — русский: комментарии, строки UI, коммиты (conventional commits по-русски, напр. `feat(landing): …`).
 
+Экосистема: **LegalX** (законы, бывший JurisBase) + **SudX** (судебная практика — раздел внутри LegalX, схема `court` в его базе) + **InspectorX** (эта витрина). Два проекта Supabase в одной организации на одном аккаунте: LegalX-БД и InspectorX-БД. Python-воркеры обоих продуктов — на Railway. Топология зафиксирована в `docs/adr/0002-ecosystem-topology.md`.
+
 ## Команды
 
 ```bash
@@ -33,7 +35,19 @@ node scripts/walkthrough.mjs                     # сквозной путь: л
 supabase db start && supabase db reset --local
 ```
 
-Накат на прод — `supabase db push` (линкованный проект) или Supabase MCP. `scripts/generate_v1_content_migration.mjs` — одноразовый перенос контента из v1, обычно трогать не нужно.
+**Накат на прод — автоматический.** К проекту Supabase подключена GitHub-интеграция
+(`TAVI-Agency/inspectorx-v2`, рабочая директория `.`, ветка `main`, Deploy to production включён):
+мёрж в `main` сам применяет новые файлы `supabase/migrations/` к боевой базе. Поэтому миграция
+кладётся в `main` только когда готова — автоматического отката нет. Ручной путь
+(`supabase db push`, Management API) остаётся запасным.
+
+Edge Functions не используются: рантайм там Deno/TypeScript, Python туда не деплоится. Роль базы в запуске фоновых работ — только разбудить воркер на Railway: `pg_cron` для расписаний + `pg_net` для HTTP наружу (см. `20260727120000_lead_notifications.sql`).
+
+Аккаунты, ключи и что из них сейчас протухло — `docs/INFRA_ACCOUNTS.md` (проекты переехали на
+основной аккаунт владельца 02.08.2026; адрес БД и ключи проекта не менялись, токен уровня
+аккаунта и ключ LegalX — менялись).
+
+`scripts/generate_v1_content_migration.mjs` — одноразовый перенос контента из v1, обычно трогать не нужно.
 
 ## Архитектура
 
@@ -78,3 +92,8 @@ Dev-тумблер «я подписчик» (`src/app/app-mode.tsx`, localStora
 - `docs/TARGET_FORMAT.md` — ТЗ продукта, контракт данных требования (§4). Технические решения подчиняются ему, а не наоборот.
 - `docs/IDEAS.md` — идеи вне MVP; **не кодировать без явного решения**.
 - `docs/LAUNCH_CHECKLIST.md` — правило заморозки: в текущий код после запуска добавляется только контент, новые фичи — через TARGET_FORMAT.
+- `docs/INFRA_ACCOUNTS.md` — аккаунты, доступы и счета (Supabase, GitHub, Vercel): чей аккаунт, какие ключи живые, какие протухли.
+- `docs/adr/0002-ecosystem-topology.md` — топология экосистемы: названия (LegalX / SudX / InspectorX), число баз Supabase, где исполняется Python. При расхождении с другими документами верен ADR.
+- `docs/adr/0003-agent-flow.md` — агентский флоу контент-фабрики: контуры Build / Runtime / Monitoring, generic-агенты с профилями, независимый Verifier, порядок конвейера. Детализация — доска в Miro.
+- `docs/adr/0004-product-catalog.md` — товарный каталог: `product_types` (HS6 — товары, UNSPSC — услуги), `country_codes` (ИКПУ/ТН ВЭД/ОКЭД…), `skus`; требования привязываются только к типам.
+- `docs/adr/0005-ecosystem-contracts.md` — интерфейсы между проектами: `search_norms`, `search_cases`, webhook изменений, версионирование актов в LegalX.
