@@ -16,8 +16,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-# Имя профиля = какой шаг конвейера он описывает (ADR-0003).
-ProfileName = Literal["norm", "label", "sanctions", "cases", "samples", "translation"]
+# Имя профиля = какой шаг конвейера он описывает (ADR-0003). 'summary' —
+# Задача 17 (steps_norm.py); 'question_writer' — Задача 16 (question_writer.py
+# профиль пока не строит, но имя зарезервировано под тот же паттерн).
+ProfileName = Literal[
+    "norm", "label", "sanctions", "cases", "samples", "translation",
+    "summary", "question_writer",
+]
 # Тир модели = ключ в `models.yaml` -> `tiers`.
 ModelTier = Literal["cheap", "mid", "expensive"]
 

@@ -207,6 +207,50 @@ def test_norm_step_no_norm_for_all_questions_returns_no_norm():
     assert result.verdicts == []
 
 
+# ── шаг 'norm': смешанные исходы → fail, НЕ no_norm ──────────────────────
+#
+# Пин-тесты фикс-раунда ревью Задачи 17 (Important): предыдущие тесты
+# покрывали только ОДНОРОДНЫЕ наборы исходов («все no_norm», «все
+# not_found») — регрессия агрегации `all(outcome == "no_norm" ...)` ->
+# `any(outcome == "no_norm" ...)` в steps_norm.py прошла бы мимо них
+# незамеченной (для набора из одних no_norm `any` и `all` дают одинаковый
+# результат). Эти тесты специально смешивают no_norm с другим исходом —
+# только смешанный набор различает `all` от `any`.
+
+
+def test_norm_step_mixed_no_norm_and_not_found_returns_fail_not_no_norm():
+    legalx = FakeLegalX(responses=[[]])  # всегда пусто — оба вопроса ищут вслепую
+    llm = ScriptedLLM([
+        two_questions_answer(),
+        no_norm_signal(),  # q0 -> no_norm (сигнал сразу, без реформулировок)
+        reformulate("q1 переформулировка 1"), reformulate("q1 переформулировка 2"),  # q1 -> not_found
+    ])
+    step = NormStep(legalx, llm)
+
+    result = step(item_ctx())
+
+    assert result.status == "fail"
+    assert result.status != "no_norm"
+    assert result.verdicts == []
+
+
+def test_norm_step_mixed_no_norm_and_verifier_fail_returns_fail_not_no_norm():
+    legalx = FakeLegalX(responses=[[], [fragment()]])  # q0 пусто, q1 находит
+    llm = ScriptedLLM([
+        two_questions_answer(),
+        no_norm_signal(),  # q0 -> no_norm
+        verdict_json(False, "фрагмент не отвечает на вопрос"),  # q1 -> found, но verifier отклонил
+    ])
+    step = NormStep(legalx, llm)
+
+    result = step(item_ctx())
+
+    assert result.status == "fail"
+    assert result.status != "no_norm"
+    assert len(result.verdicts) == 1
+    assert result.verdicts[0].passed is False
+
+
 # ── шаг 'norm': фрагмент нашёлся, но Verifier не пропустил ни один ──────
 
 
