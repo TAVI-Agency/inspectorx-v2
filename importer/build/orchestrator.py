@@ -123,6 +123,20 @@ class BuildStore(Protocol):
         `steps_dedup.py`) — сравнение текущего айтема с уже обработанными
         айтемами того же прогона. Каждый элемент — `{"item_id", "text"}`.
 
+        ИНВАРИАНТ (фикс-раунд ревью Задачи 25, Critical): кандидат — ТОЛЬКО
+        айтем, чей черновик реально дошёл до записи в БД —
+        `status in ('draft_loaded', 'published')`. `pending`/`in_progress`/
+        `needs_attention`/`no_norm` — НЕ кандидаты: `Orchestrator.run_group`
+        создаёт ВСЕ айтемы прогона одной пачкой ДО цикла обработки
+        (`create_items`), поэтому без этого фильтра dedup первого айтема
+        видел бы ещё не начатые айтемы 2..N (у них тоже есть `expected_item`)
+        и мог бы схлопнуть айтем с тем, что ещё не прошёл конвейер и не будет
+        иметь строки `requirements` к моменту шага 'load' — ложная склейка "в
+        пустоту". Порядок результата — по `updated_at` (детерминизм «первый
+        найденный дубль побеждает» и в `SupabaseBuildStore`, и в
+        `InMemoryStore`, где порядок и так стабилен — словарь сохраняет
+        порядок вставки).
+
         ОГРАНИЧЕНИЕ `SupabaseBuildStore`: `pipeline.items` (миграция
         `20260803170000_pipeline_schema.sql`) хранит только `expected_item`
         (входной текст из карты) — колонки под финальный `summary` шага
@@ -410,10 +424,17 @@ class SupabaseBuildStore:
     def list_run_item_texts(self, run_id: str) -> list[dict]:
         """См. докстринг `BuildStore.list_run_item_texts` — ограничение:
         `text` здесь всегда `expected_item`, `pipeline.items` не хранит
-        `summary`."""
+        `summary`. Фильтр `status in ('draft_loaded', 'published')`
+        (Critical фикс-раунда ревью Задачи 25) — `pending`/`in_progress`/
+        `needs_attention`/`no_norm` не кандидаты, черновика в БД у них ещё
+        (или уже никогда) не будет. `order("updated_at")` — детерминизм
+        «первый найденный дубль побеждает» (Minor того же ревью)."""
         rows = (
             self._db.table("items").select("id, expected_item")
-            .eq("run_id", run_id).execute().data
+            .eq("run_id", run_id)
+            .in_("status", ["draft_loaded", "published"])
+            .order("updated_at")
+            .execute().data
         )
         return [{"item_id": row["id"], "text": row["expected_item"]} for row in rows]
 
