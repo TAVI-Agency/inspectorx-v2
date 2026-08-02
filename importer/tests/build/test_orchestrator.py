@@ -12,11 +12,12 @@
   (стоп-точка ①), причём ДО создания run/items;
 - `rerun_item` валидирует `from_step` и гонит только хвост STEP_ORDER;
 - все переходы статуса/ретраи/вердикты идут ТОЛЬКО через `BuildStore`
-  (`InMemoryStore` ниже — тесты state machine не ходят в живую БД).
+  (`InMemoryStore` из `importer/tests/build/stores.py` — тесты state machine
+  не ходят в живую БД; тот же дублёр переиспользует `test_cartographer.py`,
+  чтобы связка Cartographer→Orchestrator проверялась на одном сторе, а не
+  на двух разошедшихся дублёрах, см. фикс-раунд ревью Задачи 15).
 """
 from __future__ import annotations
-
-from dataclasses import dataclass, field
 
 import pytest
 
@@ -30,67 +31,10 @@ from importer.build.orchestrator import (
     escalate,
 )
 from importer.build.steps import STEP_ORDER, ItemContext, ItemRecord, StepResult
+from importer.tests.build.stores import InMemoryStore
 
 
 # ── тестовые дублёры ────────────────────────────────────────────────────
-
-
-@dataclass
-class InMemoryStore:
-    """Фейковый BuildStore: без сети и без БД, только словари в памяти."""
-
-    maps: dict[str, MapRecord] = field(default_factory=dict)
-    items: dict[str, ItemRecord] = field(default_factory=dict)
-    runs: dict[str, dict] = field(default_factory=dict)
-    verdicts: list[tuple[str, str, list[Verdict]]] = field(default_factory=list)
-    # (item_id, status) в порядке вызовов — чтобы проверять переходы, не только итог
-    status_history: list[tuple[str, str]] = field(default_factory=list)
-    _next_id: int = 0
-
-    def _gen_id(self, prefix: str) -> str:
-        self._next_id += 1
-        return f"{prefix}-{self._next_id}"
-
-    def load_map(self, map_id: str) -> MapRecord:
-        return self.maps[map_id]
-
-    def create_run(self, map_id: str) -> str:
-        run_id = self._gen_id("run")
-        self.runs[run_id] = {"map_id": map_id, "status": "running"}
-        return run_id
-
-    def create_items(self, run_id: str, payload: list[dict]) -> list[ItemRecord]:
-        created = []
-        for entry in payload:
-            item_id = self._gen_id("item")
-            item = ItemRecord(
-                id=item_id,
-                run_id=run_id,
-                expected_item=entry["expected_item"],
-                category_slug=entry.get("category_slug"),
-            )
-            self.items[item_id] = item
-            created.append(item)
-        return created
-
-    def update_item_status(self, item_id, status, *, last_error=None) -> ItemRecord:
-        item = self.items[item_id]
-        item.status = status
-        if last_error is not None:
-            item.last_error = last_error
-        self.status_history.append((item_id, status))
-        return item
-
-    def bump_retry(self, item_id: str) -> int:
-        item = self.items[item_id]
-        item.retry_count += 1
-        return item.retry_count
-
-    def save_verdicts(self, item_id, step, verdicts) -> None:
-        self.verdicts.append((item_id, step, verdicts))
-
-    def finish_run(self, run_id: str, status: str) -> None:
-        self.runs[run_id]["status"] = status
 
 
 class ScriptedStep:
