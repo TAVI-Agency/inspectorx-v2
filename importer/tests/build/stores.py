@@ -65,6 +65,9 @@ class InMemoryStore:
     requirement_rules: dict[str, list[dict]] = field(default_factory=dict)
     _by_external_key: dict[str, str] = field(default_factory=dict)
 
+    # ── Задача 29: трейсинг LLM-вызовов и стоимость по ролям ───────────────
+    llm_calls: list[dict] = field(default_factory=list)
+
     def _gen_id(self, prefix: str) -> str:
         self._next_id += 1
         return f"{prefix}-{self._next_id}"
@@ -261,6 +264,32 @@ class InMemoryStore:
         self.requirement_rules[requirement_id] = list(card.get("rules") or [])
 
         return requirement_id
+
+    # ── Задача 29: трейсинг LLM-вызовов и стоимость по ролям ───────────────
+
+    def save_llm_call(
+        self,
+        run_id: str,
+        role: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+        *,
+        item_id: str | None = None,
+    ) -> None:
+        self.llm_calls.append({
+            "run_id": run_id,
+            "item_id": item_id,
+            "role": role,
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost_usd,
+        })
+
+    def list_llm_calls(self, run_id: str) -> list[dict]:
+        return [dict(call) for call in self.llm_calls if call["run_id"] == run_id]
 
     @staticmethod
     def _replace_lang_rows(

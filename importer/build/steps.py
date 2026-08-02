@@ -25,9 +25,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Literal
+from typing import TYPE_CHECKING, Callable, Literal
 
 from importer.build.agents import Verdict
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps<->trace
+    from importer.build.trace import Tracer
 
 # Порядок шагов конвейера Build — РОВНО как в брифе Задачи 14, ЗА ВЫЧЕТОМ
 # 'coverage' (Задача 27 — см. докстринг выше). Менять список шагов — ревизия
@@ -88,6 +91,16 @@ class ItemContext:
 
     item: ItemRecord
     data: dict = field(default_factory=dict)
+    # Задача 29 (трейсинг): `Orchestrator` кладёт сюда `Tracer` этого прогона
+    # (когда стор его поддерживает — `run_group`/`rerun_item`,
+    # `orchestrator.py`), чтобы шаговые функции МОГЛИ передать его своим
+    # generic-агентам (`agents.py: tracer=`/`role=`) и трейсить LLM-вызовы
+    # ЭТОГО айтема (`item_id=ctx.item.id`). Ни один текущий шаг (Задачи
+    # 17–26) это поле ещё не читает — сами шаги (`steps_*.py`) в Задаче 29
+    # не тронуты, это НЕ обязательность («без tracer'а всё работает как
+    # раньше», см. `agents.py: _trace_llm_call`) — задел на будущее касание
+    # каждого шага, не полная проводка.
+    tracer: "Tracer | None" = None
 
 
 StepFn = Callable[[ItemContext], StepResult]

@@ -27,6 +27,7 @@ from importer.build.steps import (
     StepResult,
     get_step,
 )
+from importer.build.trace import Tracer
 
 if TYPE_CHECKING:  # без реального импорта на рантайме (цикл с coverage.py) — см. RunReport.coverage
     from importer.build.coverage import CoverageReport
@@ -289,6 +290,33 @@ class BuildStore(Protocol):
         параметр этого метода, не опциональный."""
         ...
 
+    # ── Задача 29: трейсинг LLM-вызовов и стоимость по ролям ───────────────
+
+    def save_llm_call(
+        self,
+        run_id: str,
+        role: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+        *,
+        item_id: str | None = None,
+    ) -> None:
+        """Пишет одну строку `pipeline.llm_calls` (миграция
+        `20260803170000_pipeline_schema.sql`) — единственный писатель:
+        `trace.py: Tracer.record`. `item_id` — опционален (звонок на уровне
+        run, не привязанный к конкретному айтему, например переформулировка
+        запроса `Retriever`'ом — см. `agents.py`)."""
+        ...
+
+    def list_llm_calls(self, run_id: str) -> list[dict]:
+        """Все строки `pipeline.llm_calls` прогона `run_id` — вход
+        `trace.py: cost_report` (CLI `build cost --run <id>`, `cli.py`).
+        Каждый элемент — как минимум `{"role", "model", "input_tokens",
+        "output_tokens", "cost_usd"}`."""
+        ...
+
 
 def escalate(item: ItemRecord, reason: str, store: BuildStore) -> None:
     """Пишет `reason` в `last_error` и переводит айтем в `needs_attention` —
@@ -363,10 +391,11 @@ class Orchestrator:
             )
         run_id = self._store.create_run(map_id)
         items = self._store.create_items(run_id, map_record.payload)
+        tracer = self._make_tracer(run_id)
 
         for item in items:
             item = self._store.update_item_status(item.id, "in_progress")
-            ctx = ItemContext(item=item)
+            ctx = ItemContext(item=item, tracer=tracer)
             self._run_from(ctx, start_index=0)
 
         self._store.finish_run(run_id, "done")
@@ -404,6 +433,19 @@ class Orchestrator:
                 counts[item.status] += 1
         return counts
 
+    def _make_tracer(self, run_id: str) -> Tracer | None:
+        """Задача 29: `Tracer` этого прогона — только если `self._store`
+        ПОДДЕРЖИВАЕТ трейсинг (`save_llm_call`, добавлен в `BuildStore`
+        Protocol этой задачей). Проверка через `hasattr`, не через
+        `isinstance(..., BuildStore)`, потому что `BuildStore` —
+        `typing.Protocol` БЕЗ `@runtime_checkable`: сторы тестов, написанные
+        ДО Задачи 29 (если такие остались в стороннем коде) без этого метода
+        продолжают работать как раньше — `run_group` тогда просто не трейсит
+        (`ItemContext.tracer=None`, см. докстринг `steps.py:ItemContext`)."""
+        if not hasattr(self._store, "save_llm_call"):
+            return None
+        return Tracer(self._store, run_id)
+
     def rerun_item(self, item_id: str, from_step: str) -> None:
         """Частичный Build для контура C: сбрасывает статус айтема в
         'in_progress' и гонит шаги STEP_ORDER, начиная с `from_step`."""
@@ -412,7 +454,7 @@ class Orchestrator:
                 f"Неизвестный шаг {from_step!r} — ожидается один из {STEP_ORDER}"
             )
         item = self._store.update_item_status(item_id, "in_progress")
-        ctx = ItemContext(item=item)
+        ctx = ItemContext(item=item, tracer=self._make_tracer(item.run_id))
         self._run_from(ctx, start_index=STEP_ORDER.index(from_step))
 
     # ── внутреннее ───────────────────────────────────────────────────────
@@ -876,6 +918,35 @@ class SupabaseBuildStore:
             self._client.table("requirement_rules").insert(rule_rows).execute()
 
         return requirement_id
+
+    # ── Задача 29: трейсинг LLM-вызовов и стоимость по ролям ───────────────
+
+    def save_llm_call(
+        self,
+        run_id: str,
+        role: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+        *,
+        item_id: str | None = None,
+    ) -> None:
+        self._db.table("llm_calls").insert({
+            "run_id": run_id,
+            "item_id": item_id,
+            "role": role,
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost_usd,
+        }).execute()
+
+    def list_llm_calls(self, run_id: str) -> list[dict]:
+        return (
+            self._db.table("llm_calls").select("*")
+            .eq("run_id", run_id).order("created_at").execute().data
+        )
 
     # ── доп. запросы для CLI (вне BuildStore Protocol, нужны только `build
     # status` / `build attention`) ─────────────────────────────────────────
