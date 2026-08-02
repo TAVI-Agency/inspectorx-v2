@@ -32,6 +32,7 @@ from importer.build.eval_golden import (
     LifecycleDates,
     SourceAct,
     _pick_decoy,
+    _pick_near_miss_decoy,
     category_accuracy_for_item,
     compute_delta,
     lifecycle_date_accuracy_for_item,
@@ -302,56 +303,72 @@ def test_retrieval_hit_garbage_llm_answer_is_error_not_exception():
 # ══════════════════════════════════════════════════════════════════════════
 
 
-def test_verifier_agreement_true_when_correct_passes_and_substituted_fails():
-    golden = item(golden_id="g1")
-    decoy = item(golden_id="g2", expected_item="Другое требование", article="п. 99")
+def test_verifier_agreement_true_when_correct_passes_gross_and_near_miss_fail():
+    golden = item(golden_id="g1", article="п. 24")
+    gross = item(golden_id="g2", expected_item="Другое требование", act="Налоговый кодекс", article="обязанность")
+    near_miss = item(golden_id="g3", expected_item="Соседнее требование", article="п. 33")  # тот же акт, другая статья
     llm = ScriptedLLM([
-        json.dumps({"passed": True, "reason": "ok"}),
-        json.dumps({"passed": False, "reason": "не о том"}),
+        json.dumps({"passed": True, "reason": "ok"}),       # correct
+        json.dumps({"passed": False, "reason": "не о том"}),  # gross decoy
+        json.dumps({"passed": False, "reason": "не та статья"}),  # near-miss decoy
     ])
 
-    result = verifier_agreement_for_item(golden, decoy, llm)
+    result = verifier_agreement_for_item(golden, gross, near_miss, llm)
 
     assert result.correct_passed is True
-    assert result.substituted_passed is False
-    assert result.agreement is True
+    assert result.gross_decoy_passed is False
+    assert result.near_miss_decoy_passed is False
+    assert result.near_miss_decoy_item_id == "g3"
+
+
+def test_verifier_agreement_near_miss_none_when_no_candidate():
+    golden = item(golden_id="g1")
+    gross = item(golden_id="g2", article="п. 99")
+    llm = ScriptedLLM([json.dumps({"passed": True}), json.dumps({"passed": False})])
+
+    result = verifier_agreement_for_item(golden, gross, None, llm)
+
+    assert result.near_miss_decoy_item_id is None
+    assert result.near_miss_decoy_passed is None
+    assert len(llm.calls) == 2  # near-miss вызов НЕ делается, кандидата нет
 
 
 def test_verifier_agreement_false_when_correct_fails():
     golden = item(golden_id="g1")
-    decoy = item(golden_id="g2", article="п. 99")
+    gross = item(golden_id="g2", article="п. 99")
     llm = ScriptedLLM([
         json.dumps({"passed": False, "reason": "не подтвердил правильный"}),
         json.dumps({"passed": False, "reason": "ok"}),
     ])
 
-    result = verifier_agreement_for_item(golden, decoy, llm)
+    result = verifier_agreement_for_item(golden, gross, None, llm)
 
     assert result.correct_passed is False
-    assert result.agreement is False
 
 
-def test_verifier_agreement_false_when_substituted_also_passes():
-    golden = item(golden_id="g1")
-    decoy = item(golden_id="g2", article="п. 99")
+def test_verifier_agreement_true_when_gross_or_near_miss_decoy_wrongly_passes():
+    golden = item(golden_id="g1", article="п. 24")
+    gross = item(golden_id="g2", act="Налоговый кодекс", article="обязанность")
+    near_miss = item(golden_id="g3", article="п. 33")
     llm = ScriptedLLM([
         json.dumps({"passed": True}),
-        json.dumps({"passed": True}),  # подложный НЕ должен пройти, но прошёл
+        json.dumps({"passed": True}),  # грубый подложный НЕ должен пройти, но прошёл
+        json.dumps({"passed": True}),  # near-miss подложный тоже прошёл
     ])
 
-    result = verifier_agreement_for_item(golden, decoy, llm)
+    result = verifier_agreement_for_item(golden, gross, near_miss, llm)
 
-    assert result.substituted_passed is True
-    assert result.agreement is False
+    assert result.gross_decoy_passed is True
+    assert result.near_miss_decoy_passed is True
 
 
 def test_verifier_agreement_uses_model_different_from_producer():
     golden = item()
-    decoy = item(golden_id="g2", article="п. 99")
+    gross = item(golden_id="g2", article="п. 99")
     llm = ScriptedLLM([json.dumps({"passed": True}), json.dumps({"passed": False})])
     config = load_models_config()
 
-    verifier_agreement_for_item(golden, decoy, llm, models=config)
+    verifier_agreement_for_item(golden, gross, None, llm, models=config)
 
     producer_model = config.tiers["mid"]  # VERIFY_PROFILE.tier == 'mid'
     expected_verifier_model = verifier_model_for(producer_model, config)
@@ -361,14 +378,14 @@ def test_verifier_agreement_uses_model_different_from_producer():
 
 def test_verifier_agreement_garbage_answer_is_error_not_exception():
     golden = item()
-    decoy = item(golden_id="g2", article="п. 99")
+    gross = item(golden_id="g2", article="п. 99")
     llm = ScriptedLLM(["не могу ответить"])
 
-    result = verifier_agreement_for_item(golden, decoy, llm)
+    result = verifier_agreement_for_item(golden, gross, None, llm)
 
     assert result.correct_passed is None
-    assert result.substituted_passed is None
-    assert result.agreement is None
+    assert result.gross_decoy_passed is None
+    assert result.near_miss_decoy_passed is None
     assert result.error is not None
     assert len(llm.calls) == 1  # второй вызов (подложный) не делается после ошибки первого
 
@@ -396,6 +413,59 @@ def test_pick_decoy_falls_back_to_next_when_all_identical():
     decoy = _pick_decoy(items, 0)
 
     assert decoy.id == "g2"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# _pick_near_miss_decoy — тот же акт, ДРУГАЯ статья; n/a если кандидата нет
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def test_pick_near_miss_decoy_finds_same_act_different_article():
+    items = [
+        item(golden_id="g1", act="ПКМ-290, ТР", article="п. 24"),
+        item(golden_id="g2", act="Налоговый кодекс", article="обязанность"),  # другой акт — не near-miss
+        item(golden_id="g3", act="ПКМ-290, ТР", article="п. 33"),  # тот же акт, другая статья
+    ]
+
+    decoy = _pick_near_miss_decoy(items, 0)
+
+    assert decoy is not None
+    assert decoy.id == "g3"
+
+
+def test_pick_near_miss_decoy_skips_same_act_same_article():
+    items = [
+        item(golden_id="g1", act="ПКМ-290, ТР", article="п. 24"),
+        item(golden_id="g2", act="ПКМ-290, ТР", article="п. 24"),  # тот же акт И та же статья — не near-miss
+        item(golden_id="g3", act="ПКМ-290, ТР", article="п. 33"),
+    ]
+
+    decoy = _pick_near_miss_decoy(items, 0)
+
+    assert decoy.id == "g3"
+
+
+def test_pick_near_miss_decoy_none_when_no_same_act_candidate():
+    items = [
+        item(golden_id="g1", act="ПКМ-290, ТР", article="п. 24"),
+        item(golden_id="g2", act="Налоговый кодекс", article="обязанность"),
+        item(golden_id="g3", act="ЗРУ-701", article="прил. №1"),
+    ]
+
+    decoy = _pick_near_miss_decoy(items, 0)
+
+    assert decoy is None
+
+
+def test_pick_near_miss_decoy_none_when_item_has_no_source_act():
+    items = [
+        item(golden_id="g1", act=None, article=None),
+        item(golden_id="g2", act="ПКМ-290, ТР", article="п. 33"),
+    ]
+
+    decoy = _pick_near_miss_decoy(items, 0)
+
+    assert decoy is None
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -496,78 +566,119 @@ def test_lifecycle_date_accuracy_garbage_answer_is_error_not_exception():
 # ══════════════════════════════════════════════════════════════════════════
 
 
-def _two_item_set() -> list[GoldenItem]:
+def _three_item_set() -> list[GoldenItem]:
+    """3 айтема: g1/g2 делят акт ПКМ-290 (разные статьи — near-miss друг
+    для друга), g3 — единственный со своим актом (n/a для near-miss,
+    гросс-декой для соседей). Порядок [g1, g3, g2] — так `_pick_decoy(g1)`
+    сразу натыкается на g3 (полностью другой акт, чистый «грубый» декой),
+    а `_pick_near_miss_decoy(g1)` доходит до g2 (тот же акт, другая статья)
+    — конкретные цели уже проверены отдельно в тестах `_pick_decoy`/
+    `_pick_near_miss_decoy` выше, здесь важны только агрегаты. Тексты несут
+    ключевые слова `_CATEGORY_KEYWORDS`, чтобы `HeuristicBaselineLLM`
+    детерминированно классифицировала их в ОЖИДАЕМУЮ категорию (без
+    scripted-очереди ответов — реальное поведение эвристики, порядок
+    вызовов LLM руками не считаем)."""
     return [
-        item(golden_id="g1", expected_item="Требование раз", category_slug="marking", article="п. 24"),
-        item(golden_id="g2", expected_item="Требование два", category_slug="tbt", article="п. 40"),
+        item(golden_id="g1", expected_item="Наносить маркировку на упаковку",
+             category_slug="marking", act="ПКМ-290, ТР", article="п. 24"),
+        item(golden_id="g3", expected_item="Установить онлайн-кассу",
+             category_slug="fiscal", act="Налоговый кодекс", article="обязанность"),
+        item(golden_id="g2", expected_item="Соблюдать технический регламент по сигаретам",
+             category_slug="tbt", act="ПКМ-290, ТР", article="п. 40"),
     ]
 
 
 def test_run_eval_aggregates_and_markdown_table():
-    items = _two_item_set()
+    items = _three_item_set()
     legalx = FakeLegalX(responses=[
-        [fragment(article_ref="п. 24")],  # g1 retrieval hit
-        [fragment(article_ref="п. 40")],  # g2 retrieval hit
+        [fragment(act_title="ПКМ-290, ТР", article_ref="п. 24")],             # g1 retrieval hit
+        [fragment(act_title="Налоговый кодекс", article_ref="обязанность")],  # g3 retrieval hit
+        [fragment(act_title="ПКМ-290, ТР", article_ref="п. 40")],             # g2 retrieval hit
     ])
-    llm = ScriptedLLM([
-        json.dumps({"passed": True}), json.dumps({"passed": False}),  # verifier g1: correct, substituted
-        json.dumps({"passed": True}), json.dumps({"passed": False}),  # verifier g2
-        json.dumps({"category_slug": "marking"}),  # category g1
-        json.dumps({"category_slug": "tbt"}),       # category g2
-        json.dumps({"effective_from": None, "transition_until": None, "valid_to": None, "repealed_by_ref": None}),
-        json.dumps({"effective_from": None, "transition_until": None, "valid_to": None, "repealed_by_ref": None}),
-    ])
+    llm = HeuristicBaselineLLM()  # реальное (не scripted) поведение — независимо unit-тестировано ниже
 
-    report = run_eval(items, legalx=legalx, llm=llm, valid_category_slugs=["marking", "tbt"], backend="mock")
+    report = run_eval(
+        items, legalx=legalx, llm=llm, valid_category_slugs=["marking", "tbt", "fiscal"], backend="mock",
+    )
+    m = report.metrics
 
-    assert report.metrics.retrieval_hit_rate == 1.0
-    assert report.metrics.verifier_agreement_rate == 1.0
-    assert report.metrics.category_accuracy == 1.0
-    assert report.metrics.lifecycle_date_exact_match_rate == 1.0
+    assert m.retrieval_hit_rate == 1.0
+    assert m.verifier_pass_on_correct_rate == 1.0
+    assert m.verifier_fail_on_gross_decoy_rate == 1.0
+    # near-miss измерим только для g1 и g2 (делят акт ПКМ-290, разные статьи) — g3 n/a (уникальный акт)
+    assert m.verifier_fail_on_near_miss_decoy_rate == 1.0
+    assert m.verifier_near_miss_na == 1
+    assert m.category_accuracy == 1.0
+    assert m.lifecycle_date_exact_match_rate == 1.0
     assert "Retriever" in report.markdown
     assert "Verifier" in report.markdown
     assert "Classifier" in report.markdown
+    assert "near_miss" in report.markdown
 
 
 def test_run_eval_with_baseline_prints_delta():
-    items = _two_item_set()
-    legalx = FakeLegalX(responses=[[], []])
-    llm = ScriptedLLM([
-        json.dumps({"no_norm": True}), json.dumps({"no_norm": True}),  # retrieval misses g1/g2
-        json.dumps({"passed": True}), json.dumps({"passed": False}),
-        json.dumps({"passed": True}), json.dumps({"passed": False}),
-        json.dumps({"category_slug": "marking"}),
-        json.dumps({"category_slug": "tbt"}),
-        json.dumps({"effective_from": None, "transition_until": None, "valid_to": None, "repealed_by_ref": None}),
-        json.dumps({"effective_from": None, "transition_until": None, "valid_to": None, "repealed_by_ref": None}),
-    ])
-    baseline = {"retrieval_hit_rate": 0.5, "verifier_agreement_rate": 1.0, "category_accuracy": 0.5}
+    items = _three_item_set()
+    legalx = FakeLegalX(responses=[[], [], []])  # ничего не находит -> retrieval misses (via no_norm)
+    llm = HeuristicBaselineLLM()
+    baseline = {
+        "retrieval_hit_rate": 0.5,
+        "verifier_pass_on_correct_rate": 1.0,
+        "verifier_fail_on_gross_decoy_rate": 1.0,
+        "verifier_fail_on_near_miss_decoy_rate": 1.0,
+        "category_accuracy": 0.5,
+    }
 
     report = run_eval(
-        items, legalx=legalx, llm=llm, valid_category_slugs=["marking", "tbt"],
+        items, legalx=legalx, llm=llm, valid_category_slugs=["marking", "tbt", "fiscal"],
         backend="mock", baseline=baseline,
     )
 
     assert "Дельта против baseline.json" in report.markdown
-    assert report.metrics.retrieval_hit_rate == 0.0  # 0/2 hits
+    assert report.metrics.retrieval_hit_rate == 0.0  # 0/3 hits
+    # verifier не зависит от retrieval — суб-метрики те же, что и в первом тесте
+    assert report.metrics.verifier_fail_on_near_miss_decoy_rate == 1.0
 
 
 def test_compute_delta_skips_metrics_missing_on_either_side():
     metrics = AggregateMetrics(
         total_items=1, retrieval_hit_rate=0.8, retrieval_hits=4, retrieval_misses=1,
         retrieval_no_source_act=0, retrieval_errors=0,
-        verifier_agreement_rate=None, verifier_accept_correct_rate=None,
-        verifier_reject_substituted_rate=None, verifier_errors=0,
+        verifier_pass_on_correct_rate=None, verifier_fail_on_gross_decoy_rate=None,
+        verifier_fail_on_near_miss_decoy_rate=None, verifier_near_miss_na=0, verifier_errors=0,
         category_accuracy=0.9, category_measured=10, category_errors=0,
         lifecycle_date_field_accuracy=1.0, lifecycle_date_exact_match_rate=1.0, lifecycle_errors=0,
     )
-    baseline = {"retrieval_hit_rate": 0.5, "category_accuracy": None}  # нет verifier_agreement_rate вовсе
+    baseline = {"retrieval_hit_rate": 0.5, "category_accuracy": None}  # нет verifier_*_rate вовсе
 
     delta = compute_delta(metrics, baseline)
 
     assert delta["retrieval_hit_rate"] == {"baseline": 0.5, "current": 0.8, "delta": pytest.approx(0.3)}
-    assert delta["verifier_agreement_rate"] is None  # текущее None
+    assert delta["verifier_pass_on_correct_rate"] is None  # текущее None
+    assert delta["verifier_fail_on_gross_decoy_rate"] is None
+    assert delta["verifier_fail_on_near_miss_decoy_rate"] is None
     assert delta["category_accuracy"] is None  # baseline None
+
+
+def test_compute_delta_all_three_verifier_submetrics():
+    metrics = AggregateMetrics(
+        total_items=3, retrieval_hit_rate=1.0, retrieval_hits=3, retrieval_misses=0,
+        retrieval_no_source_act=0, retrieval_errors=0,
+        verifier_pass_on_correct_rate=1.0, verifier_fail_on_gross_decoy_rate=0.8,
+        verifier_fail_on_near_miss_decoy_rate=0.6, verifier_near_miss_na=1, verifier_errors=0,
+        category_accuracy=1.0, category_measured=3, category_errors=0,
+        lifecycle_date_field_accuracy=1.0, lifecycle_date_exact_match_rate=1.0, lifecycle_errors=0,
+    )
+    baseline = {
+        "verifier_pass_on_correct_rate": 1.0,
+        "verifier_fail_on_gross_decoy_rate": 1.0,
+        "verifier_fail_on_near_miss_decoy_rate": 0.5,
+    }
+
+    delta = compute_delta(metrics, baseline)
+
+    assert delta["verifier_pass_on_correct_rate"]["delta"] == pytest.approx(0.0)
+    assert delta["verifier_fail_on_gross_decoy_rate"]["delta"] == pytest.approx(-0.2)
+    assert delta["verifier_fail_on_near_miss_decoy_rate"]["delta"] == pytest.approx(0.1)
 
 
 # ══════════════════════════════════════════════════════════════════════════

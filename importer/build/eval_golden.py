@@ -27,11 +27,22 @@ loop инструментарий vs Build-гейт ②) — совмещени�
   Айтемы БЕЗ `source_act` (реальный пробел контента — «Источник не указан»,
   см. `scripts/generate_golden_set.py`) исключены из знаменателя hit-rate —
   отдельный счётчик `no_source_act`.
-- **verifier_agreement** (`Verifier`): pass на ПРАВИЛЬНОМ фрагменте этого
-  айтема, fail на ПОДЛОЖНОМ (фрагмент другого айтема golden-набора,
-  соседнего по списку). Фрагмент/источник для Verifier'а строятся из
-  собственных полей golden-айтема (`expected_item` + `source_act`) — не из
-  результата Retriever'а: agreement обязан быть измерим ДАЖЕ когда retrieval
+- **verifier_agreement** (`Verifier`) — ТРИ суб-метрики (фикс ревью Задачи
+  28, Important: грубой подмены недостаточно — на живом LLM она почти
+  всегда очевидно «не о том», метрика была бы ~100% независимо от реальной
+  строгости Verifier'а):
+  - `verifier_pass_on_correct_rate` — pass на ПРАВИЛЬНОМ фрагменте айтема;
+  - `verifier_fail_on_gross_decoy_rate` — fail на ГРУБОМ подложном (фрагмент
+    ДРУГОГО требования сета, обычно и акт другой — `_pick_decoy`);
+  - `verifier_fail_on_near_miss_decoy_rate` — fail на NEAR-MISS подложном
+    (фрагмент ТОГО ЖЕ акта, но ДРУГОЙ статьи/пункта — `_pick_near_miss_decoy`,
+    имитирует типичную ошибку живого поиска «нашёл верный акт, не ту
+    статью»); айтемы, для которых в сете нет near-miss-кандидата (другой акт
+    у всех соседей), — `n/a`, исключены из знаменателя этой суб-метрики
+    (`verifier_near_miss_na`), а НЕ засчитаны как 100%.
+  Фрагмент/источник для Verifier'а строятся из собственных полей
+  golden-айтема (`expected_item` + `source_act`) — не из результата
+  Retriever'а: суб-метрики обязаны быть измеримы ДАЖЕ когда retrieval
   промахнулся (большинство айтемов на моке, см. `docs/…task-28-brief.md`).
 - **category_accuracy** (`Classifier`, профиль `steps_classify.CLASSIFY_PROFILE`):
   предсказанный `category_slug` по `expected_item` против golden `category_slug`.
@@ -312,7 +323,7 @@ def _item_source_text(item: GoldenItem) -> str:
 
 
 def _pick_decoy(items: list[GoldenItem], index: int) -> GoldenItem:
-    """Подложный айтем для verifier_agreement — ближайший СЛЕДУЮЩИЙ по
+    """GROSS-подложный айтем для verifier_agreement — ближайший СЛЕДУЮЩИЙ по
     списку (с обёрткой по кругу), чей `source_act` (акт И статья) реально
     ОТЛИЧАЕТСЯ от текущего. Наивное «просто следующий по индексу» иногда
     подставляло бы фактически ТУ ЖЕ цитату: несколько процедурных карточек
@@ -321,7 +332,13 @@ def _pick_decoy(items: list[GoldenItem], index: int) -> GoldenItem:
     настоящего не по вине Verifier'а, а по конструкции golden-набора. Если у
     ВСЕХ айтемов сета один и тот же `source_act` (вырожденный случай) —
     возвращает соседа по индексу, agreement в этом случае структурно
-    неизмерим, это ожидаемо."""
+    неизмерим, это ожидаемо.
+
+    Это ГРУБЫЙ негативный кейс: фрагмент совсем другого требования (обычно и
+    акт другой). Ревью Задачи 28 (Important): на живом LLM грубая подмена
+    почти всегда очевидно «не о том» — метрика была бы ~100% независимо от
+    реальной строгости Verifier'а. `_pick_near_miss_decoy` ниже — второй,
+    более строгий негативный кейс (тот же акт, другая статья)."""
     n = len(items)
     current = (normalize_act(items[index].source_act.act), normalize_article(items[index].source_act.article))
     for offset in range(1, n):
@@ -332,54 +349,95 @@ def _pick_decoy(items: list[GoldenItem], index: int) -> GoldenItem:
     return items[(index + 1) % n]
 
 
+def _pick_near_miss_decoy(items: list[GoldenItem], index: int) -> GoldenItem | None:
+    """NEAR-MISS-подложный айтем — тот же акт (`normalize_act` совпадает),
+    но ДРУГАЯ статья/пункт (`normalize_article` отличается). Решение
+    контроллера (ревью Задачи 28, Important): грубой подмены (`_pick_decoy`)
+    недостаточно — Verifier обязан различать не только «совсем другое
+    требование», но и «похожий фрагмент того же акта, но не той статьи»
+    (типичная ошибка Retriever'а на реальном поиске — нашёл верный акт, не
+    ту статью). Если у айтема НЕТ `source_act` (см. `normalize_act(None) is
+    None`) или в сете нет соседа с тем же актом и другой статьёй —
+    возвращает `None`: суб-метрика `fail_on_near_miss_decoy` для этого
+    айтема тогда n/a (исключается из знаменателя), а НЕ засчитывается как
+    100% — n/a не то же самое, что «прошёл проверку»."""
+    current_act = normalize_act(items[index].source_act.act)
+    if current_act is None:
+        return None
+    current_article = normalize_article(items[index].source_act.article)
+    n = len(items)
+    for offset in range(1, n):
+        candidate = items[(index + offset) % n]
+        cand_act = normalize_act(candidate.source_act.act)
+        cand_article = normalize_article(candidate.source_act.article)
+        if cand_act == current_act and cand_article != current_article:
+            return candidate
+    return None
+
+
 @dataclass
 class VerifierAgreementResult:
     item_id: str
-    decoy_item_id: str
+    gross_decoy_item_id: str
+    near_miss_decoy_item_id: str | None  # None -> в сете нет near-miss-кандидата (n/a)
     correct_passed: bool | None
-    substituted_passed: bool | None
+    gross_decoy_passed: bool | None
+    near_miss_decoy_passed: bool | None  # None, если near_miss_decoy_item_id тоже None (n/a) либо ошибка LLM
     error: str | None = None
-
-    @property
-    def agreement(self) -> bool | None:
-        if self.correct_passed is None or self.substituted_passed is None:
-            return None
-        return self.correct_passed and not self.substituted_passed
 
 
 def verifier_agreement_for_item(
     item: GoldenItem,
-    decoy: GoldenItem,
+    gross_decoy: GoldenItem,
+    near_miss_decoy: GoldenItem | None,
     llm: AgentLLMClient,
     *,
     models: ModelsConfig | None = None,
 ) -> VerifierAgreementResult:
+    """Три вызова Verifier'а на айтем: (1) ПРАВИЛЬНЫЙ фрагмент — обязан
+    пройти; (2) ГРУБЫЙ подложный (`gross_decoy`, совсем другое требование)
+    — обязан НЕ пройти; (3) NEAR-MISS подложный (`near_miss_decoy`, тот же
+    акт, другая статья, либо `None` — n/a) — тоже обязан НЕ пройти, это и
+    есть более строгая проверка из ревью Задачи 28."""
     models = models or load_models_config()
     producer_model = models.tiers[VERIFY_PROFILE.tier]
     verifier = Verifier(llm=llm, model=verifier_model_for(producer_model, models))
+    near_miss_id = near_miss_decoy.id if near_miss_decoy is not None else None
 
     try:
-        correct_verdict = verifier.run(
+        correct_passed = verifier.run(
             question=item.canonical_question,
             fragment=_item_fragment_text(item),
             source=_item_source_text(item),
             profile=VERIFY_PROFILE,
-        )
-        substituted_verdict = verifier.run(
+        ).passed
+        gross_decoy_passed = verifier.run(
             question=item.canonical_question,
-            fragment=_item_fragment_text(decoy),  # ПОДЛОЖНЫЙ фрагмент — другой айтем сета
+            fragment=_item_fragment_text(gross_decoy),  # ГРУБЫЙ подложный фрагмент
             source=_item_source_text(item),
             profile=VERIFY_PROFILE,
-        )
+        ).passed
+        near_miss_decoy_passed = None
+        if near_miss_decoy is not None:
+            near_miss_decoy_passed = verifier.run(
+                question=item.canonical_question,
+                fragment=_item_fragment_text(near_miss_decoy),  # NEAR-MISS подложный фрагмент
+                source=_item_source_text(item),
+                profile=VERIFY_PROFILE,
+            ).passed
     except AgentLLMError as exc:
         return VerifierAgreementResult(
-            item_id=item.id, decoy_item_id=decoy.id,
-            correct_passed=None, substituted_passed=None, error=str(exc),
+            item_id=item.id, gross_decoy_item_id=gross_decoy.id, near_miss_decoy_item_id=near_miss_id,
+            correct_passed=None, gross_decoy_passed=None, near_miss_decoy_passed=None, error=str(exc),
         )
 
     return VerifierAgreementResult(
-        item_id=item.id, decoy_item_id=decoy.id,
-        correct_passed=correct_verdict.passed, substituted_passed=substituted_verdict.passed,
+        item_id=item.id,
+        gross_decoy_item_id=gross_decoy.id,
+        near_miss_decoy_item_id=near_miss_id,
+        correct_passed=correct_passed,
+        gross_decoy_passed=gross_decoy_passed,
+        near_miss_decoy_passed=near_miss_decoy_passed,
     )
 
 
@@ -481,9 +539,15 @@ class AggregateMetrics:
     retrieval_misses: int
     retrieval_no_source_act: int
     retrieval_errors: int
-    verifier_agreement_rate: float | None
-    verifier_accept_correct_rate: float | None
-    verifier_reject_substituted_rate: float | None
+    # Три суб-метрики verifier_agreement (ревью Задачи 28, Important): грубой
+    # подмены недостаточно, near-miss (тот же акт, другая статья) — отдельная,
+    # более строгая проверка. verifier_fail_on_near_miss_decoy_rate считается
+    # ТОЛЬКО по айтемам, у которых near-miss-кандидат вообще нашёлся в сете
+    # (verifier_near_miss_na — сколько исключено как n/a, не как «прошёл»).
+    verifier_pass_on_correct_rate: float | None
+    verifier_fail_on_gross_decoy_rate: float | None
+    verifier_fail_on_near_miss_decoy_rate: float | None
+    verifier_near_miss_na: int
     verifier_errors: int
     category_accuracy: float | None
     category_measured: int
@@ -500,9 +564,10 @@ class AggregateMetrics:
             "retrieval_misses": self.retrieval_misses,
             "retrieval_no_source_act": self.retrieval_no_source_act,
             "retrieval_errors": self.retrieval_errors,
-            "verifier_agreement_rate": self.verifier_agreement_rate,
-            "verifier_accept_correct_rate": self.verifier_accept_correct_rate,
-            "verifier_reject_substituted_rate": self.verifier_reject_substituted_rate,
+            "verifier_pass_on_correct_rate": self.verifier_pass_on_correct_rate,
+            "verifier_fail_on_gross_decoy_rate": self.verifier_fail_on_gross_decoy_rate,
+            "verifier_fail_on_near_miss_decoy_rate": self.verifier_fail_on_near_miss_decoy_rate,
+            "verifier_near_miss_na": self.verifier_near_miss_na,
             "verifier_errors": self.verifier_errors,
             "category_accuracy": self.category_accuracy,
             "category_measured": self.category_measured,
@@ -527,9 +592,11 @@ def _aggregate(
 
     v_measured = [v for v in verifier if v.error is None]
     verifier_errors = len(verifier) - len(v_measured)
-    agreements = sum(1 for v in v_measured if v.agreement)
-    accepts_correct = sum(1 for v in v_measured if v.correct_passed)
-    rejects_substituted = sum(1 for v in v_measured if v.substituted_passed is False)
+    pass_on_correct = sum(1 for v in v_measured if v.correct_passed)
+    fail_on_gross_decoy = sum(1 for v in v_measured if v.gross_decoy_passed is False)
+    near_miss_applicable = [v for v in v_measured if v.near_miss_decoy_item_id is not None]
+    near_miss_na = len(v_measured) - len(near_miss_applicable)
+    fail_on_near_miss_decoy = sum(1 for v in near_miss_applicable if v.near_miss_decoy_passed is False)
 
     c_measured = [c for c in category if c.correct is not None]
     category_errors = sum(1 for c in category if c.error is not None)
@@ -545,9 +612,10 @@ def _aggregate(
         retrieval_hit_rate=_rate(hits, hits + misses),
         retrieval_hits=hits, retrieval_misses=misses,
         retrieval_no_source_act=no_source, retrieval_errors=retrieval_errors,
-        verifier_agreement_rate=_rate(agreements, len(v_measured)),
-        verifier_accept_correct_rate=_rate(accepts_correct, len(v_measured)),
-        verifier_reject_substituted_rate=_rate(rejects_substituted, len(v_measured)),
+        verifier_pass_on_correct_rate=_rate(pass_on_correct, len(v_measured)),
+        verifier_fail_on_gross_decoy_rate=_rate(fail_on_gross_decoy, len(v_measured)),
+        verifier_fail_on_near_miss_decoy_rate=_rate(fail_on_near_miss_decoy, len(near_miss_applicable)),
+        verifier_near_miss_na=near_miss_na,
         verifier_errors=verifier_errors,
         category_accuracy=_rate(category_correct, len(c_measured)),
         category_measured=len(c_measured), category_errors=category_errors,
@@ -571,9 +639,9 @@ def _build_markdown(backend: str, metrics: AggregateMetrics, delta: dict[str, fl
         "|---|---|---|",
         f"| Retriever | retrieval_hit_rate ({metrics.retrieval_hits}/{metrics.retrieval_hits + metrics.retrieval_misses}, "
         f"no_source_act={metrics.retrieval_no_source_act}, errors={metrics.retrieval_errors}) | {_fmt(metrics.retrieval_hit_rate)} |",
-        f"| Verifier | verifier_agreement_rate (errors={metrics.verifier_errors}) | {_fmt(metrics.verifier_agreement_rate)} |",
-        f"| Verifier | accept_correct_rate | {_fmt(metrics.verifier_accept_correct_rate)} |",
-        f"| Verifier | reject_substituted_rate | {_fmt(metrics.verifier_reject_substituted_rate)} |",
+        f"| Verifier | pass_on_correct_rate (errors={metrics.verifier_errors}) | {_fmt(metrics.verifier_pass_on_correct_rate)} |",
+        f"| Verifier | fail_on_gross_decoy_rate (грубая подмена) | {_fmt(metrics.verifier_fail_on_gross_decoy_rate)} |",
+        f"| Verifier | fail_on_near_miss_decoy_rate (тот же акт, другая статья; n/a={metrics.verifier_near_miss_na}) | {_fmt(metrics.verifier_fail_on_near_miss_decoy_rate)} |",
         f"| Classifier (category) | category_accuracy ({metrics.category_measured} измерено, errors={metrics.category_errors}) | {_fmt(metrics.category_accuracy)} |",
         f"| Classifier (lifecycle) | lifecycle_date_field_accuracy | {_fmt(metrics.lifecycle_date_field_accuracy)} |",
         f"| Classifier (lifecycle) | lifecycle_date_exact_match_rate (errors={metrics.lifecycle_errors}) | {_fmt(metrics.lifecycle_date_exact_match_rate)} |",
@@ -588,7 +656,10 @@ def _build_markdown(backend: str, metrics: AggregateMetrics, delta: dict[str, fl
 
 
 _DELTA_METRICS = (
-    "retrieval_hit_rate", "verifier_agreement_rate", "category_accuracy",
+    "retrieval_hit_rate",
+    "verifier_pass_on_correct_rate", "verifier_fail_on_gross_decoy_rate",
+    "verifier_fail_on_near_miss_decoy_rate",
+    "category_accuracy",
     "lifecycle_date_field_accuracy", "lifecycle_date_exact_match_rate",
 )
 
@@ -639,7 +710,9 @@ def run_eval(
     baseline: dict | None = None,
 ) -> EvalReport:
     """Прогоняет golden-набор через РЕАЛЬНЫЕ generic-агенты `agents.py`
-    (см. докстринг модуля) и агрегирует 4 метрики по ролям."""
+    (см. докстринг модуля) и агрегирует метрики по ролям (retrieval_hit,
+    три суб-метрики verifier_agreement, category_accuracy,
+    lifecycle_date_accuracy)."""
     models = models or load_models_config()
 
     retrieval = [
@@ -647,7 +720,9 @@ def run_eval(
         for item in items
     ]
     verifier = [
-        verifier_agreement_for_item(item, _pick_decoy(items, i), llm, models=models)
+        verifier_agreement_for_item(
+            item, _pick_decoy(items, i), _pick_near_miss_decoy(items, i), llm, models=models,
+        )
         for i, item in enumerate(items)
     ] if len(items) > 1 else []
     category = [category_accuracy_for_item(item, llm, valid_category_slugs, models=models) for item in items]
