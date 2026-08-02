@@ -27,7 +27,8 @@ from dataclasses import dataclass, field
 import pytest
 
 from importer.build.embeddings import cosine_similarity
-from importer.build.steps import ItemContext, ItemRecord
+from importer.build.orchestrator import MapRecord, Orchestrator
+from importer.build.steps import STEP_ORDER, ItemContext, ItemRecord, StepResult
 from importer.build.steps_dedup import DUP_THRESHOLD_HIGH, DUP_THRESHOLD_LOW, DedupStep
 from importer.tests.build.stores import InMemoryStore
 
@@ -108,12 +109,22 @@ def make_ctx(
 
 
 def add_processed_item(
-    store: InMemoryStore, *, item_id: str, run_id: str = "run-1", text: str
+    store: InMemoryStore,
+    *,
+    item_id: str,
+    run_id: str = "run-1",
+    text: str,
+    status: str = "published",
 ) -> None:
     """Регистрирует УЖЕ обработанный айтем прогона в сторе (см. докстринг
     `steps_dedup.py`: dedup сравнивает текущий айтем только с теми, кто уже
-    прошёл конвейер целиком)."""
-    store.items[item_id] = ItemRecord(id=item_id, run_id=run_id, expected_item=text)
+    прошёл конвейер целиком). `status='published'` по умолчанию — реальный
+    "уже обработанный" статус (см. фикс-раунд ревью Задачи 25:
+    `list_run_item_texts` отдаёт только `draft_loaded`/`published`,
+    `pending`/`in_progress`/`needs_attention`/`no_norm` — не кандидаты)."""
+    store.items[item_id] = ItemRecord(
+        id=item_id, run_id=run_id, expected_item=text, status=status
+    )
 
 
 # ── выше HIGH -> дубль без LLM ───────────────────────────────────────────
@@ -345,3 +356,147 @@ def test_step_always_returns_ok_status():
     result = step(ctx)
 
     assert result.status == "ok"
+
+
+# ── фикс-раунд ревью Задачи 25 (Critical): store.list_run_item_texts ────
+# фильтрует по статусу — pending/in_progress/needs_attention/no_norm НЕ
+# кандидаты, только draft_loaded/published (черновик реально в БД). Без
+# фильтра dedup первого айтема видел бы ещё не начатые айтемы прогона
+# (create_items создаёт их все пачкой ДО цикла обработки).
+
+
+def test_store_list_run_item_texts_filters_out_unprocessed_statuses():
+    """Прямая проверка фильтра `InMemoryStore.list_run_item_texts`: только
+    `draft_loaded`/`published` — кандидаты, остальные статусы (в т.ч. те,
+    что есть в check-constraint `pipeline.items`) исключены."""
+    store = InMemoryStore()
+    add_processed_item(store, item_id="item-pending", text="pending", status="pending")
+    add_processed_item(
+        store, item_id="item-in-progress", text="in_progress", status="in_progress"
+    )
+    add_processed_item(
+        store,
+        item_id="item-needs-attention",
+        text="needs_attention",
+        status="needs_attention",
+    )
+    add_processed_item(store, item_id="item-no-norm", text="no_norm", status="no_norm")
+    add_processed_item(
+        store, item_id="item-draft-loaded", text="draft_loaded", status="draft_loaded"
+    )
+    add_processed_item(store, item_id="item-published", text="published", status="published")
+
+    item_ids = {row["item_id"] for row in store.list_run_item_texts("run-1")}
+
+    assert item_ids == {"item-draft-loaded", "item-published"}
+
+
+def test_dedup_step_ignores_pending_candidate_even_if_returned_by_store():
+    """Если store (гипотетически, в обход своего собственного фильтра)
+    всё же вернул кандидата без статуса draft_loaded/published, шаг сам по
+    себе никакого ВТОРОГО фильтра не делает — фильтрация статуса ЦЕЛИКОМ
+    обязанность `list_run_item_texts` (см. докстринг `steps_dedup.py`). Этот
+    тест фиксирует контракт: `DedupStep` доверяет тому, что вернул стор, и
+    сравнивается со всем, что получил, за вычетом только своего item_id."""
+    store = InMemoryStore()
+    add_processed_item(store, item_id="item-prev", text="прошлый айтем", status="pending")
+    ctx = make_ctx(store, summary="текущий summary")
+
+    embedder = ScriptedEmbedder({"текущий summary": VEC_A, "прошлый айтем": VEC_HIGH})
+    llm = ScriptedLLM([])
+    step = DedupStep(llm, store, embedder)
+
+    result = step(ctx)
+
+    # item-prev в статусе 'pending' -> InMemoryStore.list_run_item_texts его
+    # НЕ отдаёт (проверено предыдущим тестом) -> кандидатов у DedupStep нет.
+    assert result.status == "ok"
+    assert ctx.data["dedup"] == {"duplicate_of": None}
+
+
+# ── ОБЯЗАТЕЛЬНЫЙ интеграционный тест: реальный Orchestrator.run_group ────
+
+
+def _ok_step(ctx: ItemContext) -> StepResult:
+    return StepResult(status="ok")
+
+
+def test_integration_orchestrator_run_group_dedup_ignores_not_yet_processed_items():
+    """Интеграционный тест на сам баг из Critical ревью: `Orchestrator.
+    run_group` создаёт ВСЕ айтемы прогона одной пачкой (`create_items`) ДО
+    цикла обработки — значит без фильтра по статусу dedup айтема 1 увидел
+    бы ещё не начатые (pending) айтемы 2 и 3 у них тоже есть `expected_item`
+    в pipeline.items с самого начала прогона.
+
+    Сценарий с настоящим `DedupStep` в реестре шагов (остальные шаги —
+    простые ok-фейки, `_ok_step`):
+    - айтем 1 на своём 'dedup' видит ПУСТОЙ реестр кандидатов (2 и 3 ещё
+      pending — их обработка не начиналась);
+    - айтем 2 (дубликат айтема 1 по тексту) на своём 'dedup' видит уже
+      ПОЛНОСТЬЮ обработанный (к этому моменту 'published' —
+      `Orchestrator` идёт по айтемам строго последовательно, айтем 1
+      закончен целиком раньше, чем стартует айтем 2) айтем 1 и схлопывается
+      с ним;
+    - айтем 3 (не похож ни на кого) не находит дубля, видя уже двух
+      обработанных айтемов 1 и 2."""
+    store = InMemoryStore()
+    store.maps["map-1"] = MapRecord(
+        id="map-1",
+        group_ref="2203",
+        jurisdiction="UZ",
+        status="approved",
+        payload=[
+            {"expected_item": "требование первое"},
+            {"expected_item": "требование первое дубль"},
+            {"expected_item": "совсем другое требование"},
+        ],
+    )
+
+    embedder = ScriptedEmbedder(
+        {
+            "требование первое": VEC_A,
+            "требование первое дубль": VEC_HIGH,  # дубль относительно первого
+            "совсем другое требование": VEC_LOW,  # не похоже ни на что
+        }
+    )
+    llm = ScriptedLLM([])  # ни одна пара не спорная -> Classifier не нужен
+    real_dedup = DedupStep(llm, store, embedder)
+
+    seen_dedup_ctx: list[ItemContext] = []
+
+    def tracking_dedup(ctx: ItemContext) -> StepResult:
+        result = real_dedup(ctx)
+        seen_dedup_ctx.append(ctx)
+        return result
+
+    steps = {name: _ok_step for name in STEP_ORDER}
+    steps["dedup"] = tracking_dedup
+
+    orchestrator = Orchestrator(store, steps=steps)
+    report = orchestrator.run_group("map-1")
+
+    assert report.total_items == 3
+    assert report.published == 3  # все ok-фейки -> все дошли до published
+    assert len(seen_dedup_ctx) == 3
+
+    items_by_expected = {item.expected_item: item for item in store.items.values()}
+    item1 = items_by_expected["требование первое"]
+    item2 = items_by_expected["требование первое дубль"]
+    item3 = items_by_expected["совсем другое требование"]
+
+    ctx1, ctx2, ctx3 = seen_dedup_ctx
+
+    assert ctx1.item.id == item1.id
+    assert ctx1.data["dedup"] == {"duplicate_of": None}  # реестр пуст: 2 и 3 ещё pending
+
+    assert ctx2.item.id == item2.id
+    assert ctx2.data["dedup"]["duplicate_of"] == item1.id  # айтем 1 уже published
+
+    assert ctx3.item.id == item3.id
+    assert ctx3.data["dedup"]["duplicate_of"] is None  # не похож ни на 1, ни на 2
+
+    # оба айтема 1 и 2 в итоге published (dedup не блокирует собственный
+    # прогресс айтема — см. докстринг steps_dedup.py: "статус НЕ 'merged'")
+    assert item1.status == "published"
+    assert item2.status == "published"
+    assert item3.status == "published"

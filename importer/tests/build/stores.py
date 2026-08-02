@@ -132,11 +132,19 @@ class InMemoryStore:
         (Задача 25) — `text` = `expected_item` (см. докстринг
         `BuildStore.list_run_item_texts` в `orchestrator.py`): `ItemRecord`
         не несёт `summary`, тестовый дублёр не притворяется, что может
-        больше, чем реальный `SupabaseBuildStore`."""
+        больше, чем реальный `SupabaseBuildStore`.
+
+        Фильтр `status in ('draft_loaded', 'published')` (Critical
+        фикс-раунда ревью Задачи 25) — та же семантика, что и у
+        `SupabaseBuildStore`: `pending`/`in_progress`/`needs_attention`/
+        `no_norm` не кандидаты. Порядок — порядок вставки в `self.items`
+        (обычный `dict` в Python 3.7+ его сохраняет), что уже эквивалентно
+        `order("updated_at")` у `SupabaseBuildStore` для целей теста
+        «первый найденный дубль побеждает»."""
         return [
             {"item_id": item.id, "text": item.expected_item}
             for item in self.items.values()
-            if item.run_id == run_id
+            if item.run_id == run_id and item.status in ("draft_loaded", "published")
         ]
 
     def update_item_status(self, item_id, status, *, last_error=None) -> ItemRecord:
