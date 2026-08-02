@@ -51,14 +51,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from importer.build.agents import load_models_config, verifier_model_for
 from importer.build.legalx import NormFragment
 from importer.build.steps import ItemContext, ItemRecord
-from importer.build.steps_samples_lawyer import LawyerStep, SamplesStep
+from importer.build.steps_samples_lawyer import (
+    STATUS_NOTE_WINDOW_DAYS,
+    LawyerStep,
+    SamplesStep,
+)
 from importer.build.websearch import WebSearcher, get_web_searcher
 
 # ── тестовые дублёры (тот же паттерн, что test_steps_sanctions.py) ─────────
@@ -296,6 +300,23 @@ def test_samples_step_judge_missing_needed_field_returns_fail_not_raise():
     assert result.error is not None
 
 
+def test_samples_step_judge_needed_true_without_document_type_returns_fail_not_raise():
+    """needed=True с пустым/отсутствующим document_type — невалидный ответ
+    судьи (Minor ревью Задачи 23): иначе весь context_text улетел бы в
+    веб-поиск вместо конкретного типа документа. У судьи нет ретрая —
+    невалидный ответ сразу StepResult(fail), Hunter не вызывается."""
+    llm = ScriptedLLM([judge_response(True, None)])
+    searcher = FakeWebSearcher(responses=[[]])
+    step = SamplesStep(searcher, llm)
+
+    result = step(item_ctx())
+
+    assert result.status == "fail"
+    assert result.error is not None
+    assert searcher.calls == []
+    assert len(llm.calls) == 1  # ретрая у судьи нет
+
+
 def test_samples_step_is_registered_in_steps_registry():
     from importer.build.steps import get_step
 
@@ -369,6 +390,94 @@ def test_lawyer_step_close_future_date_sets_status_note():
 
     assert result.status == "ok"
     assert ctx.data["status_note"] == "успеть промаркировать остатки до 2026-09-01"
+
+
+def test_lawyer_step_date_within_window_sets_status_note():
+    """Дата через 30 дней — внутри окна STATUS_NOTE_WINDOW_DAYS (180) ->
+    status_note обязателен (Important ревью Задачи 23: порог близости)."""
+    today = date(2026, 8, 2)
+    close = today + timedelta(days=30)
+    llm = ScriptedLLM([
+        lawyer_response(
+            "требование скоро изменится", ["подготовить документы"],
+            f"успеть до {close.isoformat()}",
+        ),
+    ])
+    step = LawyerStep(llm, today=today)
+    ctx = item_ctx(lifecycle={
+        "effective_from": close.isoformat(), "transition_until": None,
+        "valid_to": None, "repealed_by_ref": None,
+    })
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert ctx.data["status_note"] == f"успеть до {close.isoformat()}"
+
+
+def test_lawyer_step_date_far_beyond_window_returns_none_status_note():
+    """Дата через 3 года — далеко за пределами окна в 180 дней -> считается
+    как «близкой даты нет», status_note обязан быть null (Important ревью
+    Задачи 23: без порога 2031 год гейтил бы status_note так же, как
+    следующая неделя)."""
+    today = date(2026, 8, 2)
+    far = today + timedelta(days=365 * 3)
+    llm = ScriptedLLM([
+        lawyer_response("действует, скоро не изменится", ["ничего срочного делать не нужно"], None),
+    ])
+    step = LawyerStep(llm, today=today)
+    ctx = item_ctx(lifecycle={
+        "effective_from": far.isoformat(), "transition_until": None,
+        "valid_to": None, "repealed_by_ref": None,
+    })
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert ctx.data["status_note"] is None
+
+
+def test_lawyer_step_date_exactly_at_window_boundary_sets_status_note():
+    """Дата ровно на STATUS_NOTE_WINDOW_DAYS (180-й день) — граница
+    ВКЛЮЧИТЕЛЬНО, всё ещё считается близкой."""
+    today = date(2026, 8, 2)
+    boundary = today + timedelta(days=STATUS_NOTE_WINDOW_DAYS)
+    llm = ScriptedLLM([
+        lawyer_response(
+            "требование скоро изменится", ["подготовить документы"],
+            f"успеть до {boundary.isoformat()}",
+        ),
+    ])
+    step = LawyerStep(llm, today=today)
+    ctx = item_ctx(lifecycle={
+        "effective_from": boundary.isoformat(), "transition_until": None,
+        "valid_to": None, "repealed_by_ref": None,
+    })
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert ctx.data["status_note"] == f"успеть до {boundary.isoformat()}"
+
+
+def test_lawyer_step_date_one_day_beyond_window_boundary_returns_none_status_note():
+    """Дата на 181-й день (день ПОСЛЕ границы окна) — уже не считается
+    близкой, status_note обязан быть null."""
+    today = date(2026, 8, 2)
+    beyond = today + timedelta(days=STATUS_NOTE_WINDOW_DAYS + 1)
+    llm = ScriptedLLM([
+        lawyer_response("действует, скоро не изменится", ["ничего срочного делать не нужно"], None),
+    ])
+    step = LawyerStep(llm, today=today)
+    ctx = item_ctx(lifecycle={
+        "effective_from": beyond.isoformat(), "transition_until": None,
+        "valid_to": None, "repealed_by_ref": None,
+    })
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert ctx.data["status_note"] is None
 
 
 def test_lawyer_step_lifecycle_without_future_dates_returns_none_status_note():
