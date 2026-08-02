@@ -52,7 +52,7 @@ sanctions[].measure), являются ИИ-текстами **по постро
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from importer.build.agents import (
     ModelsConfig,
@@ -64,6 +64,9 @@ from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgent
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
 from importer.build.steps_norm import DEFAULT_JURISDICTION
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_translate<->trace
+    from importer.build.trace import Tracer
 
 TRANSLATION_PROFILE = Profile(
     name="translation",
@@ -89,11 +92,13 @@ class TranslateStep:
         target_lang: Literal["uz", "en"] | None = "uz",
         models: ModelsConfig | None = None,
         profile: Profile = TRANSLATION_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._target_lang = target_lang
         self._models = models or load_models_config()
         self._profile = profile
+        self._tracer = tracer
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         try:
@@ -126,7 +131,7 @@ class TranslateStep:
 
         # Фаза 2: Verifier (СПЕЦИАЛЬНЫЙ СЛУЧАЙ: всегда mid-модель по CSV 27)
         verifier_model = self._models.tiers["mid"]
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
 
         # Собираем кратко переведённый текст для Verifier'а
         translated_brief = self._build_verifier_fragment(translation_data)

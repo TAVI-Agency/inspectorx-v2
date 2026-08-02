@@ -76,6 +76,8 @@ try/except вокруг вызова — необработанное исклю
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from importer.build.agents import (
     ModelsConfig,
     Retriever,
@@ -91,6 +93,9 @@ from importer.build.orchestrator import BuildStore
 from importer.build.profiles import Profile
 from importer.build.question_writer import MapItem, write_questions
 from importer.build.steps import ItemContext, StepResult, register_step
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_norm<->trace
+    from importer.build.trace import Tracer
 
 # УЗ — единственная юрисдикция с реальными фикстурами LegalX сейчас
 # (`legalx_mock.py`) и primary market проекта (docs/adr/0002). `NormStep`
@@ -153,12 +158,14 @@ class NormStep:
         jurisdiction: str = DEFAULT_JURISDICTION,
         models: ModelsConfig | None = None,
         profile: Profile = NORM_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._jurisdiction = jurisdiction
         self._models = models or load_models_config()
         self._profile = profile
-        self._retriever = Retriever(legalx, llm, self._models)
+        self._tracer = tracer
+        self._retriever = Retriever(legalx, llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         try:
@@ -172,7 +179,7 @@ class NormStep:
 
         producer_model = self._models.tiers[self._profile.tier]
         verifier_model = verifier_model_for(producer_model, self._models)
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
 
         verdicts: list[Verdict] = []
         outcomes: list[str] = []
@@ -229,12 +236,14 @@ class SummaryStep:
         *,
         models: ModelsConfig | None = None,
         profile: Profile = SUMMARY_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._store = store
         self._models = models or load_models_config()
         self._profile = profile
-        self._summarizer = Summarizer(llm, self._models)
+        self._tracer = tracer
+        self._summarizer = Summarizer(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         fragment = ctx.data.get("norm_fragment")
@@ -256,7 +265,7 @@ class SummaryStep:
 
         producer_model = self._models.tiers[self._profile.tier]
         verifier_model = verifier_model_for(producer_model, self._models)
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
         verdict = verifier.run(
             question="Саммари точно передаёт норму и не добавляет ничего от себя?",
             fragment=summary_text,

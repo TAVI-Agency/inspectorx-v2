@@ -339,6 +339,7 @@ class Orchestrator:
         store: BuildStore,
         steps: dict[str, StepFn] | None = None,
         manager: ExceptionManagerLike | None = None,
+        tracer: Tracer | None = None,
     ):
         self._store = store
         # None -> берём шаги из глобального реестра steps.py (реальный
@@ -350,6 +351,20 @@ class Orchestrator:
         # исключений, чтобы существующие вызовы без manager= не заметили
         # разницы (см. docstring NullExceptionManager в manager.py).
         self._manager: ExceptionManagerLike = manager or NullExceptionManager()
+        # Задача 29 (фикс-раунд ревью, Important — старый дизайн с Tracer
+        # per-run_id не мог доехать до живых LLM-вызовов внутри шагов, см.
+        # докстринг `trace.py:Tracer`): `tracer`, если передан явно, — ТОТ ЖЕ
+        # объект, что уже отдан `build_step_registry(tracer=...)` при сборке
+        # `steps` (`registry.py`) — тождество объекта обязательно, иначе
+        # `bind_run`/`bind_item` здесь не долетят до агентов внутри уже
+        # сконструированных шагов (мутация ЧУЖОГО объекта их не коснётся).
+        # Если НЕ передан — создаём свой, когда стор поддерживает трейсинг
+        # (`hasattr(store, "save_llm_call")`, добавлено этой же задачей в
+        # `BuildStore`): `run_group`/`rerun_item` трейсят даже без явной
+        # инъекции извне (обратная совместимость вызовов без `tracer=`).
+        self._tracer: Tracer | None = tracer if tracer is not None else (
+            Tracer(store) if hasattr(store, "save_llm_call") else None
+        )
 
     def run_group(self, map_id: str, *, publish: bool = True) -> RunReport:
         """Прогоняет все айтемы утверждённой карты по STEP_ORDER, затем
@@ -391,12 +406,17 @@ class Orchestrator:
             )
         run_id = self._store.create_run(map_id)
         items = self._store.create_items(run_id, map_record.payload)
-        tracer = self._make_tracer(run_id)
+        if self._tracer is not None:
+            self._tracer.bind_run(run_id)
 
         for item in items:
             item = self._store.update_item_status(item.id, "in_progress")
-            ctx = ItemContext(item=item, tracer=tracer)
+            if self._tracer is not None:
+                self._tracer.bind_item(item.id)
+            ctx = ItemContext(item=item, tracer=self._tracer)
             self._run_from(ctx, start_index=0)
+            if self._tracer is not None:
+                self._tracer.bind_item(None)
 
         self._store.finish_run(run_id, "done")
 
@@ -433,19 +453,6 @@ class Orchestrator:
                 counts[item.status] += 1
         return counts
 
-    def _make_tracer(self, run_id: str) -> Tracer | None:
-        """Задача 29: `Tracer` этого прогона — только если `self._store`
-        ПОДДЕРЖИВАЕТ трейсинг (`save_llm_call`, добавлен в `BuildStore`
-        Protocol этой задачей). Проверка через `hasattr`, не через
-        `isinstance(..., BuildStore)`, потому что `BuildStore` —
-        `typing.Protocol` БЕЗ `@runtime_checkable`: сторы тестов, написанные
-        ДО Задачи 29 (если такие остались в стороннем коде) без этого метода
-        продолжают работать как раньше — `run_group` тогда просто не трейсит
-        (`ItemContext.tracer=None`, см. докстринг `steps.py:ItemContext`)."""
-        if not hasattr(self._store, "save_llm_call"):
-            return None
-        return Tracer(self._store, run_id)
-
     def rerun_item(self, item_id: str, from_step: str) -> None:
         """Частичный Build для контура C: сбрасывает статус айтема в
         'in_progress' и гонит шаги STEP_ORDER, начиная с `from_step`."""
@@ -454,8 +461,13 @@ class Orchestrator:
                 f"Неизвестный шаг {from_step!r} — ожидается один из {STEP_ORDER}"
             )
         item = self._store.update_item_status(item_id, "in_progress")
-        ctx = ItemContext(item=item, tracer=self._make_tracer(item.run_id))
+        if self._tracer is not None:
+            self._tracer.bind_run(item.run_id)
+            self._tracer.bind_item(item.id)
+        ctx = ItemContext(item=item, tracer=self._tracer)
         self._run_from(ctx, start_index=STEP_ORDER.index(from_step))
+        if self._tracer is not None:
+            self._tracer.bind_item(None)
 
     # ── внутреннее ───────────────────────────────────────────────────────
 

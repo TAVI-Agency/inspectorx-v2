@@ -79,12 +79,17 @@ draft_loaded/published/needs_attention/no_norm), а менять constraint ра
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from importer.build.agents import Classifier, ModelsConfig, load_models_config
 from importer.build.embeddings import Embedder, LiveEmbedder, cosine_similarity
 from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgentLLM
 from importer.build.orchestrator import BuildStore
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_dedup<->trace
+    from importer.build.trace import Tracer
 
 # Стартовые пороги (см. докстринг модуля) — калибровка по трейсингу, не в этой задаче.
 DUP_THRESHOLD_HIGH = 0.9  # >= этого — дубль без обращения к LLM
@@ -120,12 +125,13 @@ class DedupStep:
         *,
         models: ModelsConfig | None = None,
         profile: Profile = DEDUP_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._store = store
         self._embedder = embedder
         self._models = models or load_models_config()
-        self._classifier = Classifier(llm, self._models)
+        self._classifier = Classifier(llm, self._models, tracer=tracer)
         self._profile = profile
 
     def __call__(self, ctx: ItemContext) -> StepResult:

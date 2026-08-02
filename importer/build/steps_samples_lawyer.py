@@ -103,6 +103,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
+from typing import TYPE_CHECKING
 
 from importer.build.agents import (
     Classifier,
@@ -116,6 +117,9 @@ from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgent
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
 from importer.build.websearch import WebSearcher, get_web_searcher
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_samples_lawyer<->trace
+    from importer.build.trace import Tracer
 
 # ══════════════════════════════════════════════════════════════════════════
 # 'samples'
@@ -262,6 +266,7 @@ class SamplesStep:
         profile: Profile = SAMPLES_PROFILE,
         judge_profile: Profile = SAMPLES_JUDGE_PROFILE,
         hunter_profile: Profile = SAMPLES_HUNTER_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._searcher = searcher
         self._llm = llm
@@ -269,7 +274,8 @@ class SamplesStep:
         self._profile = profile
         self._judge_profile = judge_profile
         self._hunter_profile = hunter_profile
-        self._classifier = Classifier(llm, self._models)
+        self._tracer = tracer
+        self._classifier = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         try:
@@ -313,7 +319,7 @@ class SamplesStep:
 
         producer_model = self._models.tiers[self._profile.tier]
         verifier_model = verifier_model_for(producer_model, self._models)
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
         verdict: Verdict = verifier.run(
             question="Шаблон качественный и из официального/актуального источника для этого типа документа?",
             fragment=json.dumps(template, ensure_ascii=False, sort_keys=True),
@@ -445,11 +451,13 @@ class LawyerStep:
         models: ModelsConfig | None = None,
         profile: Profile = LAWYER_PROFILE,
         today: date | None = None,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._models = models or load_models_config()
         self._profile = profile
-        self._classifier = Classifier(llm, self._models)
+        self._tracer = tracer
+        self._classifier = Classifier(llm, self._models, tracer=tracer)
         self._today = today  # инъекция "сегодня" — детерминированные тесты близкой даты
 
     def __call__(self, ctx: ItemContext) -> StepResult:

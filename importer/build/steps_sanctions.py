@@ -78,6 +78,8 @@ Retriever/Verifier — оба сигналят `AgentLLMError`, см. `agents.py
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from importer.build.agents import (
     Classifier,
     ModelsConfig,
@@ -92,6 +94,9 @@ from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgent
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
 from importer.build.steps_norm import DEFAULT_JURISDICTION
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_sanctions<->trace
+    from importer.build.trace import Tracer
 
 # Форма запроса Retriever'а (уточнение контроллера задачи) — суть требования
 # приклеивается ПОСЛЕ этого префикса, см. `_build_query`.
@@ -206,14 +211,16 @@ class SanctionsStep:
         models: ModelsConfig | None = None,
         profile: Profile = SANCTIONS_PROFILE,
         structure_profile: Profile = SANCTIONS_STRUCTURE_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._jurisdiction = jurisdiction
         self._models = models or load_models_config()
         self._profile = profile
         self._structure_profile = structure_profile
-        self._retriever = Retriever(legalx, llm, self._models)
-        self._classifier = Classifier(llm, self._models)
+        self._tracer = tracer
+        self._retriever = Retriever(legalx, llm, self._models, tracer=tracer)
+        self._classifier = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         try:
@@ -237,7 +244,7 @@ class SanctionsStep:
         fragment = result.fragments[0]
         producer_model = self._models.tiers[self._profile.tier]
         verifier_model = verifier_model_for(producer_model, self._models)
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
         verdict: Verdict = verifier.run(
             question="Фрагмент реально об ответственности (санкции) за нарушение именно этого требования?",
             fragment=fragment.content,
