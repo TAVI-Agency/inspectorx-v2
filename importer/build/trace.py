@@ -61,26 +61,63 @@ class LLMCallStoreLike(Protocol):
 
 
 class Tracer:
-    """Трейсер ОДНОГО прогона — `run_id` фиксирован в конструкторе (вызовы
-    вне прогона, например Cartographer, этим классом сейчас не покрыты, см.
-    `orchestrator.py: Orchestrator.run_group`).
+    """Трейсер прогона — LATE-BOUND и MUTABLE (фикс-раунд ревью Задачи 29,
+    Important: старый дизайн с `run_id`, фиксированным в конструкторе,
+    физически не мог доехать до живых LLM-вызовов внутри шагов — фабрика
+    шагов (`registry.py: build_step_registry`) строит `Step`-объекты и их
+    агентов ДО того, как `Orchestrator.run_group` создаёт `run_id`, а
+    `Tracer` со старым дизайном требовал `run_id` уже на этапе конструктора).
 
-    `record` — единственная точка записи: считает `cost_usd` по прайсу
-    `models.yaml` и делегирует персистентность `store.save_llm_call`."""
+    Теперь `Tracer` создаётся ОДИН РАЗ (`Tracer(store)`, `run_id=None` —
+    "не привязан"), передаётся И в `build_step_registry(tracer=...)` (тот же
+    объект долетает до каждого `Step` и его агентов, см. `registry.py`), И в
+    `Orchestrator(steps=registry, tracer=tracer)` — оркестратор мутирует ТОТ
+    ЖЕ объект по ходу прогона: `bind_run(run_id)` один раз в начале
+    `run_group`/`rerun_item`, `bind_item(item.id)` перед шагами каждого
+    айтема и `bind_item(None)` после. Поскольку все держатели этого объекта
+    (агенты внутри шагов) видят одну и ту же мутацию, `record()`, вызванный
+    ЛЮБЫМ агентом ЛЮБОГО шага в любой момент прогона, попадает под правильные
+    `run_id`/`item_id` без явной передачи их через сигнатуры шагов.
+
+    Мутабельность безопасна: CLI и `Orchestrator` — однопоточные (никакого
+    параллелизма по айтемам внутри одного прогона, `_run_from` идёт строго
+    последовательно), гонок за `self._run_id`/`self._item_id` нет.
+
+    `record()`, вызванный ДО `bind_run` (например, конструирование шагов на
+    этапе, где `run_id` ещё не существует) — намеренный no-op, не ошибка и
+    не буферизация "на потом": до Задачи 29 трейсинга не было вовсе,
+    пропущенный вызов до первого `bind_run` не хуже старого поведения."""
 
     def __init__(
         self,
         store: LLMCallStoreLike,
-        run_id: str,
+        run_id: str | None = None,
         models: ModelsConfig | None = None,
     ):
         self._store = store
         self._run_id = run_id
+        self._item_id: str | None = None
         self._models = models or load_models_config()
 
     @property
-    def run_id(self) -> str:
+    def run_id(self) -> str | None:
         return self._run_id
+
+    def bind_run(self, run_id: str) -> None:
+        """Привязывает трейсер к прогону — вызывается РОВНО один раз в
+        начале `Orchestrator.run_group`/`rerun_item`, сразу после того, как
+        `run_id` реально создан (`store.create_run`/уже существующий
+        `item.run_id`). Сбрасывает `item_id` (новый прогон — старый
+        item-контекст не имеет смысла)."""
+        self._run_id = run_id
+        self._item_id = None
+
+    def bind_item(self, item_id: str | None) -> None:
+        """Привязывает трейсер к текущему айтему прогона — `Orchestrator`
+        вызывает перед шагами айтема (`bind_item(item.id)`) и
+        `bind_item(None)` сразу после (вызовы вне цикла по айтемам,
+        например будущие run-level агенты, не приписываются айтему)."""
+        self._item_id = item_id
 
     def record(
         self,
@@ -93,11 +130,20 @@ class Tracer:
     ) -> None:
         """Пишет один вызов LLM в `pipeline.llm_calls` через
         `store.save_llm_call` — `cost_usd` считается здесь по прайсу
-        `models.yaml`, не хранится готовым у вызывающего кода."""
+        `models.yaml`, не хранится готовым у вызывающего кода.
+
+        `item_id`: явный override (используется юнит-тестами `Tracer`
+        напрямую); если не передан — берётся текущее связанное состояние
+        `self._item_id` (обычный путь агентов внутри шага, см. докстринг
+        класса). `run_id=None` (трейсер ещё не забинден вызовом `bind_run`)
+        — намеренный no-op."""
+        if self._run_id is None:
+            return
+        resolved_item_id = item_id if item_id is not None else self._item_id
         cost_usd = self._cost_usd(model, input_tokens, output_tokens)
         self._store.save_llm_call(
             self._run_id, role, model, input_tokens, output_tokens, cost_usd,
-            item_id=item_id,
+            item_id=resolved_item_id,
         )
 
     def _cost_usd(self, model: str, input_tokens: int, output_tokens: int) -> float:

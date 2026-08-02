@@ -82,6 +82,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import date
+from typing import TYPE_CHECKING
 
 from importer.build.agents import (
     Classifier,
@@ -96,6 +97,9 @@ from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgent
 from importer.build.orchestrator import BuildStore
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_scope_lifecycle<->trace
+    from importer.build.trace import Tracer
 
 # ══════════════════════════════════════════════════════════════════════════
 # 'scope'
@@ -155,13 +159,15 @@ class ScopeStep:
         group_ref: str,
         models: ModelsConfig | None = None,
         profile: Profile = SCOPE_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._store = store
         self._group_ref = group_ref
         self._models = models or load_models_config()
         self._profile = profile
-        self._classifier = Classifier(llm, self._models)
+        self._tracer = tracer
+        self._classifier = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         fragment = ctx.data.get("norm_fragment")
@@ -309,11 +315,13 @@ class LifecycleStep:
         *,
         models: ModelsConfig | None = None,
         profile: Profile = LIFECYCLE_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._models = models or load_models_config()
         self._profile = profile
-        self._extractor = Classifier(llm, self._models)
+        self._tracer = tracer
+        self._extractor = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         fragment = ctx.data.get("norm_fragment")
@@ -352,7 +360,7 @@ class LifecycleStep:
 
         producer_model = self._models.tiers[self._profile.tier]
         verifier_model = verifier_model_for(producer_model, self._models)
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
 
         verdict: Verdict = verifier.run(
             question="Даты жизненного цикла точно соответствуют фрагменту нормы?",

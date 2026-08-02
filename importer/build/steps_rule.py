@@ -85,6 +85,7 @@ Rule-maker — `Classifier` (`agents.py`) в роли producer'а, тир `mid`
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from importer.build.agents import (
     Classifier,
@@ -98,6 +99,9 @@ from importer.build.legalx import NormFragment
 from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgentLLM
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_rule<->trace
+    from importer.build.trace import Tracer
 
 # Единственная категория, для которой машинные правила фото-чека вообще
 # имеют смысл (решение контроллера задачи) — для остальных шаг skip-ok.
@@ -152,11 +156,13 @@ class RuleStep:
         *,
         models: ModelsConfig | None = None,
         profile: Profile = RULE_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._models = models or load_models_config()
         self._profile = profile
-        self._maker = Classifier(llm, self._models)
+        self._tracer = tracer
+        self._maker = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         category_slug = ctx.data.get("category_slug")
@@ -199,7 +205,7 @@ class RuleStep:
 
         producer_model = self._models.tiers[self._profile.tier]
         verifier_model = verifier_model_for(producer_model, self._models)
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
 
         verdicts: list[Verdict] = []
         verified_rules: list[dict] = []

@@ -16,7 +16,7 @@ from importer.build.orchestrator import (
     SupabaseBuildStore,
 )
 from importer.build.registry import build_step_registry
-from importer.build.trace import cost_report
+from importer.build.trace import Tracer, cost_report
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
@@ -147,12 +147,21 @@ def main(argv=None):
             # ИЗ карты этого прогона, не из заглушек глобального реестра
             # steps.py (load_default_steps/_STUB_GROUP_REF/DEFAULT_JURISDICTION).
             map_record = store.load_map(args.map_id)
+            # Задача 29 (фикс-раунд ревью): ОДИН Tracer, late-bound
+            # (run_id/item_id ещё не существуют на этом шаге, см. докстринг
+            # `trace.py:Tracer`) — та же ссылка идёт И в фабрику шагов
+            # (агенты внутри Step-ов трейсят через неё), И в Orchestrator
+            # (который её же bind_run/bind_item мутирует по ходу прогона).
+            # Тождество объекта обязательно: разные экземпляры Tracer друг
+            # друга не видят.
+            tracer = Tracer(store)
             registry = build_step_registry(
                 store, _build_llm_runner, get_legalx_client(),
                 group_ref=map_record.group_ref, jurisdiction=map_record.jurisdiction,
+                tracer=tracer,
             )
             try:
-                report = Orchestrator(store, steps=registry).run_group(
+                report = Orchestrator(store, steps=registry, tracer=tracer).run_group(
                     args.map_id, publish=not args.no_publish
                 )
             except MapNotApprovedError as exc:

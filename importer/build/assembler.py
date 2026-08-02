@@ -130,12 +130,16 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from importer.build.agents import Classifier, ModelsConfig, load_models_config
 from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgentLLM
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
 from importer.build.steps_norm import DEFAULT_JURISDICTION
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл assembler<->trace
+    from importer.build.trace import Tracer
 
 # requirements.operation (operation_domain enum) — NOT NULL БЕЗ дефолта в
 # схеме (20260711120000_initial_schema.sql), но НИ ОДИН шаг STEP_ORDER
@@ -343,12 +347,13 @@ class AssembleStep:
         jurisdiction: str = DEFAULT_JURISDICTION,
         models: ModelsConfig | None = None,
         profile: Profile = ASSEMBLE_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._llm = llm
         self._jurisdiction = jurisdiction
         self._models = models or load_models_config()
         self._profile = profile
-        self._classifier = Classifier(llm, self._models)
+        self._classifier = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         dedup = ctx.data.get("dedup") or {}

@@ -34,6 +34,8 @@ court_cases=None, ноль вызовов LLM/LegalX (граница плана)
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from importer.build.agents import (
     ModelsConfig,
     Summarizer,
@@ -47,6 +49,9 @@ from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgent
 from importer.build.profiles import Profile
 from importer.build.steps import ItemContext, StepResult, register_step
 from importer.build.steps_norm import DEFAULT_JURISDICTION
+
+if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл steps_cases<->trace
+    from importer.build.trace import Tracer
 
 CASES_PROFILE = Profile(
     name="cases",
@@ -83,6 +88,7 @@ class CasesStep:
         models: ModelsConfig | None = None,
         profile: Profile = CASES_PROFILE,
         summary_profile: Profile = CASES_SUMMARY_PROFILE,
+        tracer: "Tracer | None" = None,
     ):
         self._legalx = legalx
         self._llm = llm
@@ -90,7 +96,8 @@ class CasesStep:
         self._models = models or load_models_config()
         self._profile = profile
         self._summary_profile = summary_profile
-        self._summarizer = Summarizer(llm, self._models)
+        self._tracer = tracer
+        self._summarizer = Summarizer(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
         try:
@@ -127,7 +134,7 @@ class CasesStep:
         # Проверка Verifier'ом: кейсы реально по этой статье/теме
         producer_model = self._models.tiers[self._profile.tier]
         verifier_model = verifier_model_for(producer_model, self._models)
-        verifier = Verifier(llm=self._llm, model=verifier_model)
+        verifier = Verifier(llm=self._llm, model=verifier_model, tracer=self._tracer)
 
         # Собираем кейсы кратко для вопроса Verifier'а
         cases_brief = "; ".join(
