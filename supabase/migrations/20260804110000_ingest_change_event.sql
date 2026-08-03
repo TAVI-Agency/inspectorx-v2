@@ -1,18 +1,43 @@
 -- ============================================================================
 -- InspectorX v2 — Задача 39: приём webhook изменений LegalX (Блок 6, контур C)
 -- Контракт 3 (payload) — docs/adr/0005-ecosystem-contracts.md, финализирован
--- Задачей 1:
---   {secret, jurisdiction, act_id, fragment_ids[], change_type, effective_date,
---    summary}
--- change_type ∈ new | amended | repealed | effective_soon (тот же набор, что
--- enum public.change_event_type — совпадение контракта и схемы намеренное).
+-- Задачей 1. change_type ∈ new | amended | repealed | effective_soon (тот же
+-- набор, что enum public.change_event_type — совпадение контракта и схемы
+-- намеренное).
 --
 -- LegalX шлёт HTTP POST (pg_net) на PostgREST-RPC public.ingest_change_event.
--- act_id в payload — uuid акта В БАЗЕ LEGALX, а change_events.act_id — FK на
--- ЛОКАЛЬНУЮ public.acts: чужой uuid в эту FK-колонку не пишем (нарушил бы FK
--- либо сослался бы не на тот акт). Локальный act_id/paragraph_id оставляем
--- NULL — сопоставление LegalX-идентификаторов с локальными acts делает
--- Impact-маппер (Задача 40) из payload jsonb, который сохраняется целиком.
+-- Сигнатура — ingest_change_event(p_secret text, p_payload jsonb): у
+-- PostgREST top-level ключи тела запроса маппятся на имена параметров, поэтому
+-- тело — КОНВЕРТ с двумя ключами, а не плоский объект контракта (найдено на
+-- код-ревью 03.08.2026, задокументировано в ADR-0005, чтобы сторона LegalX не
+-- получила «could not find function»):
+--
+--   POST {SUPABASE_URL}/rest/v1/rpc/ingest_change_event
+--   apikey: <anon/publishable ключ InspectorX>
+--   Content-Type: application/json
+--
+--   {
+--     "p_secret": "<из Vault LegalX>",
+--     "p_payload": {
+--       "jurisdiction": "UZ",
+--       "act_id": "<uuid в LegalX>",
+--       "fragment_ids": ["<uuid>"],
+--       "change_type": "new | amended | repealed | effective_soon",
+--       "effective_date": "2027-01-01",
+--       "summary": "краткое описание изменения"
+--     }
+--   }
+--
+-- act_id внутри p_payload — uuid акта В БАЗЕ LEGALX, а change_events.act_id —
+-- FK на ЛОКАЛЬНУЮ public.acts: чужой uuid в эту FK-колонку не пишем (нарушил
+-- бы FK либо сослался бы не на тот акт). Локальный act_id/paragraph_id
+-- оставляем NULL — сопоставление LegalX-идентификаторов с локальными acts
+-- делает Impact-маппер (Задача 40) из payload jsonb, который сохраняется
+-- целиком (без секрета — он живёт только в p_secret, в БД не попадает).
+--
+-- Идемпотентности на этом уровне нет: повторная доставка одного события
+-- (ретрай/дубль в очереди LegalX) создаёт новую строку change_events —
+-- дедупликация делается на стороне Impact-маппера (Задача 40), не здесь.
 --
 -- Секрет — общий секрет из Vault LegalX (см. ADR-0005, Контракт 3), сверяется
 -- с локальным Vault-секретом 'legalx_webhook_secret' по паттерну

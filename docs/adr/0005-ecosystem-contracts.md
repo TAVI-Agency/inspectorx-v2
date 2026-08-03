@@ -111,25 +111,57 @@ InspectorX **снапшотит топ-5 кейсов в `requirement_details` �
 ## Контракт 3. Webhook изменений LegalX → InspectorX (country-aware)
 
 LegalX при изменении акта или фрагмента шлёт HTTP POST (`pg_net`) на
-PostgREST-RPC `ingest_change_event` в InspectorX:
+PostgREST-RPC `ingest_change_event` в InspectorX. RPC в базе InspectorX
+объявлена как `ingest_change_event(p_secret text, p_payload jsonb)` — у
+PostgREST top-level ключи JSON-тела маппятся один в один на имена параметров
+функции, поэтому тело запроса — **конверт** с двумя ключами `p_secret` и
+`p_payload`, а не плоский объект:
 
-```json
+```
+POST {SUPABASE_URL}/rest/v1/rpc/ingest_change_event
+apikey: <anon/publishable ключ InspectorX>
+Content-Type: application/json
+
 {
-  "secret": "<из Vault LegalX>",
-  "jurisdiction": "UZ",
-  "act_id": "<uuid в LegalX>",
-  "fragment_ids": ["<uuid>"],
-  "change_type": "new | amended | repealed | effective_soon",
-  "effective_date": "2027-01-01",
-  "summary": "краткое описание изменения"
+  "p_secret": "<из Vault LegalX>",
+  "p_payload": {
+    "jurisdiction": "UZ",
+    "act_id": "<uuid в LegalX>",
+    "fragment_ids": ["<uuid>"],
+    "change_type": "new | amended | repealed | effective_soon",
+    "effective_date": "2027-01-01",
+    "summary": "краткое описание изменения"
+  }
 }
 ```
 
-`secret` — общий секрет из Vault LegalX, проверяется на входе в
+Внутренняя структура `p_payload` — прежний плоский объект контракта
+(`jurisdiction`, `act_id`, `fragment_ids`, `change_type`, `effective_date`,
+`summary`), без изменений. Секрет — **отдельный параметр верхнего уровня**
+`p_secret`, а не поле внутри `p_payload`: он сверяется функцией и не попадает
+в БД, тогда как `p_payload` целиком сохраняется в `change_events.payload` для
+Impact-маппера — секрет внутри него означал бы, что секрет осел в таблице.
+
+Плоский объект-конверт (`{secret, jurisdiction, act_id, …}` без вложенности)
+не работает: PostgREST не находит перегрузку `ingest_change_event` с
+параметрами `secret`/`jurisdiction`/`act_id`/… и отвечает `could not find
+function` — эта ошибка всплыла при код-ревью реализации (Задача 39,
+03.08.2026) и здесь задокументирована, чтобы сторона LegalX не наступила на
+неё при интеграции.
+
+`p_secret` — общий секрет из Vault LegalX, проверяется на входе в
 `ingest_change_event`, чтобы эндпоинт не принимал чужие вызовы. `jurisdiction`
-обязателен и того же формата, что `p_jurisdiction` в `search_norms`: без него
-InspectorX не сможет сопоставить `act_id` с правильной страной в собственных
-данных.
+внутри `p_payload` обязателен и того же формата, что `p_jurisdiction` в
+`search_norms`: без него InspectorX не сможет сопоставить `act_id` с
+правильной страной в собственных данных.
+
+**Идемпотентность: её нет на этом уровне.** Повторная доставка одного и того
+же события (ретрай LegalX после таймаута, дубль в очереди `pg_net`) создаёт
+**новую строку** в `change_events` — RPC не дедуплицирует по `act_id` +
+`change_type` + `effective_date` и не хранит идемпотентный ключ доставки.
+Устранение дублей — по сторону InspectorX, на Impact-маппере (Задача 40),
+который читает `change_events`; сама точка приёма вебхука сознательно
+оставлена простой (insert-only, без доп. состояния).
 
 **Граница покрытия:** webhook покрывает **только связанные акты** — те, на
 которые уже ссылается хотя бы одно требование. Новое регулирование, ни с чем не
