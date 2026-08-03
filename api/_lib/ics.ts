@@ -50,21 +50,39 @@ function formatTimestamp(date: Date): string {
 
 /**
  * Фолдинг длинных строк по RFC 5545 §3.1: физическая строка ICS не должна
- * превышать 75 октетов, перенос — CRLF + один пробел в начале продолжения.
- * Заголовок и SUMMARY/DESCRIPTION у нас короткие, но фолдинг оставлен для
- * корректности на случай длинных названий требований.
+ * превышать 75 ОКТЕТОВ — не UTF-16 юнитов и не символов JS-строки. Кириллица
+ * в UTF-8 — 2 байта на символ, «—» (em dash) — 3, так что 74-символьная
+ * русская строка — это уже ~148 октетов, вдвое больше лимита. Считаем через
+ * Buffer.byteLength, режем строго по границам символов (Array.from — код-
+ * поинты, переживает суррогатные пары), никогда не разрезая многобайтовый
+ * символ пополам. Первая физическая строка — лимит 75 октетов; строки-
+ * продолжения — 74 октета на сам текст + 1 октет на ведущий пробел (тоже
+ * часть строки при передаче), итого тоже 75.
  */
 function foldLine(line: string): string {
-  const limit = 74 // + 1 октет на ведущий пробел продолжения = 75
-  if (line.length <= limit) return line
-  let result = line.slice(0, limit)
-  let rest = line.slice(limit)
-  while (rest.length > 0) {
-    const chunk = rest.slice(0, limit - 1)
-    result += '\r\n ' + chunk
-    rest = rest.slice(chunk.length)
+  const octetLimit = 75
+  if (Buffer.byteLength(line, 'utf8') <= octetLimit) return line
+
+  const physicalLines: string[] = []
+  let current = ''
+  let currentBytes = 0
+  let limit = octetLimit // первая строка — без ведущего пробела
+
+  for (const ch of Array.from(line)) {
+    const chBytes = Buffer.byteLength(ch, 'utf8')
+    if (currentBytes + chBytes > limit) {
+      physicalLines.push(current)
+      current = ch
+      currentBytes = chBytes
+      limit = octetLimit - 1 // все следующие строки — продолжения (минус пробел)
+    } else {
+      current += ch
+      currentBytes += chBytes
+    }
   }
-  return result
+  physicalLines.push(current)
+
+  return physicalLines.map((part, i) => (i === 0 ? part : ' ' + part)).join('\r\n')
 }
 
 /**
