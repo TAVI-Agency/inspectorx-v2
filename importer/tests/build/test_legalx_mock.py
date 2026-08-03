@@ -5,7 +5,8 @@
 - поиск по КЗ пуст (norms_kz.json — пустой массив, живого КЗ-контента ещё нет);
 - поиск судебной практики по статье КоАО возвращает не больше limit кейсов;
 - get_client() переключается по env LEGALX_BACKEND: mock (в т.ч. по умолчанию),
-  live -> NotImplementedError (Задача 42), прочее -> ValueError.
+  live -> LiveLegalX или ValueError без ключей (полное покрытие ветки live —
+  test_legalx_live.py, Задача 42), прочее -> ValueError.
 """
 from datetime import date
 from decimal import Decimal
@@ -103,9 +104,13 @@ def test_get_client_default_is_mock_when_env_unset(monkeypatch):
     assert isinstance(client, MockLegalX)
 
 
-def test_get_client_live_not_implemented(monkeypatch):
+def test_get_client_live_without_env_raises_value_error(monkeypatch):
+    """Полное покрытие ветки `live` (успех + перечисление недостающих
+    переменных) — `importer/tests/build/test_legalx_live.py` (Задача 42)."""
     monkeypatch.setenv("LEGALX_BACKEND", "live")
-    with pytest.raises(NotImplementedError, match="42"):
+    monkeypatch.delenv("LEGALX_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("LEGALX_SUPABASE_KEY", raising=False)
+    with pytest.raises(ValueError, match="LEGALX_SUPABASE_URL"):
         get_client()
 
 

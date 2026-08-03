@@ -74,9 +74,13 @@ def get_client() -> LegalXClient:
     - `mock` (или переменная не задана) -> `MockLegalX` на фикстурах
       `importer/build/fixtures/*.json` — пилотный прогон Build без живого
       LegalX.
-    - `live` -> `NotImplementedError`: живой клиент добавляется Задачей 42
-      (глобальное ограничение ④ — переключение mock->live только по
-      готовности LegalX-зависимостей).
+    - `live` -> `LiveLegalX` (`legalx_live.py`, Задача 42) поверх PostgREST
+      RPC LegalX; читает `LEGALX_SUPABASE_URL`/`LEGALX_SUPABASE_KEY`
+      (read-only роль, см. `.env.importer.example`) из окружения — их
+      отсутствие сразу `ValueError` со списком недостающих имён, а не
+      тихий откат на мок. Соединение готово, но приёмка на реально живом
+      LegalX (retrieval hit-rate ≥ мокового baseline) — отдельный, ещё не
+      выполненный шаг (гейт D1, докстринг `legalx_live.py`).
     - любое другое значение -> `ValueError`: опечатка в конфигурации лучше
       падает сразу, чем молча откатывается на мок.
     """
@@ -86,10 +90,19 @@ def get_client() -> LegalXClient:
 
         return MockLegalX()
     if backend == "live":
-        raise NotImplementedError(
-            "LEGALX_BACKEND=live: живой клиент LegalX ещё не реализован — "
-            "добавляется Задачей 42 (глобальное ограничение ④, переключение "
-            "mock->live по готовности LegalX-зависимостей)"
+        from importer.build.legalx_live import LiveLegalX
+
+        required_env = ("LEGALX_SUPABASE_URL", "LEGALX_SUPABASE_KEY")
+        missing = [name for name in required_env if not os.environ.get(name)]
+        if missing:
+            raise ValueError(
+                "LEGALX_BACKEND=live требует переменных окружения: "
+                + ", ".join(missing)
+                + " (см. .env.importer.example)"
+            )
+        return LiveLegalX(
+            base_url=os.environ["LEGALX_SUPABASE_URL"],
+            api_key=os.environ["LEGALX_SUPABASE_KEY"],
         )
     raise ValueError(
         f"Неизвестный LEGALX_BACKEND={backend!r}: ожидается 'mock' или 'live'"
