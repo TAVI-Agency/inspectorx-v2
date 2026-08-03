@@ -46,12 +46,14 @@ import {
   fetchLawyerNotificationsReal,
   fetchLawyerStatsReal,
   fetchLeaderboardReal,
+  fetchLifecycleNotificationsReal,
   fetchMyLawyerProfileReal,
   fetchMyQuestionsReal,
   fetchMyReviewsReal,
   fetchReviewQueueReal,
   fetchSubscriptionRequests,
   markLawyerNotificationReadReal,
+  markLifecycleNotificationReadReal,
   removeChosenReal,
   submitContentRequest,
   submitLawyerApplicationReal,
@@ -303,8 +305,10 @@ export function useNotificationCenter() {
   const { data: lawyerProfile } = useMyLawyerProfile()
   const verified = lawyerProfile?.status === 'verified'
   const { data: lawyerNotifs } = useLawyerNotifications(verified)
+  const { data: lifecycleNotifs } = useLifecycleNotifications()
   const markChange = useMarkChangeRead()
   const markLawyer = useMarkNotificationRead()
+  const markLifecycle = useMarkLifecycleNotificationRead()
 
   const items: AppNotification[] = []
 
@@ -353,12 +357,26 @@ export function useNotificationCenter() {
     })
   }
 
+  for (const n of lifecycleNotifs ?? []) {
+    items.push({
+      id: `lifecycle-${n.id}`,
+      kind: 'lifecycle',
+      sourceId: n.id,
+      title: ru.notifications.lifecycle[n.event],
+      subtitle: n.requirementTitle,
+      link: n.link,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+    })
+  }
+
   items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   const markRead = (n: AppNotification) => {
     if (n.isRead) return
     if (n.kind === 'change') markChange.mutate(n.sourceId)
     else if (n.kind === 'lawyer') markLawyer.mutate(n.sourceId)
+    else if (n.kind === 'lifecycle') markLifecycle.mutate(n.sourceId)
     else {
       markQuestionAnswerRead(n.sourceId)
       void qc.invalidateQueries({ queryKey: ['my-questions'] })
@@ -587,6 +605,27 @@ export function useMarkNotificationRead() {
     mutationFn: (id: string) => markLawyerNotificationReadReal(id),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ['lawyer-notifications'] }),
+  })
+}
+
+/** Lifecycle-уведомления (user_notifications, kind='lifecycle') — заводит cron Задачи 38 */
+export function useLifecycleNotifications() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['lifecycle-notifications', session?.user.id ?? 'anon'],
+    queryFn: fetchLifecycleNotificationsReal,
+    enabled: Boolean(session),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+}
+
+export function useMarkLifecycleNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => markLifecycleNotificationReadReal(id),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['lifecycle-notifications'] }),
   })
 }
 
