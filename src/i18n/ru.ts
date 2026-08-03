@@ -264,6 +264,18 @@ export const ru = {
       badgeConfirmedMany: (nUnit: string) => `Подтвердили ${nUnit}`,
       badgeDispute: 'Есть замечание юриста',
     },
+    /** Пустой блок ВНУТРИ раскрытой карточки (не скрывается) — TARGET_FORMAT §4в */
+    noDataYet: 'Данных пока нет',
+    courtCases: {
+      title: 'Судебная практика',
+      button: (n: number) => `Показать кейсы (${n})`,
+    },
+    templates: {
+      title: 'Шаблоны документов',
+    },
+    lawyerInstruction: {
+      title: 'Инструкция юриста',
+    },
     card: {
       description: 'Суть требования',
       howTo: 'Как исполнить',
