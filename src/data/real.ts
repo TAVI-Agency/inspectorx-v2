@@ -8,6 +8,7 @@ import type { Json } from '@/lib/database.types'
 import { ru } from '@/i18n/ru'
 import { PHARMACY_SERVICE_ID } from './cross-links'
 import { CIGARETTES_PRODUCT_ID } from './mock/fixtures'
+import type { CountryCode, LifecycleStatus } from './countries'
 import {
   locked,
   ok,
@@ -38,6 +39,17 @@ import {
   type StageInfo,
   type UserQuestion,
 } from './types'
+
+/** Значения вне известного enum'а (напр. будущая страна) не должны падать рендер витрины. */
+function toCountryCode(v: string | null | undefined): CountryCode {
+  return v === 'KZ' || v === 'AE' ? v : 'UZ'
+}
+
+function toLifecycle(v: string | null | undefined): LifecycleStatus {
+  return v === 'upcoming' || v === 'transitional' || v === 'expiring' || v === 'repealed'
+    ? v
+    : 'in_force'
+}
 
 // ── Разбор сырых полей ─────────────────────────────────────────────
 
@@ -245,16 +257,42 @@ export async function searchProductsReal(query: string): Promise<SearchHit[]> {
 
 // ── Паспорт товара ─────────────────────────────────────────────────
 
+/**
+ * Нац. коды товара для страны — catalog.country_codes по product_type_id
+ * (ADR-0004). Схема catalog экспонирована через PostgREST (supabase/config.toml
+ * api.schemas), anon имеет grant select (20260803100000_catalog_schema.sql);
+ * подтверждено вручную на локальном Supabase (см. task-30-report.md).
+ * Нет product_type_id или строк на страну — честно пустой список, не 500-ка.
+ */
+async function fetchCountryCodes(
+  productTypeId: string | null,
+  country: CountryCode,
+): Promise<{ system: string; code: string }[]> {
+  if (!productTypeId) return []
+  const { data, error } = await supabase
+    .schema('catalog')
+    .from('country_codes')
+    .select('system, code')
+    .eq('product_type_id', productTypeId)
+    .eq('country', country)
+  if (error) return []
+  return data ?? []
+}
+
 export async function fetchPassportReal(
   productId: string,
+  country: CountryCode,
 ): Promise<ProductPassport | null> {
   const { data: p } = await supabase
     .from('products')
-    .select('id, name_ru, hs_code, complexity_index, hierarchy_path')
+    .select('id, name_ru, hs_code, complexity_index, hierarchy_path, product_type_id')
     .eq('id', productId)
     .maybeSingle()
   if (!p) return null
-  const aliases = await defaultAliases([p.id])
+  const [aliases, codes] = await Promise.all([
+    defaultAliases([p.id]),
+    fetchCountryCodes(p.product_type_id, country),
+  ])
   const h = parseHierarchy(p.hierarchy_path)
   const official = officialFromRaw(p.name_ru)
   return {
@@ -265,6 +303,9 @@ export async function fetchPassportReal(
     categoryName: categoryShort(h),
     hierarchyLevels: h.levels ?? [],
     complexity: p.complexity_index ?? undefined,
+    // countries — сводка по всем странам считается в index.ts (там же живут KZ/AE-фикстуры)
+    countries: [],
+    codes,
   }
 }
 
@@ -374,20 +415,28 @@ export interface RequirementListReal {
   verifiedAt?: string
 }
 
-const REQUIREMENT_LIST_SELECT = `id, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at, requirement_category, nature,
+const REQUIREMENT_LIST_SELECT = `id, jurisdiction, lifecycle, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at, requirement_category, nature,
        lifecycle_stages(id, name_ru, sort_order),
        authorities(name_ru),
        requirement_contents(lang, title, sanction_summary),
        requirement_applicability!inner(code, scope)`
 
+/**
+ * Источник — view requirements_with_status (не таблица): генератор типов
+ * Supabase честно помечает nullable ВСЕ колонки представления, даже те,
+ * что NOT NULL на requirements. Практически они пустыми не приходят
+ * (фильтр status=published), но типы это отражают — обрабатываем ?? ниже.
+ */
 interface RawListRow {
-  id: string
-  deontic: RequirementRow['deontic']
-  operation: RequirementRow['operation']
+  id: string | null
+  jurisdiction: string | null
+  lifecycle: string | null
+  deontic: RequirementRow['deontic'] | null
+  operation: RequirementRow['operation'] | null
   transport_type: RequirementRow['transport'] | null
-  addressee_roles: RequirementRow['roles']
-  trust_label: DbTrustLabel
-  review_flag: 'none' | 'flagged_by_change'
+  addressee_roles: RequirementRow['roles'] | null
+  trust_label: DbTrustLabel | null
+  review_flag: 'none' | 'flagged_by_change' | null
   reviewed_at: string | null
   published_at: string | null
   requirement_category: NonNullable<RequirementRow['category']> | null
@@ -397,13 +446,20 @@ interface RawListRow {
   requirement_contents: { lang: string; title: string; sanction_summary: string | null }[]
 }
 
+/**
+ * Список требований товара: чтение из view requirements_with_status
+ * (security_invoker — та же RLS-видимость, что и у таблицы requirements,
+ * плюс вычисленный lifecycle). Фильтр по стране — .eq('jurisdiction', …).
+ */
 export async function fetchRequirementsReal(
   hsCode: string,
+  country: CountryCode,
 ): Promise<RequirementListReal> {
   const { data, error } = await supabase
-    .from('requirements')
+    .from('requirements_with_status')
     .select(REQUIREMENT_LIST_SELECT)
     .eq('status', 'published')
+    .eq('jurisdiction', country)
     .or(`code.eq.${hsCode},scope.eq.all_products`, {
       referencedTable: 'requirement_applicability',
     })
@@ -411,7 +467,10 @@ export async function fetchRequirementsReal(
   return listFromData(data ?? [])
 }
 
-/** Требования услуги: точный код ОКЭД + классы-префиксы + общие для всех услуг */
+/**
+ * Требования услуги: точный код ОКЭД + классы-префиксы + общие для всех услуг.
+ * Услуги пока UZ-only (Блок 4 — только товарный каталог многострановый).
+ */
 export async function fetchServiceRequirementsReal(
   okedCode: string | null,
 ): Promise<RequirementListReal> {
@@ -423,9 +482,10 @@ export async function fetchServiceRequirementsReal(
       filters.push(`and(scope.eq.oked_prefix,code.in.(${prefixes.join(',')}))`)
   }
   const { data, error } = await supabase
-    .from('requirements')
+    .from('requirements_with_status')
     .select(REQUIREMENT_LIST_SELECT)
     .eq('status', 'published')
+    .eq('jurisdiction', 'UZ' satisfies CountryCode)
     .or(filters.join(','), { referencedTable: 'requirement_applicability' })
   if (error) throw error
   return listFromData(data ?? [])
@@ -445,6 +505,8 @@ function listFromData(data: RawListRow[]): RequirementListReal {
   const rows: RequirementRow[] = []
   const seen = new Set<string>()
   for (const r of data) {
+    // Защитные поля view, реально не бывают null у published-строки (см. коммент RawListRow)
+    if (!r.id || !r.deontic || !r.operation || !r.addressee_roles || !r.trust_label) continue
     const content =
       r.requirement_contents.find((c) => c.lang === 'ru') ??
       r.requirement_contents[0]
@@ -467,6 +529,8 @@ function listFromData(data: RawListRow[]): RequirementListReal {
     rows.push({
       id: r.id,
       title,
+      jurisdiction: toCountryCode(r.jurisdiction),
+      lifecycle: toLifecycle(r.lifecycle),
       deontic: r.deontic,
       roles: r.addressee_roles,
       operation: r.operation,
@@ -523,8 +587,8 @@ export async function fetchCardReal(
 ): Promise<RequirementCard> {
   const [req, details, cits, faqs, revs] = await Promise.all([
     supabase
-      .from('requirements')
-      .select('authorities(name_ru, contacts, website)')
+      .from('requirements_with_status')
+      .select('jurisdiction, lifecycle, authorities(name_ru, contacts, website)')
       .eq('id', requirementId)
       .maybeSingle(),
     supabase
@@ -627,7 +691,16 @@ export async function fetchCardReal(
     history = ok([])
   }
 
-  return { requirementId, authority, detail, citations, faqs: faqList, history }
+  return {
+    requirementId,
+    jurisdiction: toCountryCode(req.data?.jurisdiction),
+    lifecycle: toLifecycle(req.data?.lifecycle),
+    authority,
+    detail,
+    citations,
+    faqs: faqList,
+    history,
+  }
 }
 
 // ── Проверка юристом ───────────────────────────────────────────────

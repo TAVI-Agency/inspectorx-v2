@@ -12,6 +12,7 @@ import {
   locked,
   ok,
   type ChangeCard,
+  type CountryCoverage,
   type Gated,
   type LawyerReview,
   type PortfolioItem,
@@ -27,6 +28,7 @@ import {
   type TelemetryStats,
   type WeekSummary,
 } from './types'
+import { COUNTRIES, type CountryCode } from './countries'
 import {
   fetchCardReal,
   fetchLawyerReviewsReal,
@@ -63,6 +65,7 @@ import {
 } from './mock/fixtures'
 import { loadMockReviewVotes, readChangeIds, saveMockReviewVote } from './mock/read-store'
 import { CAFE_SERVICE_ID, PHARMACY_SERVICE_ID } from './cross-links'
+import { isKzRequirementId, kzCardFor, kzCodesFor, kzRowsFor, kzStagesFor } from './mock/kz-fixtures'
 
 export interface DataCtx {
   /** Реальная подписка (profiles.is_subscribed под сессией) */
@@ -232,40 +235,115 @@ function metricsFor(
   }
 }
 
+/** Метрики для превью-стран (KZ) — без подписочного оверлея, санкции только из открытых строк. */
+function previewMetrics(rows: RequirementRow[]): SummaryMetrics {
+  const openMax = maxSanctionFromRows(rows)
+  return {
+    requirements: rows.length,
+    documents: locked,
+    maxSanction: openMax ? ok(openMax) : locked,
+    changes30d: 0,
+  }
+}
+
+function emptyMetrics(): SummaryMetrics {
+  return { requirements: 0, documents: locked, maxSanction: locked, changes30d: 0 }
+}
+
+/** Состояние страны фиксировано (стадия раскатки), published — per-товар. */
+const COUNTRY_STATE: Record<CountryCode, CountryCoverage['state']> = {
+  UZ: 'live',
+  KZ: 'preview',
+  AE: 'none',
+}
+
+function countriesCoverage(productId: string, uzPublished: number): CountryCoverage[] {
+  return COUNTRIES.map((country) => ({
+    country,
+    published:
+      country === 'UZ' ? uzPublished : country === 'KZ' ? kzRowsFor(productId).length : 0,
+    state: COUNTRY_STATE[country],
+  }))
+}
+
 export async function fetchProductBundle(
   productId: string,
   ctx: DataCtx,
+  country: CountryCode = 'UZ',
 ): Promise<ProductBundle | null> {
-  // Полностью мок-товар
+  // Полностью мок-товар (UZ-only; для KZ/AE у него ещё нет требований)
   if (productId === PARACETAMOL_PRODUCT_ID) {
-    const rows = applyChangeOverlay(productId, mockRowsFor(productId))
+    const uzRows = mockRowsFor(productId)
+    const countries = countriesCoverage(productId, uzRows.length)
+    if (country === 'UZ') {
+      const rows = applyChangeOverlay(productId, uzRows)
+      return {
+        passport: { ...paracetamolPassport, countries },
+        rows,
+        stages: stagesFromRows(rows),
+        metrics: metricsFor(productId, rows, ctx),
+      }
+    }
+    const rows = country === 'KZ' ? kzRowsFor(productId) : []
     return {
-      passport: paracetamolPassport,
+      passport: { ...paracetamolPassport, countries, codes: kzCodesFor(productId) },
       rows,
-      stages: stagesFromRows(rows),
-      metrics: metricsFor(productId, rows, ctx),
+      stages: kzStagesFor(productId),
+      metrics: previewMetrics(rows),
     }
   }
 
-  const passport = await fetchPassportReal(productId)
+  const passport = await fetchPassportReal(productId, country)
   if (!passport) return null
 
-  // Реальный товар с мок-требованиями (молоко)
+  // Реальный товар с мок-требованиями (молоко) — тоже UZ-only демо
   if (productId === MILK_PRODUCT_ID) {
-    const rows = applyChangeOverlay(productId, mockRowsFor(productId))
+    const uzRows = mockRowsFor(productId)
+    const countries = countriesCoverage(productId, uzRows.length)
+    const milkPassport = { ...passport, ...milkPassportExtras, displayName: passport.displayName }
+    if (country === 'UZ') {
+      const rows = applyChangeOverlay(productId, uzRows)
+      return {
+        passport: { ...milkPassport, countries },
+        rows,
+        stages: stagesFromRows(rows),
+        metrics: metricsFor(productId, rows, ctx),
+      }
+    }
+    const rows = country === 'KZ' ? kzRowsFor(productId) : []
     return {
-      passport: { ...passport, ...milkPassportExtras, displayName: passport.displayName },
+      passport: { ...milkPassport, countries, codes: kzCodesFor(productId) },
       rows,
-      stages: stagesFromRows(rows),
-      metrics: metricsFor(productId, rows, ctx),
+      stages: kzStagesFor(productId),
+      metrics: previewMetrics(rows),
     }
   }
 
   // Живые данные (сигареты и все остальные наполненные товары)
-  const list = await fetchRequirementsReal(passport.hsCode)
-  const rows = applyChangeOverlay(productId, list.rows)
+  const uzList = await fetchRequirementsReal(passport.hsCode, 'UZ')
+  const countries = countriesCoverage(productId, uzList.rows.length)
+
+  if (country === 'KZ') {
+    const rows = kzRowsFor(productId)
+    return {
+      passport: { ...passport, countries, codes: kzCodesFor(productId) },
+      rows,
+      stages: kzStagesFor(productId),
+      metrics: previewMetrics(rows),
+    }
+  }
+  if (country === 'AE') {
+    return {
+      passport: { ...passport, countries, codes: [] },
+      rows: [],
+      stages: [],
+      metrics: emptyMetrics(),
+    }
+  }
+
+  const rows = applyChangeOverlay(productId, uzList.rows)
   return {
-    passport: { ...passport, verifiedAt: list.verifiedAt },
+    passport: { ...passport, verifiedAt: uzList.verifiedAt, countries },
     rows,
     stages: stagesFromRows(rows),
     metrics: metricsFor(productId, rows, ctx),
@@ -317,6 +395,14 @@ export async function fetchCard(
   row?: RequirementRow,
 ): Promise<RequirementCard> {
   const subscriber = effectiveSubscriber(ctx)
+
+  if (isKzRequirementId(requirementId)) {
+    const card = kzCardFor(requirementId)
+    if (!card) throw new Error(`Unknown KZ mock requirement: ${requirementId}`)
+    if (subscriber) return card
+    // Превью-страна тоже за пейволлом — тизер честный, детали закрыты
+    return { ...card, detail: locked, citations: locked, faqs: locked, history: locked }
+  }
 
   if (isMockRequirementId(requirementId)) {
     const card = mockCardFor(requirementId)
@@ -400,7 +486,7 @@ async function resolveCigaretteSlotIds(): Promise<Map<string, string>> {
   // requirementId для изменений по сигаретам — из живых строк
   const map = new Map<string, string>()
   try {
-    const list = await fetchRequirementsReal('2404110001')
+    const list = await fetchRequirementsReal('2404110001', 'UZ')
     for (const slot of cigaretteChangeSlots) {
       const row =
         list.rows.find((r) =>

@@ -57,6 +57,9 @@ export const paracetamolPassport: ProductPassport = {
   ],
   complexity: 8,
   verifiedAt: isoDaysFromNow(-2),
+  // Полностью мок-товар — не привязан к catalog.product_types; countries считает index.ts
+  countries: [],
+  codes: [{ system: 'ikpu', code: '03808001001000000' }],
 }
 
 export const paracetamolHit: SearchHit = {
@@ -114,7 +117,15 @@ function defineReq(
   stage: { id: string; name: string; sortOrder: number },
   row: Omit<
     RequirementRow,
-    'id' | 'stageId' | 'stageName' | 'stageSortOrder' | 'unread' | 'underReview' | 'status'
+    | 'id'
+    | 'jurisdiction'
+    | 'lifecycle'
+    | 'stageId'
+    | 'stageName'
+    | 'stageSortOrder'
+    | 'unread'
+    | 'underReview'
+    | 'status'
   > & { status?: RequirementRow['status'] },
   rest: Omit<MockReq, 'row'>,
 ): MockReq {
@@ -122,6 +133,9 @@ function defineReq(
     row: {
       ...row,
       id,
+      // Мок-товары (молоко/парацетамол) живут только в УЗ, действуют сейчас
+      jurisdiction: 'UZ',
+      lifecycle: 'in_force',
       status: row.status ?? { kind: 'active' },
       unread: false,
       underReview: false,
@@ -797,6 +811,8 @@ export function mockCardFor(requirementId: string): RequirementCard | undefined 
         : []
   return {
     requirementId,
+    jurisdiction: req.row.jurisdiction,
+    lifecycle: req.row.lifecycle,
     authority: req.authority ?? (req.row.authorityName ? { name: req.row.authorityName } : undefined),
     detail: ok(req.detail),
     citations: ok(req.citations),
@@ -837,6 +853,8 @@ export function demoDetailFor(row: RequirementRow): RequirementCard {
   }
   return {
     requirementId: row.id,
+    jurisdiction: row.jurisdiction,
+    lifecycle: row.lifecycle,
     authority: row.authorityName ? { name: row.authorityName } : undefined,
     detail: ok(detail),
     citations: ok([

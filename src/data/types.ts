@@ -3,6 +3,7 @@
  * откуда пришли данные (Supabase или мок), решает слой src/data.
  */
 import type { RequirementCategory } from './taxonomy'
+import type { CountryCode, LifecycleStatus } from './countries'
 
 export type Deontic = 'obligation' | 'prohibition' | 'permission'
 export type PartyRole =
@@ -54,6 +55,15 @@ export interface SearchHit {
   categoryName?: string
 }
 
+// ── Мультистрановость (ADR-0004/0005, Блок 4) ──────────────────────
+
+/** Покрытие товара/услуги по стране — бейдж таба на карточке. */
+export type CountryCoverage = {
+  country: CountryCode
+  published: number
+  state: 'live' | 'preview' | 'none'
+}
+
 // ── Паспорт товара ─────────────────────────────────────────────────
 
 export interface ProductPassport {
@@ -67,6 +77,10 @@ export interface ProductPassport {
   hierarchyLevels: string[]
   complexity?: number
   verifiedAt?: string
+  /** Покрытие по всем странам (табы UZ/KZ/AE) — считается независимо от выбранной страны */
+  countries: CountryCoverage[]
+  /** Нац. коды ВЫБРАННОЙ страны из catalog.country_codes (по product_type_id) */
+  codes: { system: string; code: string }[]
 }
 
 // ── Паспорт услуги ─────────────────────────────────────────────────
@@ -112,6 +126,9 @@ export interface StageInfo {
 export interface RequirementRow {
   id: string
   title: string
+  jurisdiction: CountryCode
+  /** Вычисляемый статус жизненного цикла (requirements_with_status.lifecycle) */
+  lifecycle: LifecycleStatus
   deontic: Deontic
   roles: PartyRole[]
   operation: Operation
@@ -195,6 +212,8 @@ export interface HistoryEntry {
 
 export interface RequirementCard {
   requirementId: string
+  jurisdiction: CountryCode
+  lifecycle: LifecycleStatus
   authority?: AuthorityInfo
   detail: Gated<RequirementDetail>
   citations: Gated<Citation[]>
