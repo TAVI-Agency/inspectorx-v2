@@ -23,6 +23,13 @@ create or replace function public.lifecycle_status(
   end
 $$;
 
+-- ВНИМАНИЕ: `select r.*` фиксирует список колонок `requirements` НА МОМЕНТ
+-- СОЗДАНИЯ view (Postgres разворачивает `*` в конкретные имена колонок при
+-- `create view`, а не заново при каждом запросе). Будущий `alter table
+-- public.requirements add column ...` в отдельной миграции такую колонку в
+-- этот view НЕ добавит — понадобится `create or replace view` в ТОЙ ЖЕ
+-- миграции, что добавляет колонку, иначе потребители view (`src/data/real.ts`
+-- и т.п.) её не увидят.
 create view public.requirements_with_status with (security_invoker = true) as
   select r.*, public.lifecycle_status(r.effective_from, r.transition_until, r.valid_to) as lifecycle
   from public.requirements r;

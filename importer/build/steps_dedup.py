@@ -141,7 +141,16 @@ class DedupStep:
             return StepResult(status="fail", error=f"шаг 'dedup': {exc}")
 
     def _run(self, ctx: ItemContext) -> StepResult:
-        text = ctx.data.get("summary") or ctx.item.expected_item
+        # coalesce(ctx.data['summary'], item.summary_text, expected_item) —
+        # см. докстринг `BuildStore.list_run_item_texts` (orchestrator.py):
+        # кандидаты уже сравниваются симметрично через
+        # `summary_text or expected_item`. Без `ctx.item.summary_text` здесь
+        # partial `rerun_item`, начатый ПОСЛЕ шага 'summary' (тот уже отработал
+        # и записал `pipeline.items.summary_text` в прошлом прогоне, но в этом
+        # rerun шаг 'summary' не выполняется повторно — `ctx.data['summary']`
+        # пуст), молча падал на `expected_item`, срывая симметричность и не
+        # находя дубли, которые нашёл бы полный прогон.
+        text = ctx.data.get("summary") or ctx.item.summary_text or ctx.item.expected_item
         current_vec = self._embedder.embed(text)
 
         candidates = [

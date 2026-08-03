@@ -115,6 +115,13 @@ function parseSteps(json: Json): HowToStep[] {
   })
 }
 
+/**
+ * Оба конвейера (importer/loader.py, importer/build/assembler.py) и схема
+ * (`20260711120000_initial_schema.sql`) пишут ключ `where_to_get`. Читаем
+ * его как основной; `where` — оборонительный фолбэк на случай прямой
+ * вставки в формате TS-типа `RequiredDocument` (см. `parseCourtCases`,
+ * который так же читает `summary` с фолбэком на `summary_line`).
+ */
 function parseDocuments(json: Json): RequiredDocument[] {
   if (!Array.isArray(json)) return []
   return json.flatMap((item): RequiredDocument[] => {
@@ -123,7 +130,13 @@ function parseDocuments(json: Json): RequiredDocument[] {
       const o = item as Record<string, Json | undefined>
       const name = typeof o.name === 'string' ? o.name : typeof o.doc === 'string' ? o.doc : ''
       if (!name.trim()) return []
-      return [{ name, where: typeof o.where === 'string' ? o.where : undefined }]
+      const where =
+        typeof o.where_to_get === 'string'
+          ? o.where_to_get
+          : typeof o.where === 'string'
+            ? o.where
+            : undefined
+      return [{ name, where }]
     }
     return []
   })
