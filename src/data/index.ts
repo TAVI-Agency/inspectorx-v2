@@ -31,6 +31,7 @@ import {
 } from './types'
 import { COUNTRIES, type CountryCode, type LifecycleStatus } from './countries'
 import { categoryChipOf } from './taxonomy'
+import { formatFine, type Fine } from '@/i18n/format'
 import {
   fetchCardReal,
   fetchComparisonReal,
@@ -203,15 +204,38 @@ function changes30dFor(productId: string): number {
   ).length
 }
 
+/**
+ * Разбор «сумма + единица» из открытого текста уровня 0 (sanction_summary):
+ * не завязан на конкретную единицу измерения — конвейер пишет её как есть,
+ * своя для каждой юрисдикции, код её не выбирает и не хардкодит
+ * (TARGET_FORMAT §4, доп. 02.08.2026 «Санкции — структура»). Единица —
+ * 3–6 заглавных букв сразу после числа (`\p{Lu}`, не `\b`: латиница и
+ * кириллица вперемешку, а `\b` в JS не видит границы слова у кириллицы).
+ * Нижний порог в 3 буквы отсекает короткие отсылки к статьям кодекса рядом
+ * с номером статьи (напр. «ст. 190» + короткая аббревиатура кодекса — это
+ * не санкция, а ссылка на источник). Старый прод-контент (единственно УЗ)
+ * писал сумму строго одной фразой — отдельного узкого регэкспа под неё не
+ * нужно: она уже покрыта этим общим разбором без всякого расширения.
+ */
+function extractMaxFine(text: string | undefined): Fine | null {
+  if (!text) return null
+  let best: Fine | null = null
+  for (const m of text.matchAll(/(\d+)\s*(\p{Lu}{3,6})(?!\p{L})/gu)) {
+    const amount = Number(m[1])
+    if (amount > 0 && (!best || amount > best.amount)) best = { amount, unit: m[2] }
+  }
+  return best
+}
+
 /** Макс. санкция из ОТКРЫТЫХ строк уровня 0 — то, что аноним и так видит.
  *  Закрывать метрику, когда суммы напечатаны в списке, — ложь интерфейса. */
-function maxSanctionFromRows(rows: RequirementRow[]): string | null {
-  let max = 0
+function maxSanctionFromRows(rows: RequirementRow[], country: CountryCode): string | null {
+  let max: Fine | null = null
   for (const r of rows) {
-    const m = r.sanctionSummary?.match(/до\s+(\d+)\s*БРВ/i)
-    if (m) max = Math.max(max, Number(m[1]))
+    const fine = extractMaxFine(r.sanctionSummary)
+    if (fine && (!max || fine.amount > max.amount)) max = fine
   }
-  return max > 0 ? `до ${max} БРВ` : null
+  return max ? formatFine(max, country) : null
 }
 
 function metricsFor(
@@ -224,7 +248,8 @@ function metricsFor(
   let documents: Gated<number> = locked
   if (subscriber && mock) documents = ok(mock.documents)
 
-  const openMax = maxSanctionFromRows(rows)
+  // metricsFor зовётся только для УЗ-ветки бандла (previewMetrics — для KZ/AE)
+  const openMax = maxSanctionFromRows(rows, 'UZ')
   let maxSanction: Gated<string> = openMax
     ? ok(openMax)
     : subscriber && mock
@@ -239,9 +264,9 @@ function metricsFor(
   }
 }
 
-/** Метрики для превью-стран (KZ) — без подписочного оверлея, санкции только из открытых строк. */
-function previewMetrics(rows: RequirementRow[]): SummaryMetrics {
-  const openMax = maxSanctionFromRows(rows)
+/** Метрики для превью-стран (KZ/AE) — без подписочного оверлея, санкции только из открытых строк. */
+function previewMetrics(rows: RequirementRow[], country: CountryCode): SummaryMetrics {
+  const openMax = maxSanctionFromRows(rows, country)
   return {
     requirements: rows.length,
     documents: locked,
@@ -293,7 +318,7 @@ export async function fetchProductBundle(
       passport: { ...paracetamolPassport, countries, codes: kzCodesFor(productId) },
       rows,
       stages: kzStagesFor(productId),
-      metrics: previewMetrics(rows),
+      metrics: previewMetrics(rows, country),
     }
   }
 
@@ -304,7 +329,16 @@ export async function fetchProductBundle(
   if (productId === MILK_PRODUCT_ID) {
     const uzRows = mockRowsFor(productId)
     const countries = countriesCoverage(productId, uzRows.length)
-    const milkPassport = { ...passport, ...milkPassportExtras, displayName: passport.displayName }
+    // ИКПУ молока — мок-поле (в схеме БД его нет, см. milkPassportExtras),
+    // остальные коды (ТН ВЭД) уже пришли из catalog.country_codes реальным
+    // паспортом; KZ/AE-ветка ниже полностью заменяет codes на kzCodesFor —
+    // ИКПУ (фискальный код УЗ) там ни при чём, перезапишется корректно.
+    const milkPassport = {
+      ...passport,
+      ...milkPassportExtras,
+      displayName: passport.displayName,
+      codes: [...passport.codes, { system: 'ikpu', code: milkPassportExtras.ikpuCode }],
+    }
     if (country === 'UZ') {
       const rows = applyChangeOverlay(productId, uzRows)
       return {
@@ -319,7 +353,7 @@ export async function fetchProductBundle(
       passport: { ...milkPassport, countries, codes: kzCodesFor(productId) },
       rows,
       stages: kzStagesFor(productId),
-      metrics: previewMetrics(rows),
+      metrics: previewMetrics(rows, country),
     }
   }
 
@@ -333,7 +367,7 @@ export async function fetchProductBundle(
       passport: { ...passport, countries, codes: kzCodesFor(productId) },
       rows,
       stages: kzStagesFor(productId),
-      metrics: previewMetrics(rows),
+      metrics: previewMetrics(rows, country),
     }
   }
   if (country === 'AE') {
@@ -426,7 +460,8 @@ export async function fetchServiceBundle(
   const docsCount = await fetchServiceDocumentsCountReal(rows.map((r) => r.id))
   const documents: Gated<number> = docsCount === null ? locked : ok(docsCount)
 
-  const openMax = maxSanctionFromRows(rows)
+  // Услуги пока UZ-only (ADR-0004: многострановый пока только товарный каталог)
+  const openMax = maxSanctionFromRows(rows, 'UZ')
   return {
     passport: { ...passport, verifiedAt: list.verifiedAt },
     rows,

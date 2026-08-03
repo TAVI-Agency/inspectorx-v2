@@ -59,7 +59,12 @@ export const paracetamolPassport: ProductPassport = {
   verifiedAt: isoDaysFromNow(-2),
   // Полностью мок-товар — не привязан к catalog.product_types; countries считает index.ts
   countries: [],
-  codes: [{ system: 'ikpu', code: '03808001001000000' }],
+  // Чипы паспорта (Задача 33) рендерятся из codes[], а не из hsCode/ikpuCode
+  // напрямую — нужны оба кода, а не только фискальный (ИКПУ).
+  codes: [
+    { system: 'tnved', code: '3004900002' },
+    { system: 'ikpu', code: '03808001001000000' },
+  ],
 }
 
 export const paracetamolHit: SearchHit = {

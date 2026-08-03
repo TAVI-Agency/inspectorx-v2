@@ -19,6 +19,7 @@ import {
 } from '@/data/taxonomy'
 import { serviceLinkForProduct } from '@/data/cross-links'
 import { formatDate, formatHsCode } from '@/lib/format'
+import { codeSystemLabel, sortCodesForDisplay } from '@/i18n/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { CCard, CEyebrow, CLockedValue, CStatTile, CountUp } from './ui'
@@ -136,14 +137,16 @@ export function CProductPage() {
             {passport.officialName}
           </p>
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
-              {ru.product.hsLabel} {formatHsCode(passport.hsCode)}
-            </span>
-            {passport.ikpuCode && (
-              <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
-                {ru.product.ikpuLabel} {passport.ikpuCode}
+            {/* Чипы кодов — из passport.codes (страно-независимо, Задача 33):
+                лейбл по системе кода, а не по хардкоду «ТН ВЭД»/«ИКПУ» на конкретную страну. */}
+            {sortCodesForDisplay(passport.codes).map((c) => (
+              <span
+                key={c.system}
+                className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground"
+              >
+                {codeSystemLabel(c.system)} {c.system === 'tnved' ? formatHsCode(c.code) : c.code}
               </span>
-            )}
+            ))}
             {passport.complexity != null && <ComplexityMeter value={passport.complexity} />}
             {passport.verifiedAt && (
               <span className="inline-flex items-center gap-1.5 rounded-md border border-positive/40 px-2.5 py-1 font-mono text-[11px] font-medium tracking-[0.05em] text-positive uppercase">
