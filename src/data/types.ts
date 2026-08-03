@@ -144,6 +144,12 @@ export interface RequirementRow {
   jurisdiction: CountryCode
   /** Вычисляемый статус жизненного цикла (requirements_with_status.lifecycle) */
   lifecycle: LifecycleStatus
+  /** Даты ЖЦ для бейджа (requirements.effective_from) — когда lifecycle='upcoming' */
+  effectiveFrom?: string
+  /** requirements.transition_until — когда lifecycle='transitional' */
+  transitionUntil?: string
+  /** requirements.valid_to — когда lifecycle='expiring' */
+  validTo?: string
   deontic: Deontic
   roles: PartyRole[]
   operation: Operation
@@ -197,6 +203,8 @@ export interface RequirementDetail {
   steps: HowToStep[]
   documents: RequiredDocument[]
   sanctions: SanctionItem[]
+  /** Пояснение юриста к бейджу lifecycle-статуса (requirement_details.status_note) */
+  statusNote?: string
 }
 
 export interface AuthorityInfo {

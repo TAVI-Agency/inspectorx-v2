@@ -7,7 +7,7 @@ import { categoryChipOf } from '@/data/taxonomy'
 import { formatDate, pluralize } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
-import { CCard, CCategoryChip, CDeonticChip } from './ui'
+import { CCard, CCategoryChip, CDeonticChip, CLifecycleBadge } from './ui'
 import { CRequirementCard } from './CRequirementCard'
 
 /**
@@ -159,7 +159,14 @@ function CRow({
   reviewStats?: RequirementReviewStats
 }) {
   return (
-    <li className={cn('transition-colors', expanded && 'bg-accent/25')}>
+    <li
+      className={cn(
+        'transition-colors',
+        expanded && 'bg-accent/25',
+        // Отменённое требование — история для юзера, не скрываем, а приглушаем
+        row.lifecycle === 'repealed' && 'opacity-60',
+      )}
+    >
       <button
         type="button"
         aria-expanded={expanded}
@@ -187,6 +194,12 @@ function CRow({
                 {ru.requirement.underReview}
               </span>
             )}
+            <CLifecycleBadge
+              lifecycle={row.lifecycle}
+              effectiveFrom={row.effectiveFrom}
+              transitionUntil={row.transitionUntil}
+              validTo={row.validTo}
+            />
             {reviewStats && <CReviewBadge stats={reviewStats} />}
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

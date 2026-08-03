@@ -203,6 +203,17 @@ export const ru = {
       changed: (date: string) => `изменилось ${date}`,
       upcoming: (date: string) => `изменится с ${date}`,
     },
+    /**
+     * Бейдж вычисляемого lifecycle-статуса (requirements_with_status.lifecycle) —
+     * ось «на какой стадии действия норма», отдельная от status выше (та про
+     * ленту изменений). in_force бейдж не рисуем — это молчаливая норма.
+     */
+    lifecycle: {
+      upcoming: (date: string) => `вступает ${date}`,
+      transitional: (date: string) => `переходный период до ${date}`,
+      expiring: (date: string) => `утрачивает силу ${date}`,
+      repealed: 'утратило силу',
+    },
     underReview: 'проверяется обновление',
     nature: {
       one_time: 'разовое',
