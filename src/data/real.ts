@@ -14,10 +14,13 @@ import {
   ok,
   type AuthorityInfo,
   type Citation,
+  type CourtCase,
+  type DocumentTemplate,
   type FaqItem,
   type Gated,
   type HistoryEntry,
   type HowToStep,
+  type LawyerInstruction,
   type LawyerLeaderboard,
   type LawyerNotification,
   type LawyerProfile,
@@ -143,6 +146,59 @@ function parseSanctions(json: Json): SanctionItem[] {
     }
     return []
   })
+}
+
+/**
+ * До 5 кейсов из снапшота SudX (importer/build/steps_cases.py:
+ * `[{case_url, case_title, summary_line, outcome, amount}]`). Пустой массив
+ * («не нашли» — верифицирован в шаге cases) для витрины неотличим от null
+ * («не искали») — оба «Данных пока нет» (TARGET_FORMAT §4в).
+ */
+function parseCourtCases(json: Json): CourtCase[] | null {
+  if (!Array.isArray(json)) return null
+  const out: CourtCase[] = []
+  for (const item of json) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const o = item as Record<string, Json | undefined>
+    const caseUrl = typeof o.case_url === 'string' ? o.case_url : ''
+    const summaryLine = typeof o.summary_line === 'string' ? o.summary_line : ''
+    if (!caseUrl || !summaryLine) continue
+    out.push({
+      caseUrl,
+      caseTitle: typeof o.case_title === 'string' && o.case_title ? o.case_title : summaryLine,
+      summaryLine,
+      outcome: typeof o.outcome === 'string' ? o.outcome : '',
+      amount: typeof o.amount === 'string' && o.amount ? o.amount : undefined,
+    })
+  }
+  return out.length > 0 ? out.slice(0, 5) : null
+}
+
+/** Шаблоны от Template hunter: [{name, source_url, note}] — []/null одинаково «Данных пока нет» */
+function parseTemplates(json: Json): DocumentTemplate[] | null {
+  if (!Array.isArray(json)) return null
+  const out: DocumentTemplate[] = []
+  for (const item of json) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const o = item as Record<string, Json | undefined>
+    const name = typeof o.name === 'string' ? o.name : ''
+    const sourceUrl = typeof o.source_url === 'string' ? o.source_url : ''
+    if (!name || !sourceUrl) continue
+    out.push({ name, sourceUrl, note: typeof o.note === 'string' && o.note ? o.note : undefined })
+  }
+  return out.length > 0 ? out : null
+}
+
+/** Рекомендация in-house юриста: {verdict, steps: [text]} — без содержимого null */
+function parseLawyerInstruction(json: Json): LawyerInstruction | null {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null
+  const o = json as Record<string, Json | undefined>
+  const verdict = typeof o.verdict === 'string' ? o.verdict.trim() : ''
+  const steps = Array.isArray(o.steps)
+    ? o.steps.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    : []
+  if (!verdict && steps.length === 0) return null
+  return { verdict, steps }
 }
 
 function parseContacts(json: Json): { phone?: string } {
@@ -711,7 +767,9 @@ export async function fetchCardReal(
       .maybeSingle(),
     supabase
       .from('requirement_details')
-      .select('lang, description, how_to_comply, documents, sanctions, status_note')
+      .select(
+        'lang, description, how_to_comply, documents, sanctions, status_note, court_cases, templates, lawyer_instruction',
+      )
       .eq('requirement_id', requirementId),
     supabase
       .from('requirement_citations')
@@ -752,9 +810,20 @@ export async function fetchCardReal(
       documents: parseDocuments(d.documents),
       sanctions: parseSanctions(d.sanctions),
       statusNote: d.status_note ?? undefined,
+      courtCases: parseCourtCases(d.court_cases),
+      templates: parseTemplates(d.templates),
+      lawyerInstruction: parseLawyerInstruction(d.lawyer_instruction),
     })
   } else if (isSubscriber) {
-    detail = ok({ description: undefined, steps: [], documents: [], sanctions: [] })
+    detail = ok({
+      description: undefined,
+      steps: [],
+      documents: [],
+      sanctions: [],
+      courtCases: null,
+      templates: null,
+      lawyerInstruction: null,
+    })
   }
 
   let citations: Gated<Citation[]> = locked

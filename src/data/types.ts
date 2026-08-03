@@ -198,6 +198,28 @@ export interface FaqItem {
   trustLabel: TrustLabel
 }
 
+/** Судебный кейс — снапшот из SudX (requirement_details.court_cases), только UZ */
+export interface CourtCase {
+  caseUrl: string
+  caseTitle: string
+  summaryLine: string
+  outcome: string
+  amount?: string
+}
+
+/** Шаблон документа от Template hunter (requirement_details.templates) */
+export interface DocumentTemplate {
+  name: string
+  sourceUrl: string
+  note?: string
+}
+
+/** Рекомендация in-house юриста (requirement_details.lawyer_instruction) */
+export interface LawyerInstruction {
+  verdict: string
+  steps: string[]
+}
+
 export interface RequirementDetail {
   description?: string
   steps: HowToStep[]
@@ -205,6 +227,15 @@ export interface RequirementDetail {
   sanctions: SanctionItem[]
   /** Пояснение юриста к бейджу lifecycle-статуса (requirement_details.status_note) */
   statusNote?: string
+  /**
+   * До 5 кейсов по статье санкции (TARGET_FORMAT §4б); отсутствие поля или
+   * null/[] — «Данных пока нет» (§4в), блок внутри карточки не скрывается.
+   */
+  courtCases?: CourtCase[] | null
+  /** Шаблоны документов; null/[] — «Данных пока нет» (различие серверное) */
+  templates?: DocumentTemplate[] | null
+  /** null — «Данных пока нет» */
+  lawyerInstruction?: LawyerInstruction | null
 }
 
 export interface AuthorityInfo {
