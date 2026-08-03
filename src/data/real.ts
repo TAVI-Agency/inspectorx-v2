@@ -263,10 +263,21 @@ export async function searchProductsReal(query: string): Promise<SearchHit[]> {
  * api.schemas), anon имеет grant select (20260803100000_catalog_schema.sql);
  * подтверждено вручную на локальном Supabase (см. task-30-report.md).
  * Нет product_type_id или строк на страну — честно пустой список, не 500-ка.
+ *
+ * product_type_id группирует ПО HS6 (например, у «бордо» это вся товарная
+ * группа 220421 — 58 разных 10-значных кодов конкретных вин), а не по
+ * одному товару — без фильтра запрос отдаёт чипы ВСЕХ товаров группы
+ * (Важно из ревью Задачи 33). Оставляем строку только если её код совпадает
+ * с СОБСТВЕННЫМ кодом товара по этой же системе (`ownCodes[system]`);
+ * системы, для которых у товара нет собственного кода (сейчас — все, кроме
+ * ТН ВЭД: у public.products нет колонки под ИКПУ), из выдачи убираются
+ * целиком — лучше не показать чип, чем показать чужой. Дедуп по (system, code)
+ * — на случай задвоения строк каталога.
  */
 async function fetchCountryCodes(
   productTypeId: string | null,
   country: CountryCode,
+  ownCodes: Partial<Record<string, string>>,
 ): Promise<{ system: string; code: string }[]> {
   if (!productTypeId) return []
   const { data, error } = await supabase
@@ -276,7 +287,17 @@ async function fetchCountryCodes(
     .eq('product_type_id', productTypeId)
     .eq('country', country)
   if (error) return []
-  return data ?? []
+  const seen = new Set<string>()
+  const out: { system: string; code: string }[] = []
+  for (const row of data ?? []) {
+    const own = ownCodes[row.system]
+    if (own === undefined || row.code !== own) continue
+    const key = `${row.system}:${row.code}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(row)
+  }
+  return out
 }
 
 export async function fetchPassportReal(
@@ -291,7 +312,7 @@ export async function fetchPassportReal(
   if (!p) return null
   const [aliases, codes] = await Promise.all([
     defaultAliases([p.id]),
-    fetchCountryCodes(p.product_type_id, country),
+    fetchCountryCodes(p.product_type_id, country, { tnved: p.hs_code }),
   ])
   const h = parseHierarchy(p.hierarchy_path)
   const official = officialFromRaw(p.name_ru)

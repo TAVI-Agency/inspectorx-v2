@@ -138,15 +138,19 @@ export function CProductPage() {
           </p>
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             {/* Чипы кодов — из passport.codes (страно-независимо, Задача 33):
-                лейбл по системе кода, а не по хардкоду «ТН ВЭД»/«ИКПУ» на конкретную страну. */}
-            {sortCodesForDisplay(passport.codes).map((c) => (
-              <span
-                key={c.system}
-                className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground"
-              >
-                {codeSystemLabel(c.system)} {c.system === 'tnved' ? formatHsCode(c.code) : c.code}
-              </span>
-            ))}
+                лейбл по системе кода, а не по хардкоду «ТН ВЭД»/«ИКПУ» на конкретную страну.
+                Пустой codes[] (товар ещё не заведён строкой в catalog.country_codes) —
+                фолбэк на скалярные hsCode/ikpuCode паспорта, как было раньше. */}
+            {passport.codes.length > 0 ? (
+              sortCodesForDisplay(passport.codes).map((c) => (
+                <CCodeChip key={`${c.system}-${c.code}`} system={c.system} code={c.code} />
+              ))
+            ) : (
+              <>
+                <CCodeChip system="tnved" code={passport.hsCode} />
+                {passport.ikpuCode && <CCodeChip system="ikpu" code={passport.ikpuCode} />}
+              </>
+            )}
             {passport.complexity != null && <ComplexityMeter value={passport.complexity} />}
             {passport.verifiedAt && (
               <span className="inline-flex items-center gap-1.5 rounded-md border border-positive/40 px-2.5 py-1 font-mono text-[11px] font-medium tracking-[0.05em] text-positive uppercase">
@@ -310,6 +314,15 @@ export function CProductPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+/** Чип кода в паспорте: лейбл системы + сам код (ТН ВЭД форматируется группами цифр). */
+function CCodeChip({ system, code }: { system: string; code: string }) {
+  return (
+    <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
+      {codeSystemLabel(system)} {system === 'tnved' ? formatHsCode(code) : code}
+    </span>
   )
 }
 
