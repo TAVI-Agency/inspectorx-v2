@@ -47,23 +47,37 @@ Build (`Orchestrator.run_group` по новому прогону либо `rerun
 параллельный путь сборки черновика прямо в discovery избыточно и дублирует
 Build.
 
-## Идемпотентность
+## Идемпотентность СО СТАТУС-ФИЛЬТРОМ (фикс-раунд ревью)
 
-`(map_id, expected_item)` — см. докстринг `MonitoringStore.
-find_existing_discovery_item`: схема `pipeline.*` не несёт колонки «этот
-item породило discovery события X» (миграция вне периметра этой задачи),
-поэтому идемпотентность держится на паре карта+текст айтема. Повторный
-прогон discovery для уже обработанного айтема карты находит существующий
-`pipeline.items` ДО вызова LLM/поиска (`write_questions`/`search_norms` не
-вызываются повторно) и просто пропускает его.
+`(map_id, expected_item)`, но НЕ «любой найденный item» — см. докстринг
+`MonitoringStore.is_expected_item_already_covered`. Первая версия
+(`find_existing_discovery_item`) блокировала кандидата, если под картой
+УЖЕ существовал ЛЮБОЙ `pipeline.items` с тем же `expected_item`, независимо
+от статуса. Это был баг (Important, ревью Задачи 41): для ЛЮБОЙ уже
+собранной карты (а approved-карта почти всегда уже прогнана Build хотя бы
+раз) discovery превращался в вечный no-op — включая ровно тот сценарий,
+который просил бриф («новый акт закрывает пробел, который прежний прогон
+не смог закрыть»).
+
+Теперь блокируют только статусы `pending`/`in_progress`/`draft_loaded`/
+`published` (`DISCOVERY_BLOCKING_STATUSES`, `impact_mapper.py`) — «уже в
+работе или закрыт». `no_norm`/`needs_attention` НЕ блокируют: это и есть
+пробел, который новый акт может закрыть, — discovery заводит НОВЫЙ
+кандидат-item поверх старого (старый no_norm/needs_attention никуда не
+девается, это отдельная строка `pipeline.items`, Build дособерёт по
+новому). Повторный прогон discovery на уже `pending`/`published` айтеме
+находит покрытие ДО вызова LLM/поиска (`write_questions`/`search_norms` не
+вызываются повторно) и пропускает его.
 
 ## Известное ограничение
 
-Айтемы карты, которые НЕ дали хита в текущем прогоне, перепроверяются
-КАЖДЫЙ следующий прогон discovery (нет негативного кэша «уже проверяли —
-не нашли», см. `find_existing_discovery_item`) — цена простоты первой
-итерации. Если объём карт/вопросов вырастет настолько, что это станет
-дорого, стоит завести отдельный учёт проверенных пар `(event, map_item)`.
+Айтемы карты, которые НЕ дали хита в текущем прогоне (и остались
+`no_norm`/`needs_attention` либо вообще не заводили `pipeline.items`),
+перепроверяются КАЖДЫЙ следующий прогон discovery (нет негативного кэша
+«уже проверяли — не нашли», см. `is_expected_item_already_covered`) — цена
+простоты первой итерации. Если объём карт/вопросов вырастет настолько, что
+это станет дорого, стоит завести отдельный учёт проверенных пар `(event,
+map_item)`.
 
 ## CLI
 
@@ -95,7 +109,14 @@ class DiscoveryReport:
     # определяется совпадением NormFragment.act_id (докстринг модуля).
     events_skipped_no_act_id: int = 0
     items_checked: int = 0
-    items_already_known: int = 0
+    # Айтем уже покрыт активным/финальным статусом (см. докстринг модуля,
+    # «Идемпотентность СО СТАТУС-ФИЛЬТРОМ») — НЕ считает no_norm/
+    # needs_attention покрытием, только pending/in_progress/draft_loaded/
+    # published.
+    items_already_covered: int = 0
+    # Ошибка search_norms (сеть/LegalX недоступен) на конкретном айтеме —
+    # айтем считается no-hit, прогон продолжается (фикс-раунд ревью, Important).
+    search_errors: int = 0
     candidates_created: int = 0
 
 
@@ -129,11 +150,10 @@ def run_discovery(
                     benchmark_countries=raw_item.get("benchmark_countries", []),
                 )
 
-                existing_item_id = store.find_existing_discovery_item(
+                if store.is_expected_item_already_covered(
                     map_record.id, map_item.expected_item
-                )
-                if existing_item_id is not None:
-                    report.items_already_known += 1
+                ):
+                    report.items_already_covered += 1
                     continue
 
                 try:
@@ -148,7 +168,24 @@ def run_discovery(
                     )
                     continue
 
-                if not _has_hit(legalx, questions, event.jurisdiction, act_id):
+                try:
+                    hit = _has_hit(legalx, questions, event.jurisdiction, act_id)
+                except Exception as exc:
+                    # search_norms — сетевой вызов к LegalX без узкого
+                    # контракта исключений (в отличие от AgentLLMClient,
+                    # чьи ошибки — AgentLLMError/ValueError); ловим широко
+                    # (паттерн NormStep, `steps_norm.py`, «шаги ловят
+                    # исключения сами, а не дают им всплыть»), иначе
+                    # временная недоступность LegalX на ОДНОМ айтеме роняла
+                    # бы весь `monitor discovery` (фикс-раунд ревью, Important).
+                    logger.warning(
+                        "discovery: search_norms упал на map=%s item=%r: %s",
+                        map_record.id, map_item.expected_item, exc,
+                    )
+                    report.search_errors += 1
+                    continue
+
+                if not hit:
                     continue
 
                 run_id = store.create_discovery_run(map_record.id)

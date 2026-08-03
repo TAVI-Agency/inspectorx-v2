@@ -122,6 +122,15 @@ logger = logging.getLogger(__name__)
 # pending_review — это шум, не спорная связь для ревью).
 CANDIDATE_SCORE_THRESHOLD = 0.5
 
+# Задача 41 (фикс-раунд ревью, discovery): статусы `pipeline.items`
+# (`20260803170000_pipeline_schema.sql`, полный набор — `pending |
+# in_progress | draft_loaded | published | needs_attention | no_norm`), при
+# которых `is_expected_item_already_covered` считает айтем карты «уже
+# покрытым» — discovery НЕ заводит второго кандидата. Осознанно БЕЗ
+# `no_norm`/`needs_attention`: это как раз тот пробел, который новый акт
+# может закрыть (см. докстринг метода в `MonitoringStore`).
+DISCOVERY_BLOCKING_STATUSES = ("pending", "in_progress", "draft_loaded", "published")
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # Типы
@@ -373,16 +382,26 @@ class MonitoringStore(Protocol):
         события той же юрисдикции."""
         ...
 
-    def find_existing_discovery_item(
-        self, map_id: str, expected_item: str
-    ) -> str | None:
-        """Есть ли УЖЕ `pipeline.items` с этим `expected_item` под каким-либо
-        `pipeline.runs` этой карты — идемпотентность discovery (Задача 41).
+    def is_expected_item_already_covered(self, map_id: str, expected_item: str) -> bool:
+        """Есть ли УЖЕ `pipeline.items` с этим `expected_item` под КАКИМ-ЛИБО
+        `pipeline.runs` этой карты СО СТАТУСОМ `pending`/`in_progress`/
+        `draft_loaded`/`published` — «уже в работе или закрыт», discovery не
+        должен заводить дубль-кандидата (Задача 41, фикс-раунд ревью).
+
+        `no_norm`/`needs_attention` НЕ считаются покрытием: это ГЛАВНЫЙ
+        сценарий брифа задачи — предыдущий Build-прогон не нашёл нормы (или
+        застрял), а новый акт (webhook `event_type='new'`) как раз МОЖЕТ
+        закрыть этот пробел. Первая версия метода (`find_existing_discovery_
+        item`) блокировала ЛЮБОЙ статус — для уже собранной карты это делало
+        discovery вечным no-op, включая ровно тот сценарий, который бриф
+        просил ловить; исправлено ревью.
+
         В схеме `pipeline.*` нет колонки «этот item породило discovery
         события X» (миграция вне периметра этой задачи, см. докстринг
-        `discovery.py`), поэтому идемпотентность держится на паре
-        `(map_id, expected_item)`: тот же текст айтема карты не даёт двух
-        кандидатов. Возвращает `id` найденного айтема либо `None`."""
+        `discovery.py`), поэтому проверка идёт по паре `(map_id,
+        expected_item)` — тот же текст айтема карты, УЖЕ дошедший до
+        активного/финального статуса, не даёт второго кандидата; тот же
+        текст, застрявший на `no_norm`/`needs_attention`, — даёт."""
         ...
 
     def create_discovery_run(self, map_id: str) -> str:
@@ -1058,23 +1077,24 @@ class SupabaseMonitoringStore:
             for row in rows
         ]
 
-    def find_existing_discovery_item(self, map_id: str, expected_item: str) -> str | None:
+    def is_expected_item_already_covered(self, map_id: str, expected_item: str) -> bool:
         run_rows = (
             self._pipeline.table("runs").select("id").eq("map_id", map_id).execute().data
         )
         run_ids = [row["id"] for row in run_rows]
         if not run_ids:
-            return None
+            return False
         rows = (
             self._pipeline.table("items")
             .select("id")
             .in_("run_id", run_ids)
             .eq("expected_item", expected_item)
+            .in_("status", list(DISCOVERY_BLOCKING_STATUSES))
             .limit(1)
             .execute()
             .data
         )
-        return rows[0]["id"] if rows else None
+        return bool(rows)
 
     def create_discovery_run(self, map_id: str) -> str:
         row = self._pipeline.table("runs").insert({"map_id": map_id}).execute().data[0]

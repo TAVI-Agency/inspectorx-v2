@@ -359,7 +359,8 @@ def main(argv=None):
                 f"events_seen={discovery_report.events_seen} "
                 f"skipped_no_act_id={discovery_report.events_skipped_no_act_id} "
                 f"items_checked={discovery_report.items_checked} "
-                f"items_already_known={discovery_report.items_already_known} "
+                f"items_already_covered={discovery_report.items_already_covered} "
+                f"search_errors={discovery_report.search_errors} "
                 f"candidates_created={discovery_report.candidates_created}"
             )
         return
