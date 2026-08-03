@@ -112,7 +112,11 @@ class InMemoryMonitoringStore:
         ]
 
     def find_duplicate_processed_event(
-        self, legalx_act_id: str | None, event_type: str, effective_date: str | None
+        self,
+        legalx_act_id: str | None,
+        event_type: str,
+        effective_date: str | None,
+        jurisdiction: str,
     ) -> bool:
         if not legalx_act_id:
             return False
@@ -123,6 +127,7 @@ class InMemoryMonitoringStore:
                 row["payload"].get("act_id") == legalx_act_id
                 and row["event_type"] == event_type
                 and row["effective_date"] == effective_date
+                and row["jurisdiction"] == jurisdiction
             ):
                 return True
         return False

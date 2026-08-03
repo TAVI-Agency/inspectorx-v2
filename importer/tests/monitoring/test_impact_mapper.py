@@ -324,6 +324,78 @@ def test_rerun_skipped_without_orchestrator_even_if_lawyer_says_needs_true():
     assert report.rereviews_enqueued == 0
 
 
+# ── ревью Задачи 40 (Important): изоляция ошибок юриста в очереди ───────
+
+
+def test_lawyer_error_on_one_requirement_does_not_lose_its_already_saved_impact_and_flag():
+    """(б) исключение НЕ теряет уже сохранённые impacts/flag: `flag_requirement`
+    и `save_impacts` для requirement_id выполняются ДО вызова юриста —
+    падение `InHouseLawyer.decide` на этом requirement_id не откатывает их."""
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_published_requirement("UZ", "req-1", "Требование под ударом")
+    event_id = store.add_event(event_type="amended", jurisdiction="UZ", payload={"act_id": LEGALX_ACT_ID})
+    invalid = json.dumps({"needs_reimplementation": True, "from_step": None, "note": "x"})
+    lawyer = InHouseLawyer(ScriptedLLM(responses=[invalid, invalid]))  # дважды невалиден -> AgentLLMError
+
+    report = process_changes(store, lawyer=lawyer, orchestrator=RecordingOrchestrator())
+
+    assert any(imp["requirement_id"] == "req-1" for imp in store.impacts)
+    assert store.requirements["req-1"]["review_flag"] == "flagged_by_change"
+    assert store.requirements["req-1"]["flagged_by_event_id"] == event_id
+    assert report.lawyer_errors == 1
+    assert report.rereviews_enqueued == 0
+    assert store.events[event_id]["processed_at"] is not None
+    assert report.events_processed == 1
+
+
+def test_lawyer_error_on_first_requirement_does_not_block_second_requirement_or_next_event():
+    """(а) юрист бросает на 1-м требовании из 2 → второе требование
+    обработано, событие processed, очередь идёт дальше (следующее событие
+    обработано) — не head-of-line blocking «ядовитым» требованием/событием."""
+    store = InMemoryMonitoringStore()
+    # событие 1: два затронутых требования, юрист падает на первом
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_citation(LEGALX_ACT_ID, "req-2")
+    store.add_published_requirement("UZ", "req-1", "Требование 1")
+    store.add_published_requirement("UZ", "req-2", "Требование 2")
+    store.add_pipeline_item("req-2", "item-2")
+    event1_id = store.add_event(
+        event_type="amended", jurisdiction="UZ", payload={"act_id": LEGALX_ACT_ID},
+    )
+    # событие 2: следующее в очереди, не должно застрять за событием 1
+    other_act_id = "22222222-2222-2222-2222-222222222222"
+    store.add_citation(other_act_id, "req-3")
+    store.add_published_requirement("UZ", "req-3", "Требование 3")
+    event2_id = store.add_event(event_type="new", jurisdiction="UZ", payload={"act_id": other_act_id})
+
+    invalid = json.dumps({"needs_reimplementation": True, "from_step": None, "note": "x"})
+    llm = ScriptedLLM(
+        responses=[
+            invalid, invalid,                       # req-1: дважды невалиден -> AgentLLMError
+            lawyer_response(True, "norm"),           # req-2: валиден -> rerun_item
+            lawyer_response(False, None),            # req-3 (событие 2): валиден, needs=false
+        ]
+    )
+    lawyer = InHouseLawyer(llm)
+    orchestrator = RecordingOrchestrator()
+
+    report = process_changes(store, lawyer=lawyer, orchestrator=orchestrator)
+
+    # req-1 — юрист упал, ре-ревью не поставлен, но flag/impact на месте
+    assert report.lawyer_errors == 1
+    assert store.requirements["req-1"]["review_flag"] == "flagged_by_change"
+    # req-2 — то же событие, следующее требование ОБРАБОТАНО как обычно
+    assert orchestrator.calls == [("item-2", "norm")]
+    assert store.requirements["req-2"]["review_flag"] == "flagged_by_change"
+    # событие 1 всё равно помечено processed (иначе очередь встала бы навсегда)
+    assert store.events[event1_id]["processed_at"] is not None
+    # событие 2 — очередь пошла дальше, а не застряла на «ядовитом» событии 1
+    assert store.events[event2_id]["processed_at"] is not None
+    assert any(imp["requirement_id"] == "req-3" for imp in store.impacts)
+    assert report.events_processed == 2
+
+
 # ── идемпотентность фан-аута ─────────────────────────────────────────────
 
 

@@ -72,6 +72,22 @@ verdict/steps ДЛЯ карточки при ПЕРВИЧНОЙ сборке. `I
 partial rerun (`Orchestrator.rerun_item`), либо изменение не требует
 пересборки (косметика, подтверждение статус-кво).
 
+## Устойчивость к «ядовитому» требованию (ревью Задачи 40, Important)
+
+`InHouseLawyer.decide` может исчерпать свой ретрай и бросить `AgentLLMError`
+(дважды невалидный ответ LLM) НА ОДНОМ КОНКРЕТНОМ затронутом требовании
+события. `process_changes` ловит эту ошибку ЛОКАЛЬНО, вокруг вызова
+`.decide` для ЭТОГО требования — impacts и `flag_requirement` для него уже
+записаны СТРОКОЙ ВЫШЕ и НЕ откатываются; просто ре-ревью для этого
+требования не ставится в очередь автоматически (чинится вручную —
+`orchestrator.rerun_item(item_id, from_step)` напрямую, после разбора
+причины в логе warning). Остальные требования этого же события и
+остальные события очереди обрабатываются как обычно, событие в конце всё
+равно помечается `processed_at` — без этого одно «ядовитое» требование
+стопорило бы ВСЮ очередь необработанных событий навсегда (head-of-line
+blocking, событие с ним никогда бы не помечалось обработанным, следующие
+события до него бы не доходили).
+
 ## Railway cron (докстринг-заметка, инфра вне репозитория)
 
 Продовый запуск — cron-джоб Railway `python -m importer monitor
@@ -81,6 +97,7 @@ pg_net добавится при необходимости). Сама наст�
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -92,6 +109,8 @@ from importer.build.steps import STEP_ORDER
 
 if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл impact_mapper<->trace
     from importer.build.trace import Tracer
+
+logger = logging.getLogger(__name__)
 
 # Порог скора Classifier-кандидата (путь б) — решение контроллера задачи:
 # ниже порога кандидат отбрасывается ДО записи impact (не попадает даже в
@@ -165,6 +184,11 @@ class ProcessingReport:
     requirements_flagged: int = 0
     rereviews_enqueued: int = 0
     notifications_sent: int = 0
+    # Ревью Задачи 40 (Important, head-of-line blocking): сколько раз
+    # `InHouseLawyer.decide` упал (дважды невалидный ответ) на КОНКРЕТНОМ
+    # требовании — событие/остальные требования этого события ИДУТ ДАЛЬШЕ
+    # (см. докстринг `process_changes`), это только счётчик для наблюдения.
+    lawyer_errors: int = 0
 
 
 class RerunOrchestratorLike(Protocol):
@@ -185,11 +209,18 @@ class MonitoringStore(Protocol):
         ...
 
     def find_duplicate_processed_event(
-        self, legalx_act_id: str | None, event_type: str, effective_date: str | None
+        self,
+        legalx_act_id: str | None,
+        event_type: str,
+        effective_date: str | None,
+        jurisdiction: str,
     ) -> bool:
         """Есть ли УЖЕ обработанное (`processed_at is not null`) событие с
-        тем же `(payload->>'act_id', event_type, effective_date)` —
-        идемпотентность повторной доставки webhook'а (докстринг модуля).
+        тем же `(payload->>'act_id', event_type, effective_date, jurisdiction)`
+        — идемпотентность повторной доставки webhook'а (докстринг модуля).
+        `jurisdiction` — defense-in-depth (ревью Задачи 40, Minor): один и
+        тот же LegalX `act_id` теоретически не должен всплывать в двух
+        юрисдикциях одновременно, но ключ дедупа не обязан на это полагаться.
         `legalx_act_id=None` -> всегда `False` (ручные события без акта
         дедупу не подлежат)."""
         ...
@@ -498,7 +529,15 @@ def process_changes(
     без точного цитатного совпадения даёт 0 кандидатов (Classifier не
     вызывается), а найденные impacts флагаются, но ре-ревью не ставится в
     очередь (тот же принцип отсрочки live-подключения, что и везде в Build —
-    см. `importer/cli.py`)."""
+    см. `importer/cli.py`).
+
+    `InHouseLawyer.decide`, упавший на ОДНОМ требовании (`AgentLLMError`),
+    НЕ прерывает ни обработку остальных требований этого события, ни
+    очередь остальных событий — см. докстринг модуля («Устойчивость к
+    ядовитому требованию»): impacts/флаг для этого требования уже
+    сохранены и не откатываются, событие в конце всё равно помечается
+    `processed_at`, ре-ревью для пропущенного требования — вручную
+    (`orchestrator.rerun_item(item_id, from_step)` напрямую)."""
     models = models or load_models_config()
     classifier = (
         Classifier(classifier_llm, models, role="monitoring_candidate")
@@ -511,7 +550,7 @@ def process_changes(
         report.events_seen += 1
 
         if store.find_duplicate_processed_event(
-            event.legalx_act_id, event.event_type, event.effective_date
+            event.legalx_act_id, event.event_type, event.effective_date, event.jurisdiction
         ):
             store.mark_processed(event.id)
             report.duplicates_skipped += 1
@@ -539,7 +578,20 @@ def process_changes(
             if lawyer is None:
                 continue
             title = titles_by_id.get(requirement_id, requirement_id)
-            decision = lawyer.decide(event, title)
+            try:
+                decision = lawyer.decide(event, title)
+            except AgentLLMError as exc:
+                # Head-of-line blocking фикс (ревью Задачи 40, Important) —
+                # см. докстринг модуля/этой функции: impacts/флаг для
+                # requirement_id уже записаны выше и не теряются, просто
+                # ре-ревью для НЕГО не ставится в очередь автоматически.
+                # Остальные требования и остальные события — как обычно.
+                logger.warning(
+                    "InHouseLawyer.decide упал на event.id=%s requirement_id=%s: %s",
+                    event.id, requirement_id, exc,
+                )
+                report.lawyer_errors += 1
+                continue
             if not decision.needs_reimplementation:
                 continue
             item_id = store.enqueue_rereview(requirement_id)
@@ -605,7 +657,11 @@ class SupabaseMonitoringStore:
         return [_event_from_row(row) for row in rows]
 
     def find_duplicate_processed_event(
-        self, legalx_act_id: str | None, event_type: str, effective_date: str | None
+        self,
+        legalx_act_id: str | None,
+        event_type: str,
+        effective_date: str | None,
+        jurisdiction: str,
     ) -> bool:
         if not legalx_act_id:
             return False
@@ -614,6 +670,7 @@ class SupabaseMonitoringStore:
             .select("id")
             .eq("event_type", event_type)
             .eq("payload->>act_id", legalx_act_id)
+            .eq("jurisdiction", jurisdiction)
             .not_.is_("processed_at", "null")
         )
         query = (
