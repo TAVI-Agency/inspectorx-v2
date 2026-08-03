@@ -261,24 +261,30 @@ export function useCalendarToken() {
 export function useConnectCalendar() {
   const { session } = useAuth()
   const qc = useQueryClient()
+  const key = ['calendar-token', session?.user.id ?? 'anon']
   return useMutation({
     mutationFn: async () => {
       if (!session) throw new Error('auth-required')
       return createCalendarToken(session.user.id)
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar-token'] }),
+    // setQueryData вместо invalidate: значение уже на руках после insert,
+    // фоновый рефетч по инвалидации на миг вернул бы кэш к старому null
+    // (initial fetch уже резолвился в null, isLoading больше не true) —
+    // кнопка «Подключить» мигнула бы обратно до завершения рефетча.
+    onSuccess: (token) => void qc.setQueryData(key, token),
   })
 }
 
 export function useDisconnectCalendar() {
   const { session } = useAuth()
   const qc = useQueryClient()
+  const key = ['calendar-token', session?.user.id ?? 'anon']
   return useMutation({
     mutationFn: async () => {
       if (!session) throw new Error('auth-required')
       await deleteCalendarToken(session.user.id)
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar-token'] }),
+    onSuccess: () => void qc.setQueryData(key, null),
   })
 }
 
