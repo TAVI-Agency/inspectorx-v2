@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from importer.monitoring.impact_mapper import (
+    DISCOVERY_BLOCKING_STATUSES,
     ApprovedMapRecord,
     ChangeEventRecord,
     HistorySourceEvent,
@@ -47,11 +48,17 @@ class InMemoryMonitoringStore:
     # jurisdiction -> [{"id", "group_ref", "jurisdiction", "payload"}, ...] —
     # approved-карты pipeline.maps (Задача 41, вход discovery)
     approved_maps: dict[str, list[dict]] = field(default_factory=dict)
-    # append-only список discovery-прогонов: {"id", "map_id"} (эмуляция pipeline.runs)
-    discovery_runs: list[dict] = field(default_factory=list)
-    # append-only список discovery-кандидатов: {"id", "run_id", "map_id",
-    # "expected_item", "category_slug", "status"} (эмуляция pipeline.items)
-    discovery_items: list[dict] = field(default_factory=list)
+    # append-only список ВСЕХ прогонов pipeline.runs: {"id", "map_id"} — не
+    # только discovery-run'ов, но и обычных Build-прогонов (фикс-раунд ревью
+    # Задачи 41: is_expected_item_already_covered обязана видеть ЛЮБОЙ
+    # run карты, не только те, что завела сама discovery, иначе фейк не
+    # зеркалит реальную SQL-семантику `SupabaseMonitoringStore`, см.
+    # `is_expected_item_already_covered`/`add_pipeline_item_for_map` ниже).
+    pipeline_runs: list[dict] = field(default_factory=list)
+    # append-only список ВСЕХ строк pipeline.items: {"id", "run_id",
+    # "expected_item", "category_slug", "status"} — эмуляция реальной
+    # таблицы целиком, не отдельного «discovery-only» списка.
+    pipeline_items: list[dict] = field(default_factory=list)
     _next_id: int = 0
 
     def _gen_id(self, prefix: str) -> str:
@@ -135,6 +142,36 @@ class InMemoryMonitoringStore:
             {"id": mid, "group_ref": group_ref, "jurisdiction": jurisdiction, "payload": payload}
         )
         return mid
+
+    def add_pipeline_item_for_map(
+        self,
+        map_id: str,
+        expected_item: str,
+        *,
+        status: str = "no_norm",
+        category_slug: str = "category",
+        run_id: str | None = None,
+    ) -> str:
+        """Симулирует «карта уже собрана обычным Build-прогоном» — заводит
+        `pipeline.runs`(если `run_id` не передан) + `pipeline.items` под
+        картой с ПРОИЗВОЛЬНЫМ статусом (по умолчанию `no_norm`, ключевой
+        сценарий фикс-раунда ревью Задачи 41: прежний прогон нормы не нашёл,
+        новый акт может закрыть пробел). НЕ часть `MonitoringStore` Protocol
+        — только для сборки сценариев теста."""
+        rid = run_id or self._gen_id("run")
+        if not any(run["id"] == rid for run in self.pipeline_runs):
+            self.pipeline_runs.append({"id": rid, "map_id": map_id})
+        item_id = self._gen_id("item")
+        self.pipeline_items.append(
+            {
+                "id": item_id,
+                "run_id": rid,
+                "expected_item": expected_item,
+                "category_slug": category_slug,
+                "status": status,
+            }
+        )
+        return item_id
 
     # ── MonitoringStore Protocol ───────────────────────────────────────────
 
@@ -335,25 +372,34 @@ class InMemoryMonitoringStore:
             for row in self.approved_maps.get(jurisdiction, [])
         ]
 
-    def find_existing_discovery_item(self, map_id: str, expected_item: str) -> str | None:
-        for item in self.discovery_items:
-            if item["map_id"] == map_id and item["expected_item"] == expected_item:
-                return item["id"]
-        return None
+    def is_expected_item_already_covered(self, map_id: str, expected_item: str) -> bool:
+        # Зеркалит РЕАЛЬНУЮ SQL-семантику SupabaseMonitoringStore (фикс-раунд
+        # ревью Задачи 41): «по ВСЕМ ранам карты» (pipeline_runs, не только
+        # заведённым discovery — обычные Build-прогоны тоже считаются), со
+        # статус-фильтром DISCOVERY_BLOCKING_STATUSES — не отдельный список
+        # discovery-кандидатов, чтобы расхождение фейка и прода не маскировало
+        # баг снова (это и было первопричиной прошлой версии).
+        run_ids = {run["id"] for run in self.pipeline_runs if run["map_id"] == map_id}
+        if not run_ids:
+            return False
+        return any(
+            item["run_id"] in run_ids
+            and item["expected_item"] == expected_item
+            and item["status"] in DISCOVERY_BLOCKING_STATUSES
+            for item in self.pipeline_items
+        )
 
     def create_discovery_run(self, map_id: str) -> str:
         run_id = self._gen_id("discovery-run")
-        self.discovery_runs.append({"id": run_id, "map_id": map_id})
+        self.pipeline_runs.append({"id": run_id, "map_id": map_id})
         return run_id
 
     def create_discovery_item(self, run_id: str, expected_item: str, category_slug: str) -> str:
-        run = next(run for run in self.discovery_runs if run["id"] == run_id)
         item_id = self._gen_id("discovery-item")
-        self.discovery_items.append(
+        self.pipeline_items.append(
             {
                 "id": item_id,
                 "run_id": run_id,
-                "map_id": run["map_id"],
                 "expected_item": expected_item,
                 "category_slug": category_slug,
                 "status": "pending",
