@@ -281,6 +281,67 @@ def test_falls_back_to_expected_item_when_no_summary():
     assert ctx.data["dedup"]["duplicate_of"] == "item-prev"
 
 
+# ── пин-тест фикс-раунда: partial rerun_item без ctx.data['summary'] ─────
+# должен использовать item.summary_text (сохранённый прошлым прогоном шага
+# 'summary'), а не молча падать на expected_item — иначе сравнение
+# асимметрично относительно list_run_item_texts, который уже фолбэкается
+# на summary_text (см. докстринг BuildStore.list_run_item_texts).
+
+
+def test_falls_back_to_item_summary_text_when_ctx_data_summary_absent():
+    """Partial `rerun_item`, начатый ПОСЛЕ шага 'summary': шаг 'summary' в
+    этом прогоне не выполняется (ctx.data['summary'] пуст), но
+    `pipeline.items.summary_text` уже записан прошлым прогоном. Текст для
+    эмбеддинга должен браться из item.summary_text, не из expected_item."""
+    store = InMemoryStore()
+    add_processed_item(store, item_id="item-prev", text="прошлый айтем")
+    item = ItemRecord(
+        id="item-current",
+        run_id="run-1",
+        expected_item="сырой ожидаемый текст из карты",
+        summary_text="сохранённый summary из прошлого прогона",
+    )
+    store.items["item-current"] = item
+    ctx = ItemContext(item=item)  # ctx.data пуст — 'summary' в этом rerun не выполнялся
+
+    embedder = ScriptedEmbedder(
+        {"сохранённый summary из прошлого прогона": VEC_A, "прошлый айтем": VEC_HIGH}
+    )
+    llm = ScriptedLLM([])
+    step = DedupStep(llm, store, embedder)
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert ctx.data["dedup"]["duplicate_of"] == "item-prev"
+
+
+def test_ctx_data_summary_takes_priority_over_item_summary_text():
+    """Если 'summary' ОТРАБОТАЛ в этом же прогоне (ctx.data['summary'] есть),
+    он главнее устаревшего item.summary_text от предыдущего прогона."""
+    store = InMemoryStore()
+    add_processed_item(store, item_id="item-prev", text="прошлый айтем")
+    item = ItemRecord(
+        id="item-current",
+        run_id="run-1",
+        expected_item="сырой ожидаемый текст из карты",
+        summary_text="устаревший summary из прошлого прогона",
+    )
+    store.items["item-current"] = item
+    ctx = ItemContext(item=item, data={"summary": "свежий summary этого прогона"})
+
+    embedder = ScriptedEmbedder(
+        {"свежий summary этого прогона": VEC_A, "прошлый айтем": VEC_HIGH}
+    )
+    llm = ScriptedLLM([])
+    step = DedupStep(llm, store, embedder)
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert ctx.data["dedup"]["duplicate_of"] == "item-prev"
+
+
 # ── несколько кандидатов: первый найденный дубль побеждает ──────────────
 
 
