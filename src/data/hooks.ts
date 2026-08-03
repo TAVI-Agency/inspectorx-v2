@@ -18,6 +18,7 @@ import type {
   SearchKind,
   UserQuestion,
 } from './types'
+import type { CountryCode } from './countries'
 import {
   buildPortfolio,
   demoPortfolioIds,
@@ -88,11 +89,18 @@ export function useSearchQuery(query: string, kind: SearchKind) {
   })
 }
 
-export function useProductBundle(productId: string | undefined) {
+export function useProductBundle(productId: string | undefined, country: CountryCode = 'UZ') {
   const ctx = useDataCtx()
   return useQuery({
-    queryKey: ['product', productId, ctx.realSubscriber, ctx.mockSubscriber, ctx.verifiedLawyer],
-    queryFn: () => fetchProductBundle(productId!, ctx),
+    queryKey: [
+      'product',
+      productId,
+      country,
+      ctx.realSubscriber,
+      ctx.mockSubscriber,
+      ctx.verifiedLawyer,
+    ],
+    queryFn: () => fetchProductBundle(productId!, ctx, country),
     enabled: Boolean(productId),
     staleTime: 60_000,
   })

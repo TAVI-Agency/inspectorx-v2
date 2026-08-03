@@ -7,6 +7,139 @@ export type Json =
   | Json[]
 
 export type Database = {
+  catalog: {
+    Tables: {
+      country_codes: {
+        Row: {
+          code: string
+          country: string
+          id: string
+          name: string | null
+          product_type_id: string | null
+          system: string
+        }
+        Insert: {
+          code: string
+          country: string
+          id?: string
+          name?: string | null
+          product_type_id?: string | null
+          system: string
+        }
+        Update: {
+          code?: string
+          country?: string
+          id?: string
+          name?: string | null
+          product_type_id?: string | null
+          system?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "country_codes_product_type_id_fkey"
+            columns: ["product_type_id"]
+            isOneToOne: false
+            referencedRelation: "product_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_types: {
+        Row: {
+          created_at: string
+          hs_code: string | null
+          id: string
+          kind: string
+          name_en: string | null
+          name_ru: string
+          name_uz: string | null
+          parent_id: string | null
+          unspsc_code: string | null
+        }
+        Insert: {
+          created_at?: string
+          hs_code?: string | null
+          id?: string
+          kind: string
+          name_en?: string | null
+          name_ru: string
+          name_uz?: string | null
+          parent_id?: string | null
+          unspsc_code?: string | null
+        }
+        Update: {
+          created_at?: string
+          hs_code?: string | null
+          id?: string
+          kind?: string
+          name_en?: string | null
+          name_ru?: string
+          name_uz?: string | null
+          parent_id?: string | null
+          unspsc_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_types_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "product_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skus: {
+        Row: {
+          attribute: string | null
+          barcode: string | null
+          brand: string | null
+          country: string
+          id: string
+          ikpu_code: string
+          product_type_id: string
+        }
+        Insert: {
+          attribute?: string | null
+          barcode?: string | null
+          brand?: string | null
+          country?: string
+          id?: string
+          ikpu_code: string
+          product_type_id: string
+        }
+        Update: {
+          attribute?: string | null
+          barcode?: string | null
+          brand?: string | null
+          country?: string
+          id?: string
+          ikpu_code?: string
+          product_type_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skus_product_type_id_fkey"
+            columns: ["product_type_id"]
+            isOneToOne: false
+            referencedRelation: "product_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -153,6 +286,24 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_tokens: {
+        Row: {
+          created_at: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          token?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       change_events: {
         Row: {
           act_id: string | null
@@ -161,6 +312,7 @@ export type Database = {
           event_type: Database["public"]["Enums"]["change_event_type"]
           id: string
           importance: Database["public"]["Enums"]["importance_level"]
+          jurisdiction: string
           now_text: string | null
           paragraph_id: string | null
           payload: Json
@@ -176,6 +328,7 @@ export type Database = {
           event_type: Database["public"]["Enums"]["change_event_type"]
           id?: string
           importance?: Database["public"]["Enums"]["importance_level"]
+          jurisdiction?: string
           now_text?: string | null
           paragraph_id?: string | null
           payload?: Json
@@ -191,6 +344,7 @@ export type Database = {
           event_type?: Database["public"]["Enums"]["change_event_type"]
           id?: string
           importance?: Database["public"]["Enums"]["importance_level"]
+          jurisdiction?: string
           now_text?: string | null
           paragraph_id?: string | null
           payload?: Json
@@ -358,6 +512,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "import_items_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_items_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
+          {
             foreignKeyName: "import_items_run_id_fkey"
             columns: ["run_id"]
             isOneToOne: false
@@ -464,6 +632,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lawyer_notifications_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lawyer_notifications_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
+          {
             foreignKeyName: "lawyer_notifications_review_id_fkey"
             columns: ["review_id"]
             isOneToOne: false
@@ -550,6 +732,7 @@ export type Database = {
           name_ru: string
           name_uz: string | null
           parent_id: string | null
+          product_type_id: string | null
           updated_at: string
         }
         Insert: {
@@ -563,6 +746,7 @@ export type Database = {
           name_ru: string
           name_uz?: string | null
           parent_id?: string | null
+          product_type_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -576,6 +760,7 @@ export type Database = {
           name_ru?: string
           name_uz?: string | null
           parent_id?: string | null
+          product_type_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -626,6 +811,7 @@ export type Database = {
           code: string | null
           created_at: string
           id: string
+          product_type_id: string | null
           requirement_id: string
           scope: Database["public"]["Enums"]["applicability_scope"]
         }
@@ -633,6 +819,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           id?: string
+          product_type_id?: string | null
           requirement_id: string
           scope: Database["public"]["Enums"]["applicability_scope"]
         }
@@ -640,6 +827,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           id?: string
+          product_type_id?: string | null
           requirement_id?: string
           scope?: Database["public"]["Enums"]["applicability_scope"]
         }
@@ -651,7 +839,51 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "requirement_applicability_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_applicability_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
         ]
+      }
+      requirement_categories: {
+        Row: {
+          definition_ru: string | null
+          is_active: boolean
+          name_en: string | null
+          name_ru: string
+          name_uz: string | null
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          definition_ru?: string | null
+          is_active?: boolean
+          name_en?: string | null
+          name_ru: string
+          name_uz?: string | null
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          definition_ru?: string | null
+          is_active?: boolean
+          name_en?: string | null
+          name_ru?: string
+          name_uz?: string | null
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       requirement_change_impacts: {
         Row: {
@@ -702,6 +934,20 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "requirement_change_impacts_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_change_impacts_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
         ]
       }
       requirement_citations: {
@@ -740,6 +986,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "requirements"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_citations_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_citations_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
           },
         ]
       }
@@ -785,43 +1045,69 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "requirement_contents_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_contents_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
         ]
       }
       requirement_details: {
         Row: {
+          court_cases: Json | null
           created_at: string
           description: string | null
           documents: Json
           how_to_comply: Json
           lang: Database["public"]["Enums"]["lang_code"]
+          lawyer_instruction: Json | null
           requirement_id: string
           sanctions: Json
+          status_note: string | null
+          templates: Json | null
           translation_origin:
             | Database["public"]["Enums"]["translation_origin"]
             | null
           updated_at: string
         }
         Insert: {
+          court_cases?: Json | null
           created_at?: string
           description?: string | null
           documents?: Json
           how_to_comply?: Json
           lang: Database["public"]["Enums"]["lang_code"]
+          lawyer_instruction?: Json | null
           requirement_id: string
           sanctions?: Json
+          status_note?: string | null
+          templates?: Json | null
           translation_origin?:
             | Database["public"]["Enums"]["translation_origin"]
             | null
           updated_at?: string
         }
         Update: {
+          court_cases?: Json | null
           created_at?: string
           description?: string | null
           documents?: Json
           how_to_comply?: Json
           lang?: Database["public"]["Enums"]["lang_code"]
+          lawyer_instruction?: Json | null
           requirement_id?: string
           sanctions?: Json
+          status_note?: string | null
+          templates?: Json | null
           translation_origin?:
             | Database["public"]["Enums"]["translation_origin"]
             | null
@@ -834,6 +1120,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "requirements"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_details_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_details_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
           },
         ]
       }
@@ -881,6 +1181,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "requirements"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_faqs_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_faqs_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
           },
           {
             foreignKeyName: "requirement_faqs_source_question_id_fkey"
@@ -943,6 +1257,20 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "requirement_reviews_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_reviews_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
         ]
       }
       requirement_revisions: {
@@ -991,6 +1319,66 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "requirement_revisions_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_revisions_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
+        ]
+      }
+      requirement_rules: {
+        Row: {
+          created_at: string
+          id: string
+          requirement_id: string
+          rule: Json
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          requirement_id: string
+          rule: Json
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          requirement_id?: string
+          rule?: Json
+          verified?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_rules_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_rules_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_rules_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
         ]
       }
       requirement_sources: {
@@ -1024,25 +1412,43 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "requirement_sources_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_sources_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
         ]
       }
       requirements: {
         Row: {
           addressee_roles: Database["public"]["Enums"]["party_role"][]
           authority_id: string | null
+          category_slug: string | null
           confidence_score: number | null
           created_at: string
           created_by: string | null
           deontic: Database["public"]["Enums"]["deontic_type"]
+          effective_from: string | null
           external_key: string | null
           flagged_at: string | null
           flagged_by_event_id: string | null
           id: string
+          jurisdiction: string
           lifecycle_stage_id: string | null
           nature: Database["public"]["Enums"]["requirement_nature"] | null
           operation: Database["public"]["Enums"]["operation_domain"]
           origin: Database["public"]["Enums"]["requirement_origin"]
           published_at: string | null
+          repealed_by_ref: string | null
           requirement_category:
             | Database["public"]["Enums"]["requirement_category"]
             | null
@@ -1050,26 +1456,32 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           status: Database["public"]["Enums"]["requirement_status"]
+          transition_until: string | null
           transport_type: Database["public"]["Enums"]["transport_type"] | null
           trust_label: Database["public"]["Enums"]["trust_label"]
           updated_at: string
+          valid_to: string | null
         }
         Insert: {
           addressee_roles?: Database["public"]["Enums"]["party_role"][]
           authority_id?: string | null
+          category_slug?: string | null
           confidence_score?: number | null
           created_at?: string
           created_by?: string | null
           deontic: Database["public"]["Enums"]["deontic_type"]
+          effective_from?: string | null
           external_key?: string | null
           flagged_at?: string | null
           flagged_by_event_id?: string | null
           id?: string
+          jurisdiction?: string
           lifecycle_stage_id?: string | null
           nature?: Database["public"]["Enums"]["requirement_nature"] | null
           operation: Database["public"]["Enums"]["operation_domain"]
           origin?: Database["public"]["Enums"]["requirement_origin"]
           published_at?: string | null
+          repealed_by_ref?: string | null
           requirement_category?:
             | Database["public"]["Enums"]["requirement_category"]
             | null
@@ -1077,26 +1489,32 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["requirement_status"]
+          transition_until?: string | null
           transport_type?: Database["public"]["Enums"]["transport_type"] | null
           trust_label?: Database["public"]["Enums"]["trust_label"]
           updated_at?: string
+          valid_to?: string | null
         }
         Update: {
           addressee_roles?: Database["public"]["Enums"]["party_role"][]
           authority_id?: string | null
+          category_slug?: string | null
           confidence_score?: number | null
           created_at?: string
           created_by?: string | null
           deontic?: Database["public"]["Enums"]["deontic_type"]
+          effective_from?: string | null
           external_key?: string | null
           flagged_at?: string | null
           flagged_by_event_id?: string | null
           id?: string
+          jurisdiction?: string
           lifecycle_stage_id?: string | null
           nature?: Database["public"]["Enums"]["requirement_nature"] | null
           operation?: Database["public"]["Enums"]["operation_domain"]
           origin?: Database["public"]["Enums"]["requirement_origin"]
           published_at?: string | null
+          repealed_by_ref?: string | null
           requirement_category?:
             | Database["public"]["Enums"]["requirement_category"]
             | null
@@ -1104,9 +1522,11 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["requirement_status"]
+          transition_until?: string | null
           transport_type?: Database["public"]["Enums"]["transport_type"] | null
           trust_label?: Database["public"]["Enums"]["trust_label"]
           updated_at?: string
+          valid_to?: string | null
         }
         Relationships: [
           {
@@ -1115,6 +1535,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "authorities"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirements_category_slug_fkey"
+            columns: ["category_slug"]
+            isOneToOne: false
+            referencedRelation: "requirement_categories"
+            referencedColumns: ["slug"]
           },
           {
             foreignKeyName: "requirements_flagged_by_event_id_fkey"
@@ -1219,6 +1646,7 @@ export type Database = {
           name_ru: string
           name_uz: string | null
           oked_code: string | null
+          product_type_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1233,6 +1661,7 @@ export type Database = {
           name_ru: string
           name_uz?: string | null
           oked_code?: string | null
+          product_type_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1247,6 +1676,7 @@ export type Database = {
           name_ru?: string
           name_uz?: string | null
           oked_code?: string | null
+          product_type_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1299,8 +1729,10 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          impact_id: string
+          impact_id: string | null
           is_read: boolean
+          kind: string
+          payload: Json | null
           product_id: string | null
           read_at: string | null
           requirement_id: string
@@ -1310,8 +1742,10 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          impact_id: string
+          impact_id?: string | null
           is_read?: boolean
+          kind?: string
+          payload?: Json | null
           product_id?: string | null
           read_at?: string | null
           requirement_id: string
@@ -1321,8 +1755,10 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
-          impact_id?: string
+          impact_id?: string | null
           is_read?: boolean
+          kind?: string
+          payload?: Json | null
           product_id?: string | null
           read_at?: string | null
           requirement_id?: string
@@ -1350,6 +1786,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "requirements"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_notifications_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_notifications_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
           },
           {
             foreignKeyName: "user_notifications_service_id_fkey"
@@ -1421,6 +1871,20 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "user_questions_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_questions_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
         ]
       }
     }
@@ -1479,6 +1943,154 @@ export type Database = {
             referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "requirement_reviews_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_reviews_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
+        ]
+      }
+      requirements_with_status: {
+        Row: {
+          addressee_roles: Database["public"]["Enums"]["party_role"][] | null
+          authority_id: string | null
+          category_slug: string | null
+          confidence_score: number | null
+          created_at: string | null
+          created_by: string | null
+          deontic: Database["public"]["Enums"]["deontic_type"] | null
+          effective_from: string | null
+          external_key: string | null
+          flagged_at: string | null
+          flagged_by_event_id: string | null
+          id: string | null
+          jurisdiction: string | null
+          lifecycle: string | null
+          lifecycle_stage_id: string | null
+          nature: Database["public"]["Enums"]["requirement_nature"] | null
+          operation: Database["public"]["Enums"]["operation_domain"] | null
+          origin: Database["public"]["Enums"]["requirement_origin"] | null
+          published_at: string | null
+          repealed_by_ref: string | null
+          requirement_category:
+            | Database["public"]["Enums"]["requirement_category"]
+            | null
+          review_flag: Database["public"]["Enums"]["review_flag"] | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["requirement_status"] | null
+          transition_until: string | null
+          transport_type: Database["public"]["Enums"]["transport_type"] | null
+          trust_label: Database["public"]["Enums"]["trust_label"] | null
+          updated_at: string | null
+          valid_to: string | null
+        }
+        Insert: {
+          addressee_roles?: Database["public"]["Enums"]["party_role"][] | null
+          authority_id?: string | null
+          category_slug?: string | null
+          confidence_score?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          deontic?: Database["public"]["Enums"]["deontic_type"] | null
+          effective_from?: string | null
+          external_key?: string | null
+          flagged_at?: string | null
+          flagged_by_event_id?: string | null
+          id?: string | null
+          jurisdiction?: string | null
+          lifecycle?: never
+          lifecycle_stage_id?: string | null
+          nature?: Database["public"]["Enums"]["requirement_nature"] | null
+          operation?: Database["public"]["Enums"]["operation_domain"] | null
+          origin?: Database["public"]["Enums"]["requirement_origin"] | null
+          published_at?: string | null
+          repealed_by_ref?: string | null
+          requirement_category?:
+            | Database["public"]["Enums"]["requirement_category"]
+            | null
+          review_flag?: Database["public"]["Enums"]["review_flag"] | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["requirement_status"] | null
+          transition_until?: string | null
+          transport_type?: Database["public"]["Enums"]["transport_type"] | null
+          trust_label?: Database["public"]["Enums"]["trust_label"] | null
+          updated_at?: string | null
+          valid_to?: string | null
+        }
+        Update: {
+          addressee_roles?: Database["public"]["Enums"]["party_role"][] | null
+          authority_id?: string | null
+          category_slug?: string | null
+          confidence_score?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          deontic?: Database["public"]["Enums"]["deontic_type"] | null
+          effective_from?: string | null
+          external_key?: string | null
+          flagged_at?: string | null
+          flagged_by_event_id?: string | null
+          id?: string | null
+          jurisdiction?: string | null
+          lifecycle?: never
+          lifecycle_stage_id?: string | null
+          nature?: Database["public"]["Enums"]["requirement_nature"] | null
+          operation?: Database["public"]["Enums"]["operation_domain"] | null
+          origin?: Database["public"]["Enums"]["requirement_origin"] | null
+          published_at?: string | null
+          repealed_by_ref?: string | null
+          requirement_category?:
+            | Database["public"]["Enums"]["requirement_category"]
+            | null
+          review_flag?: Database["public"]["Enums"]["review_flag"] | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["requirement_status"] | null
+          transition_until?: string | null
+          transport_type?: Database["public"]["Enums"]["transport_type"] | null
+          trust_label?: Database["public"]["Enums"]["trust_label"] | null
+          updated_at?: string | null
+          valid_to?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirements_authority_id_fkey"
+            columns: ["authority_id"]
+            isOneToOne: false
+            referencedRelation: "authorities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirements_category_slug_fkey"
+            columns: ["category_slug"]
+            isOneToOne: false
+            referencedRelation: "requirement_categories"
+            referencedColumns: ["slug"]
+          },
+          {
+            foreignKeyName: "requirements_flagged_by_event_id_fkey"
+            columns: ["flagged_by_event_id"]
+            isOneToOne: false
+            referencedRelation: "change_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirements_lifecycle_stage_id_fkey"
+            columns: ["lifecycle_stage_id"]
+            isOneToOne: false
+            referencedRelation: "lifecycle_stages"
+            referencedColumns: ["id"]
+          },
         ]
       }
       review_vote_counts: {
@@ -1497,10 +2109,30 @@ export type Database = {
           },
         ]
       }
+      user_deadline_events: {
+        Row: {
+          event_date: string | null
+          event_kind: string | null
+          jurisdiction: string | null
+          requirement_id: string | null
+          title: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       is_subscriber: { Args: never; Returns: boolean }
       is_verified_lawyer: { Args: never; Returns: boolean }
+      lifecycle_status: {
+        Args: {
+          p_effective_from: string
+          p_today?: string
+          p_transition_until: string
+          p_valid_to: string
+        }
+        Returns: string
+      }
       notify_admin_telegram: { Args: { message: string }; Returns: undefined }
       review_votable: { Args: { rid: string }; Returns: boolean }
     }
@@ -1516,6 +2148,7 @@ export type Database = {
         | "all_services"
         | "oked_code"
         | "oked_prefix"
+        | "product_type"
       change_event_type: "new" | "amended" | "repealed" | "effective_soon"
       change_source: "jurisbase" | "manual"
       content_request_kind:
@@ -1708,6 +2341,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  catalog: {
+    Enums: {},
+  },
   graphql_public: {
     Enums: {},
   },
@@ -1724,6 +2360,7 @@ export const Constants = {
         "all_services",
         "oked_code",
         "oked_prefix",
+        "product_type",
       ],
       change_event_type: ["new", "amended", "repealed", "effective_soon"],
       change_source: ["jurisbase", "manual"],
