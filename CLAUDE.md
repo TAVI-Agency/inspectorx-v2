@@ -18,7 +18,7 @@ npm run build      # tsc -b && vite build — это же и проверка т
 npm run lint       # oxlint
 ```
 
-Юнит-тестов нет. Визуальная проверка — Playwright-скрипты (нужен запущенный dev-сервер; база переопределяется `SHOT_BASE`):
+Юнит-тестов на фронте нет (Python-тесты — ниже). Визуальная проверка — Playwright-скрипты (нужен запущенный dev-сервер; база переопределяется `SHOT_BASE`):
 
 ```bash
 node scripts/shot.mjs <path> <name> [steps.mjs]  # shots/<name>-{light,dark}-{1440,375}.png + консольные ошибки в stdout
@@ -26,6 +26,38 @@ node scripts/walkthrough.mjs                     # сквозной путь: л
 ```
 
 `steps.mjs` (примеры в `scripts/steps/`) экспортирует `default: async (page, ctx) => {}` — действия перед снимком.
+
+### Конвейер контента (`importer/`, Python)
+
+Тесты — `pytest.ini` в корне (маркер `integration` требует поднятый локальный Supabase, иначе сам себя скипает):
+
+```bash
+.venv-importer/bin/python -m pytest importer/tests -q   # 552 теста
+```
+
+Legacy-импортёр отчётов (`importer/pipeline.py`, команда `import-report`) — временный конвейер research-loop, статус в `docs/RESEARCH_PIPELINE_STATUS.md`. Целевой конвейер — Build (`importer/build/`, схема `pipeline`), CLI — `importer/cli.py`:
+
+```bash
+python -m importer build map --group <ref> --jurisdiction UZ        # Cartographer: draft-карта группы товаров
+python -m importer build approve-map --map <id>                     # апрув владельцем: draft -> approved (стоп-точка ①)
+python -m importer build run --map <id> [--no-publish]              # прогон 14 шагов конвейера по утверждённой карте
+python -m importer build status --run <id>                          # статусы айтемов прогона
+python -m importer build attention                                  # очередь needs_attention
+python -m importer build coverage --run <id>                        # coverage-отчёт: карта vs факт
+python -m importer build publish --run <id>                         # публикация draft_loaded по вердиктам
+python -m importer build cost --run <id>                            # стоимость прогона по ролям (трейсинг, Задача 29)
+python -m importer build eval-golden [--limit N] [--save-baseline]  # golden set (стоп-точка ②)
+```
+
+Мониторинг изменений LegalX (webhook → impact-маппер → history/discovery, Задачи 39–41):
+
+```bash
+python -m importer monitor process-changes                    # change_events -> impacts + флаг + ре-ревью + уведомления (cron 15 мин)
+python -m importer monitor discovery                          # 'new'-события без impacts -> кандидаты pipeline.items (cron после process-changes)
+python -m importer monitor build-history --requirement <id>   # ручной бэкафилл requirement_revisions
+```
+
+Живого LLM-ключа в контуре нет: `build map` / `build run` / `monitor process-changes` / `monitor discovery` падают `NotImplementedError` только при реальном обращении к модели (заглушки-раннеры в `importer/cli.py`); проверка проводки — тестами и синтетическим прогоном `scripts/pilot_synthetic.py`.
 
 ### База данных
 
@@ -80,6 +112,24 @@ Dev-тумблер «я подписчик» (`src/app/app-mode.tsx`, localStora
 - `flagged_by_change` — флаг поверх `published`: карточка при ре-ревью остаётся на витрине.
 - Коды ТН ВЭД/ИКПУ — text; применимость через scope (код / класс-префикс / все товары).
 - Уведомления: `change_events → requirement_change_impacts → user_notifications` (per-user).
+
+### Схемы `catalog` и `pipeline` (Build-конвейер, мастер-план №1)
+
+- `catalog` — товарный каталог: `product_types` (HS6 — товары, UNSPSC — услуги), `country_codes` (нацслои: ИКПУ/ТН ВЭД/ОКЭД…), `skus`. Требования привязываются только к типам (`requirement_applicability.product_type_id`) — подробности в `docs/adr/0004-product-catalog.md`.
+- `pipeline` — рабочие таблицы Build-конвейера: `maps` (карта группы, апрув владельцем: draft → approved), `runs`, `items`, `verdicts`, `llm_calls` (трейсинг стоимости). Читают/пишут только модули `importer/build/`; схема экспонирована в PostgREST (Dashboard → API → Exposed schemas).
+- `requirements` несёт жизненный цикл (`effective_from` / `transition_until` / `valid_to` / `repealed_by_ref`) и `jurisdiction` (ISO 3166-1 alpha-2). Статус не хранится — вычисляется `public.lifecycle_status()` через вью `requirements_with_status`: `upcoming` / `in_force` / `transitional` / `expiring` / `repealed`. `change_events` тоже несёт `jurisdiction` (страновой webhook, `docs/adr/0005-ecosystem-contracts.md`).
+
+### Мультистрановость витрины
+
+- Коды стран — `src/data/countries.ts` (`CountryCode = 'UZ' | 'KZ' | 'AE'`, порядок = порядок запуска); названия для UI — только `src/i18n/ru.ts`, не здесь.
+- Карточка товара — табы по странам (`?country=` в URL, `parseCountryParam` фолбэчит на UZ при пустом/невалидном значении); данные не-UZ страны приходят превью-тизером без юридического слоя до проверки юристом.
+- Кнопка «Сравнить страны» на карточке — модалка-матрица категорий по странам (`src/pages/c/product/CCompareMatrix.tsx`), бесплатный тизер без деталей и цитат.
+
+### Календарь дедлайнов (.ics)
+
+- Личный `.ics`-фид: `public.calendar_tokens` (токен → `user_id`) → `GET /api/calendar/<token>.ics` (Vercel serverless function, `api/calendar/[token].ts` + `api/_lib/ics.ts`) читает `user_deadline_events` и строит события `effective_from` / `transition_until` / `valid_to`. `SUPABASE_SERVICE_ROLE_KEY` — только в `process.env` на сервере, файл вне `src/`, в клиентский бандл не попадает.
+- Переходы жизненного цикла и напоминания за 7 дней — `pg_cron` (`20260804100000_lifecycle_cron.sql`).
+- Мок-подписчик (`ix-mock-subscriber`, без входа) видит на витрине уже «подключённый» календарь на фейковом токене — `CSettingsPage.tsx`, вкладка «Уведомления».
 
 ### Прочее
 

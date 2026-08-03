@@ -150,9 +150,21 @@
 4. Проход 2: доизвлечение точных цитат через LegalX.
 Результат на сегодня: 345 требований в проде, 142 через этот конвейер.
 
-## Целевое решение 📋 (тонкий воркер, перезапись старого Bridge)
-Один Python-воркер [RAILWAY], читает `act_units` из LegalX-БД, пишет в InspectorX-БД
-(схема `pipeline`). Пять узлов:
+## Целевое решение 🔨 (тонкий воркер, перезапись старого Bridge) — контур A
+**Факт на ветке `feat/master-plan-1` (мастер-план №1, не в проде):** Build-конвейер
+реализован — Cartographer (двухуровневая карта мир→страна, апрув владельцем:
+draft→approved, стоп-точка) + Orchestrator из 14 узлов-степов (`importer/build/steps_*.py`:
+scope/norm/classify/rule/sanctions/lifecycle/dedup/samples-юрист/cases/translate/load +
+ассемблер) + coverage-отчёт (карта vs факт) + публикация по вердиктам + трейсинг
+стоимости по ролям (`pipeline.llm_calls`, `build cost`). 552 pytest, синтетический
+сквозной пилот на локальном Supabase пройден (published/merge/no_norm). До прод-запуска
+не хватает: живого LLM-ключа (раннер — заглушка `NotImplementedError` в `importer/cli.py`)
+и данных LegalX по КЗ (гейт D2, задача 43 плана).
+
+Ниже — целевая пятиузловая модель релевантности/классификации из брейншторма; в
+реализации её роль частично взял на себя Cartographer (двухуровневая карта), частично —
+степы `steps_classify.py`/`steps_rule.py`. Один Python-воркер [RAILWAY], читает `act_units`
+из LegalX-БД, пишет в InspectorX-БД (схема `pipeline`). Пять узлов:
 
 1. **Релевантность** — каскад из 3 слоёв, от точного к размытому:
    - A: детерминированный join по кодам (строка перечня содержит ТН ВЭД, покрывающий
@@ -170,6 +182,18 @@
 
 Отдельный узел 📋: экстрактор «порядок/админрегламент → шаги + документы + сроки»
 (источник полей «Как исполнить» — админрегламенты, не законы).
+
+## Гейт качества и трейсинг (контур D) 🔨 — ветка `feat/master-plan-1`
+- Golden-набор (`importer/golden/golden_set.yaml`, статус `draft` — ждёт апрува
+  владельца пачкой, стоп-точка ②) + харнесс `build eval-golden`: метрики
+  retrieval_hit / verifier_agreement (3 суб-метрики) / category_accuracy /
+  lifecycle_date_accuracy, near-miss decoy в датасете.
+- Трейсинг: каждый LLM-вызов конвейера пишется в `pipeline.llm_calls` (роль,
+  токены, стоимость); `build cost --run <id>` собирает markdown-отчёт по ролям.
+- Сейчас — только `backend=mock` + эвристический LLM (smoke-проверка проводки
+  golden→агент→метрика, НЕ мера качества). Реальный baseline — на живом LegalX
+  (гейт D1, задача 42 плана, live-клиент есть — `importer/build/legalx_live.py`,
+  приёмка запаркована).
 
 ## Наследие старого Bridge (репо ai-compliance-bridge, заморожен с 03.2026)
 Забираем: промпты, логику валидатора, структуру узлов. Выбрасываем: Neo4j, Temporal,
@@ -242,7 +266,15 @@ AI-генерация → draft → [confidence] → очередь ревью �
   ~M сум», считается из карточек (госпошлины, сроки, документы).
 - PDF-отчёт «Паспорт соответствия» 📋 — выгрузка для банка/партнёра.
 - Telegram-бот 📋 [RAILWAY, aiogram] — уведомления + вопросы + приём фото для Vision.
-- Уведомления: change_events → requirement_change_impacts → user_notifications ✅ (схема).
+- Уведомления: change_events → requirement_change_impacts → user_notifications 🔨 —
+  конвейер целиком реализован в ветке `feat/master-plan-1` (impact-mapper + In-house
+  lawyer classifier + фан-аут `user_notifications`, `importer/monitoring/impact_mapper.py`),
+  не в проде (гейт: живой вебхук LegalX + LLM-ключ classifier'а).
+- Календарь дедлайнов (.ics) 🔨 — расширение cron-перехода lifecycle (Miro, контур C):
+  личная `.ics`-подписка (`public.calendar_tokens` → `api/calendar/[token].ts`) на
+  `effective_from`/`transition_until`/`valid_to`, напоминание за 7 дней. Google
+  Calendar OAuth из брифа не реализован — вместо него `.ics`/webcal (решение
+  контроллера, проще и без OAuth-интеграции). Код в ветке, не в проде.
 - 💡 V2: персонализация по роли, маркетплейс услуг, аналитика портфеля, API/white-label.
 
 ---
@@ -301,6 +333,17 @@ AI-генерация → draft → [confidence] → очередь ревью �
 ---
 
 # СКВОЗНОЙ СЛОЙ ИЗМЕНЕНИЙ (главная нить всей системы, рисовать поперёк всех слоёв)
+
+**Статус (контур C, ветка `feat/master-plan-1`, не в проде):** реализовано целиком.
+Webhook приёма `change_events` от LegalX (country-aware, HMAC-секрет в Vault,
+`ingest_change_event`) → `monitor process-changes` (точное цитатное совпадение →
+флаг + ре-ревью через частичный Build; иначе — эвристический classifier ставит
+кандидата в очередь In-house lawyer, ошибки per-item изолированы) → фан-аут
+`user_notifications` → `monitor discovery` (свежие `new`-события без impacts →
+кандидаты `pipeline.items`) → `requirement_revisions`-история требования. Отдельно —
+cron переходов lifecycle (`pg_cron`, 15 мин) уже шлёт уведомления «вступило в силу»/
+«закончился переходный период» независимо от webhook. Не хватает для прод-включения:
+живого вебхука со стороны LegalX и LLM-ключа classifier'а/In-house lawyer.
 
 ```
 lex.uz: новая редакция акта
