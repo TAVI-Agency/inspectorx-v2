@@ -1,18 +1,23 @@
-"""Фейковый `MonitoringStore` для тестов Impact-маппера (Задача 40) — без сети
-и без БД, только словари в памяти. Тот же паттерн, что и
-`importer/tests/build/stores.py`: `InMemoryMonitoringStore` — полная
-реализация `MonitoringStore` Protocol (`importer/monitoring/impact_mapper.py`),
-плюс несколько вспомогательных методов-фикстур (`add_event`/
-`add_citation`/`add_published_requirement`/`add_applicable_user`/
-`add_pipeline_item`), которых у Protocol нет — только для удобства сборки
-сценариев теста.
+"""Фейковый `MonitoringStore` для тестов Impact-маппера (Задача 40), истории
+изменений и discovery (Задача 41) — без сети и без БД, только словари в
+памяти. Тот же паттерн, что и `importer/tests/build/stores.py`:
+`InMemoryMonitoringStore` — полная реализация `MonitoringStore` Protocol
+(`importer/monitoring/impact_mapper.py`), плюс несколько вспомогательных
+методов-фикстур (`add_event`/`add_citation`/`add_published_requirement`/
+`add_applicable_user`/`add_pipeline_item`/`add_approved_map`), которых у
+Protocol нет — только для удобства сборки сценариев теста.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from importer.monitoring.impact_mapper import ChangeEventRecord, ImpactRecord
+from importer.monitoring.impact_mapper import (
+    ApprovedMapRecord,
+    ChangeEventRecord,
+    HistorySourceEvent,
+    ImpactRecord,
+)
 
 
 @dataclass
@@ -37,6 +42,16 @@ class InMemoryMonitoringStore:
     notifications: list[dict] = field(default_factory=list)
     # requirement_id -> pipeline item id (эмуляция pipeline.items.requirement_id)
     pipeline_items_by_requirement: dict[str, str] = field(default_factory=dict)
+    # append-only список строк requirement_revisions (Задача 41)
+    revisions: list[dict] = field(default_factory=list)
+    # jurisdiction -> [{"id", "group_ref", "jurisdiction", "payload"}, ...] —
+    # approved-карты pipeline.maps (Задача 41, вход discovery)
+    approved_maps: dict[str, list[dict]] = field(default_factory=dict)
+    # append-only список discovery-прогонов: {"id", "map_id"} (эмуляция pipeline.runs)
+    discovery_runs: list[dict] = field(default_factory=list)
+    # append-only список discovery-кандидатов: {"id", "run_id", "map_id",
+    # "expected_item", "category_slug", "status"} (эмуляция pipeline.items)
+    discovery_items: list[dict] = field(default_factory=list)
     _next_id: int = 0
 
     def _gen_id(self, prefix: str) -> str:
@@ -55,6 +70,10 @@ class InMemoryMonitoringStore:
         payload: dict | None = None,
         event_id: str | None = None,
         processed: bool = False,
+        title: str | None = None,
+        was_text: str | None = None,
+        now_text: str | None = None,
+        created_at: str | None = None,
     ) -> str:
         eid = event_id or self._gen_id("event")
         self.events[eid] = {
@@ -67,6 +86,14 @@ class InMemoryMonitoringStore:
             "processed_at": (
                 datetime.now(timezone.utc).isoformat() if processed else None
             ),
+            # Задача 41 (change_history/discovery): в реальной схеме
+            # `title` — NOT NULL (`20260711120000_initial_schema.sql`) —
+            # фолбэк ниже держит тот же инвариант для фикстуры, тестам,
+            # которым конкретный текст безразличен, не нужно его передавать.
+            "title": title if title is not None else f"событие {event_type}",
+            "was_text": was_text,
+            "now_text": now_text,
+            "created_at": created_at or datetime.now(timezone.utc).isoformat(),
         }
         return eid
 
@@ -94,6 +121,20 @@ class InMemoryMonitoringStore:
 
     def add_pipeline_item(self, requirement_id: str, item_id: str) -> None:
         self.pipeline_items_by_requirement[requirement_id] = item_id
+
+    def add_approved_map(
+        self,
+        *,
+        jurisdiction: str,
+        payload: list[dict],
+        group_ref: str = "group",
+        map_id: str | None = None,
+    ) -> str:
+        mid = map_id or self._gen_id("map")
+        self.approved_maps.setdefault(jurisdiction, []).append(
+            {"id": mid, "group_ref": group_ref, "jurisdiction": jurisdiction, "payload": payload}
+        )
+        return mid
 
     # ── MonitoringStore Protocol ───────────────────────────────────────────
 
@@ -203,3 +244,119 @@ class InMemoryMonitoringStore:
 
     def enqueue_rereview(self, requirement_id: str) -> str | None:
         return self.pipeline_items_by_requirement.get(requirement_id)
+
+    # ── Задача 41: история изменений ────────────────────────────────────────
+
+    def list_change_events_for_requirement(
+        self, requirement_id: str
+    ) -> list[HistorySourceEvent]:
+        event_ids = list(
+            dict.fromkeys(
+                imp["change_event_id"]
+                for imp in self.impacts
+                if imp["requirement_id"] == requirement_id
+            )
+        )
+        events = [
+            HistorySourceEvent(
+                change_event_id=eid,
+                event_type=row["event_type"],
+                effective_date=row["effective_date"],
+                created_at=row["created_at"],
+                summary=row["summary"],
+                title=row["title"],
+                was_text=row["was_text"],
+                now_text=row["now_text"],
+            )
+            for eid in event_ids
+            for row in [self.events[eid]]
+        ]
+        return sorted(events, key=lambda e: e.created_at)
+
+    def list_existing_revision_event_ids(self, requirement_id: str) -> set[str]:
+        return {
+            rev["change_event_id"]
+            for rev in self.revisions
+            if rev["requirement_id"] == requirement_id
+        }
+
+    def save_revision(
+        self,
+        requirement_id: str,
+        *,
+        change_event_id: str,
+        change_note: str | None,
+        snapshot: dict,
+        created_at: str,
+    ) -> str:
+        existing_nos = [
+            rev["revision_no"] for rev in self.revisions if rev["requirement_id"] == requirement_id
+        ]
+        revision_no = max(existing_nos, default=0) + 1
+        row = {
+            "id": self._gen_id("revision"),
+            "requirement_id": requirement_id,
+            "revision_no": revision_no,
+            "change_event_id": change_event_id,
+            "change_note": change_note,
+            "snapshot": snapshot,
+            "created_at": created_at,
+        }
+        self.revisions.append(row)
+        return row["id"]
+
+    # ── Задача 41: discovery новых актов ────────────────────────────────────
+
+    def list_new_events_without_impacts(self) -> list[ChangeEventRecord]:
+        impacted_event_ids = {imp["change_event_id"] for imp in self.impacts}
+        return [
+            ChangeEventRecord(
+                id=row["id"],
+                event_type=row["event_type"],
+                jurisdiction=row["jurisdiction"],
+                effective_date=row["effective_date"],
+                summary=row["summary"],
+                payload=row["payload"],
+            )
+            for row in self.events.values()
+            if row["event_type"] == "new"
+            and row["processed_at"] is not None
+            and row["id"] not in impacted_event_ids
+        ]
+
+    def list_approved_maps(self, jurisdiction: str) -> list[ApprovedMapRecord]:
+        return [
+            ApprovedMapRecord(
+                id=row["id"],
+                group_ref=row["group_ref"],
+                jurisdiction=row["jurisdiction"],
+                payload=row["payload"],
+            )
+            for row in self.approved_maps.get(jurisdiction, [])
+        ]
+
+    def find_existing_discovery_item(self, map_id: str, expected_item: str) -> str | None:
+        for item in self.discovery_items:
+            if item["map_id"] == map_id and item["expected_item"] == expected_item:
+                return item["id"]
+        return None
+
+    def create_discovery_run(self, map_id: str) -> str:
+        run_id = self._gen_id("discovery-run")
+        self.discovery_runs.append({"id": run_id, "map_id": map_id})
+        return run_id
+
+    def create_discovery_item(self, run_id: str, expected_item: str, category_slug: str) -> str:
+        run = next(run for run in self.discovery_runs if run["id"] == run_id)
+        item_id = self._gen_id("discovery-item")
+        self.discovery_items.append(
+            {
+                "id": item_id,
+                "run_id": run_id,
+                "map_id": run["map_id"],
+                "expected_item": expected_item,
+                "category_slug": category_slug,
+                "status": "pending",
+            }
+        )
+        return item_id

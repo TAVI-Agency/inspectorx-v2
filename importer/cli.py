@@ -21,6 +21,8 @@ from importer.build.trace import Tracer, cost_report
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
+from importer.monitoring.change_history import build_change_history
+from importer.monitoring.discovery import run_discovery
 from importer.monitoring.impact_mapper import (
     InHouseLawyer,
     SupabaseMonitoringStore,
@@ -60,17 +62,20 @@ def _build_llm_runner(prompt: str, model: str) -> str:
 
 
 def _monitor_llm_runner(prompt: str, model: str) -> str:
-    """Заглушка runner'а для CLI `monitor process-changes` (Задача 40): тот
-    же принцип отсрочки, что и `_build_llm_runner`/`_cartographer_llm_runner`
-    — падает только при РЕАЛЬНОМ вызове модели (Classifier-кандидаты пути
-    (б) или In-house lawyer), не при построении `InHouseLawyer`/вызове
-    `process_changes` на событии, которое разрешилось точным цитатным
-    совпадением (путь а) без единого обращения к LLM. Живое подключение —
-    после получения живого LLM-ключа, как и у остальных LLM-раннеров CLI."""
+    """Заглушка runner'а для CLI `monitor process-changes` (Задача 40) и
+    `monitor discovery` (Задача 41, генерация вопросов `question_writer`):
+    тот же принцип отсрочки, что и `_build_llm_runner`/
+    `_cartographer_llm_runner` — падает только при РЕАЛЬНОМ вызове модели
+    (Classifier-кандидаты пути (б), In-house lawyer или question_writer
+    discovery), не при построении объектов/вызове на событии, которое
+    разрешилось без единого обращения к LLM (точное цитатное совпадение пути
+    (а) у `process_changes` либо пустой список событий у `run_discovery`).
+    Живое подключение — после получения живого LLM-ключа, как и у остальных
+    LLM-раннеров CLI."""
     raise NotImplementedError(
         "Живой LLM-runner для мониторинга ещё не подключён — "
-        "'monitor process-changes' заработает после получения живого "
-        "LLM-ключа (см. importer/build/llm_client.py:RunnerAgentLLM)"
+        "'monitor process-changes'/'monitor discovery' заработают после "
+        "получения живого LLM-ключа (см. importer/build/llm_client.py:RunnerAgentLLM)"
     )
 
 
@@ -149,6 +154,21 @@ def main(argv=None):
     monitor_sub.add_parser(
         "process-changes",
         help="необработанные change_events -> impacts + флаг + ре-ревью + уведомления",
+    )
+    # Задача 41: история изменений требования (ручной прогон/бэкафилл —
+    # `process-changes` уже вызывает build_change_history автоматически для
+    # каждого затронутого требования, см. impact_mapper.py:process_changes).
+    p_monitor_history = monitor_sub.add_parser(
+        "build-history",
+        help="change_events требования -> requirement_revisions (Задача 41)",
+    )
+    p_monitor_history.add_argument("--requirement", dest="requirement_id", required=True)
+    # Задача 41: discovery — 'new'-события без impacts -> кандидаты
+    # pipeline.items (докстринг importer/monitoring/discovery.py). Запускать
+    # cron'ом ПОСЛЕ 'process-changes' в расписании Railway.
+    monitor_sub.add_parser(
+        "discovery",
+        help="свежие 'new'-события без impacts -> кандидаты pipeline.items (Задача 41)",
     )
 
     args = parser.parse_args(argv)
@@ -319,7 +339,28 @@ def main(argv=None):
                 f"impacts_created={report.impacts_created} "
                 f"requirements_flagged={report.requirements_flagged} "
                 f"rereviews_enqueued={report.rereviews_enqueued} "
-                f"notifications_sent={report.notifications_sent}"
+                f"notifications_sent={report.notifications_sent} "
+                f"revisions_recorded={report.revisions_recorded}"
+            )
+        elif args.monitor_cmd == "build-history":
+            monitor_store = SupabaseMonitoringStore(ix)
+            history_report = build_change_history(monitor_store, args.requirement_id)
+            print(
+                f"requirement={history_report.requirement_id} "
+                f"revisions_added={history_report.revisions_added} "
+                f"skipped_existing={history_report.revisions_skipped_existing}"
+            )
+        else:  # discovery
+            monitor_store = SupabaseMonitoringStore(ix)
+            discovery_report = run_discovery(
+                monitor_store, llm=RunnerAgentLLM(_monitor_llm_runner)
+            )
+            print(
+                f"events_seen={discovery_report.events_seen} "
+                f"skipped_no_act_id={discovery_report.events_skipped_no_act_id} "
+                f"items_checked={discovery_report.items_checked} "
+                f"items_already_known={discovery_report.items_already_known} "
+                f"candidates_created={discovery_report.candidates_created}"
             )
         return
 
