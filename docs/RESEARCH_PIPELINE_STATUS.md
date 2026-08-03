@@ -6,6 +6,17 @@
 > Где лежат старые сессии физически — memory/session-recovery-map.md
 > (каталоги `~/.claude/projects/-Users-abduraxmonturdiyev-inspector-x-final*`).
 
+> **02–04.08.2026 (дополнение, мастер-план №1, ветка `feat/master-plan-1`, не в
+> проде):** рядом с этим треком реализован НОВЫЙ Build-конвейер — `importer/build/`
+> (Cartographer + 14-узловой Orchestrator + coverage + publish + golden set +
+> трейсинг стоимости, контур A/D из Miro; статус — `docs/ARCHITECTURE_FLOW.md`,
+> раздел «СЛОЙ 2 → Целевое решение»). Он не заменяет и не трогает legacy-код
+> ниже (`importer/pipeline.py`, `parser.py`, `resolver.py`, `verifier.py`,
+> `research-loop/`) — тот остаётся как есть, работа над ним (фазы 3–4 UZ-first)
+> не продолжалась. Оба конвейера физически живут в одном пакете `importer/`, но
+> не пересекаются кодом; `importer/cli.py` — общая точка входа для обоих
+> (`import-report` — legacy, `build …`/`monitor …` — новый).
+
 ## Таймлайн
 
 | Дата | Что было | Артефакты |
