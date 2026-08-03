@@ -599,6 +599,12 @@ export const ru = {
     questionAnswered: 'Готов ответ на ваш вопрос',
     markAllRead: 'Прочитать все',
     allChanges: 'Все изменения',
+    /** Заголовки lifecycle-уведомлений (Задача 38) по event из payload */
+    lifecycle: {
+      effective_from: 'Требование вступило в силу',
+      transition_until: 'Закончился переходный период',
+      valid_to: 'Требование утратило силу',
+    },
   },
 
   products: {

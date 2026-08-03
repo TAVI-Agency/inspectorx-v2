@@ -360,6 +360,22 @@ export interface LawyerNotification {
   createdAt: string
 }
 
+/** Событие ЖЦ требования — ключ payload->>'event' в user_notifications (Задача 38) */
+export type LifecycleEventKind = 'effective_from' | 'transition_until' | 'valid_to'
+
+/** Lifecycle-уведомление из user_notifications (kind='lifecycle'), заводит cron Задачи 38 */
+export interface LifecycleNotification {
+  id: string
+  event: LifecycleEventKind
+  date: string
+  requirementId: string
+  requirementTitle: string
+  /** Страница товара/услуги с раскрытым требованием */
+  link?: string
+  isRead: boolean
+  createdAt: string
+}
+
 /** Строка очереди «Ждут проверки» */
 export interface ReviewQueueItem {
   requirementId: string
@@ -409,13 +425,15 @@ export interface UserQuestion {
 
 // ── Центр уведомлений (колокольчик) ────────────────────────────────
 
-export type AppNotificationKind = 'change' | 'question' | 'lawyer'
+export type AppNotificationKind = 'change' | 'question' | 'lawyer' | 'lifecycle'
 
 /**
  * Строка центра уведомлений. Источники:
  * change — мок-лента изменений портфеля (прочитанность — ix-read-changes),
  * question — ответ на вопрос пользователя (прочитанность — локальный стор),
- * lawyer — реальные уведомления юриста (lawyer_notifications).
+ * lawyer — реальные уведомления юриста (lawyer_notifications),
+ * lifecycle — переход даты ЖЦ требования, реальные user_notifications
+ *   (kind='lifecycle'), заводит cron Задачи 38.
  */
 export interface AppNotification {
   id: string

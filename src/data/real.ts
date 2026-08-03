@@ -27,6 +27,7 @@ import {
   type LawyerReview,
   type LawyerStats,
   type LeaderboardEntry,
+  type LifecycleNotification,
   type MyReviewItem,
   type RequiredDocument,
   type RequirementCard,
@@ -1424,6 +1425,43 @@ export async function fetchLawyerNotificationsReal(): Promise<LawyerNotification
 export async function markLawyerNotificationReadReal(id: string): Promise<void> {
   const { error } = await supabase
     .from('lawyer_notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
+// ── Lifecycle-уведомления (user_notifications, kind='lifecycle', Задача 38) ─
+
+export async function fetchLifecycleNotificationsReal(): Promise<LifecycleNotification[]> {
+  const { data, error } = await supabase
+    .from('user_notifications')
+    .select('id, requirement_id, payload, is_read, created_at')
+    .eq('kind', 'lifecycle')
+    .order('created_at', { ascending: false })
+    .limit(30)
+  if (error) throw error
+  const rows = data ?? []
+  const reqIds = [...new Set(rows.map((r) => r.requirement_id))]
+  const links = await resolveRequirementLinks(reqIds)
+  return rows.map((r) => {
+    const payload = (r.payload ?? {}) as { event?: string; date?: string; title?: string }
+    const info = links.get(r.requirement_id)
+    return {
+      id: r.id,
+      event: (payload.event as LifecycleNotification['event']) ?? 'effective_from',
+      date: payload.date ?? r.created_at,
+      requirementId: r.requirement_id,
+      requirementTitle: payload.title ?? info?.title ?? 'Требование',
+      link: info?.link,
+      isRead: r.is_read,
+      createdAt: r.created_at,
+    }
+  })
+}
+
+export async function markLifecycleNotificationReadReal(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_notifications')
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw error
