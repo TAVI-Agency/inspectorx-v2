@@ -1,0 +1,419 @@
+"""Impact-маппер + In-house lawyer (мониторинг) + ре-ревью (Задача 40).
+
+Сценарии из брифа/уточнений контроллера:
+
+- событие с точным цитатным совпадением (путь а) → `requirement_change_
+  impacts(status='pending_review')` + `review_flag='flagged_by_change'` +
+  фан-аут `user_notifications(kind='change')` подписанным пользователям;
+- дубль события (тот же `payload->>'act_id'`/`event_type`/`effective_date`,
+  уже обработанный) → скип, `processed_at` проставлен, impacts не создаются;
+- событие без кандидатов (ни цитат, ни опубликованных требований юрисдикции)
+  → помечено обработанным, 0 impacts;
+- нет точного совпадения → Classifier-кандидаты (путь б), ниже порога скора
+  отфильтровываются;
+- цитатное совпадение есть → Classifier вообще не вызывается (путь а
+  приоритетнее, экономия LLM);
+- In-house lawyer `needs_reimplementation=true` → `orchestrator.rerun_item`
+  вызван с `item_id`/`from_step`; `needs=false` → rerun не вызывается;
+- нет `pipeline.items` под требование → rerun не вызывается, даже если
+  юрист сказал `needs=true`;
+- идемпотентность фан-аута: повторный вызов на те же `impact_ids` не плодит
+  вторую строку уведомления.
+
+LLM — только инжектируемый скрипт ответов (тот же паттерн, что и
+`test_steps_samples_lawyer.py`/`test_manager.py`: `ScriptedLLM`, сети нет).
+Стор — `InMemoryMonitoringStore` (`importer/tests/monitoring/stores.py`),
+БД не трогаем.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+
+import pytest
+
+from importer.build.agents import load_models_config
+from importer.build.llm_client import AgentLLMError
+from importer.build.steps import STEP_ORDER
+from importer.monitoring.impact_mapper import (
+    CANDIDATE_SCORE_THRESHOLD,
+    InHouseLawyer,
+    process_changes,
+)
+from importer.tests.monitoring.stores import InMemoryMonitoringStore
+
+# ── тестовые дублёры (тот же паттерн, что test_steps_samples_lawyer.py) ────
+
+
+@dataclass
+class ScriptedLLM:
+    """Мок `AgentLLMClient`: отдаёт ответы по очереди, фиксирует все `(prompt, model)`."""
+
+    responses: list[str]
+    calls: list[tuple[str, str]] = field(default_factory=list)
+
+    def complete(self, prompt: str, model: str) -> str:
+        self.calls.append((prompt, model))
+        if not self.responses:
+            raise AssertionError("ScriptedLLM: запросили ответ сверх скрипта — лишний вызов LLM")
+        return self.responses.pop(0)
+
+
+@dataclass
+class RecordingOrchestrator:
+    """Фейковый `RerunOrchestratorLike`: фиксирует все вызовы `rerun_item`."""
+
+    calls: list[tuple[str, str]] = field(default_factory=list)
+
+    def rerun_item(self, item_id: str, from_step: str) -> None:
+        self.calls.append((item_id, from_step))
+
+
+def matches_response(matches: list[dict]) -> str:
+    return json.dumps({"matches": matches}, ensure_ascii=False)
+
+
+def lawyer_response(needs: bool, from_step: str | None = None, note: str = "обоснование") -> str:
+    return json.dumps(
+        {"needs_reimplementation": needs, "from_step": from_step, "note": note},
+        ensure_ascii=False,
+    )
+
+
+LEGALX_ACT_ID = "11111111-1111-1111-1111-111111111111"
+
+
+# ── путь (а): точное цитатное совпадение ────────────────────────────────
+
+
+def test_exact_citation_match_creates_impact_flags_and_notifies():
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_applicable_user("req-1", "user-1", product_id="prod-1")
+    event_id = store.add_event(
+        event_type="amended",
+        jurisdiction="UZ",
+        effective_date="2027-01-01",
+        summary="изменена ставка акциза",
+        payload={"act_id": LEGALX_ACT_ID, "jurisdiction": "UZ", "change_type": "amended",
+                 "effective_date": "2027-01-01", "fragment_ids": ["f1"]},
+    )
+
+    report = process_changes(store)
+
+    assert report.events_processed == 1
+    assert report.impacts_created == 1
+    assert len(store.impacts) == 1
+    impact = store.impacts[0]
+    assert impact["requirement_id"] == "req-1"
+    assert impact["status"] == "pending_review"
+
+    assert store.requirements["req-1"]["review_flag"] == "flagged_by_change"
+    assert store.requirements["req-1"]["flagged_by_event_id"] == event_id
+    assert store.requirements["req-1"]["flagged_at"] is not None
+
+    assert len(store.notifications) == 1
+    notification = store.notifications[0]
+    assert notification["user_id"] == "user-1"
+    assert notification["impact_id"] == impact["id"]
+    assert notification["kind"] == "change"
+
+    assert store.events[event_id]["processed_at"] is not None
+
+
+def test_citation_match_skips_classifier_entirely():
+    """Путь (а) приоритетнее — Classifier не вызывается, если цитаты уже
+    нашли требование (экономия cheap-вызова LLM)."""
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_published_requirement("UZ", "req-1", "Акцизная марка на сигареты")
+    store.add_event(
+        event_type="amended", jurisdiction="UZ",
+        payload={"act_id": LEGALX_ACT_ID}, effective_date=None,
+    )
+    llm = ScriptedLLM(responses=[])  # пустой скрипт — любой вызов роняет AssertionError
+
+    report = process_changes(store, classifier_llm=llm)
+
+    assert report.impacts_created == 1
+    assert llm.calls == []
+
+
+# ── дедуп повторной доставки webhook'а ──────────────────────────────────
+
+
+def test_duplicate_event_is_skipped_and_marked_processed():
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_event(
+        event_type="amended", effective_date="2027-01-01",
+        payload={"act_id": LEGALX_ACT_ID}, processed=True,
+    )
+    dup_id = store.add_event(
+        event_type="amended", effective_date="2027-01-01",
+        payload={"act_id": LEGALX_ACT_ID},
+    )
+
+    report = process_changes(store)
+
+    assert report.duplicates_skipped == 1
+    assert report.events_processed == 0
+    assert store.impacts == []
+    assert store.events[dup_id]["processed_at"] is not None
+
+
+def test_manual_events_without_act_id_are_never_deduped_against_each_other():
+    """Событие без `act_id` (ручное, не из LegalX) не подлежит дедупу — два
+    независимых ручных события в одну дату не должны схлопываться."""
+    store = InMemoryMonitoringStore()
+    store.add_event(
+        event_type="amended", effective_date="2027-01-01", payload={}, processed=True,
+    )
+    second_id = store.add_event(
+        event_type="amended", effective_date="2027-01-01", payload={},
+    )
+
+    report = process_changes(store)
+
+    assert report.duplicates_skipped == 0
+    assert store.events[second_id]["processed_at"] is not None
+    assert report.events_no_candidates == 1  # обработано, кандидатов нет
+
+
+# ── событие без кандидатов ──────────────────────────────────────────────
+
+
+def test_event_without_candidates_is_processed_with_zero_impacts():
+    store = InMemoryMonitoringStore()
+    event_id = store.add_event(
+        event_type="new", jurisdiction="UZ", payload={"act_id": "unknown-act"},
+    )
+
+    report = process_changes(store)
+
+    assert report.events_processed == 0
+    assert report.events_no_candidates == 1
+    assert store.impacts == []
+    assert store.events[event_id]["processed_at"] is not None
+
+
+# ── путь (б): Classifier-кандидаты ──────────────────────────────────────
+
+
+def test_classifier_candidates_used_when_no_citation_match():
+    store = InMemoryMonitoringStore()
+    store.add_published_requirement("UZ", "req-1", "Маркировка сигарет")
+    store.add_published_requirement("UZ", "req-2", "Молоко пастеризованное")
+    store.add_event(
+        event_type="amended", jurisdiction="UZ",
+        summary="изменены правила маркировки табачных изделий",
+        payload={"act_id": "act-without-local-mapping"},
+    )
+    llm = ScriptedLLM(responses=[matches_response([{"requirement_id": "req-1", "score": 0.9}])])
+
+    report = process_changes(store, classifier_llm=llm)
+
+    assert report.impacts_created == 1
+    assert store.impacts[0]["requirement_id"] == "req-1"
+    assert len(llm.calls) == 1
+    config = load_models_config()
+    assert llm.calls[0][1] == config.tiers["cheap"]
+
+
+def test_classifier_candidates_below_threshold_are_filtered():
+    store = InMemoryMonitoringStore()
+    store.add_published_requirement("UZ", "req-1", "Маркировка сигарет")
+    store.add_published_requirement("UZ", "req-2", "Молоко пастеризованное")
+    store.add_event(event_type="amended", jurisdiction="UZ", payload={})
+    below = CANDIDATE_SCORE_THRESHOLD - 0.1
+    llm = ScriptedLLM(responses=[matches_response([
+        {"requirement_id": "req-1", "score": 0.9},
+        {"requirement_id": "req-2", "score": below},
+    ])])
+
+    report = process_changes(store, classifier_llm=llm)
+
+    assert report.impacts_created == 1
+    assert store.impacts[0]["requirement_id"] == "req-1"
+
+
+def test_no_published_requirements_in_jurisdiction_skips_classifier_call():
+    store = InMemoryMonitoringStore()
+    store.add_event(event_type="amended", jurisdiction="UZ", payload={})
+    llm = ScriptedLLM(responses=[])
+
+    report = process_changes(store, classifier_llm=llm)
+
+    assert report.events_no_candidates == 1
+    assert llm.calls == []
+
+
+def test_classifier_garbage_response_yields_zero_candidates_not_a_crash():
+    store = InMemoryMonitoringStore()
+    store.add_published_requirement("UZ", "req-1", "Маркировка сигарет")
+    store.add_event(event_type="amended", jurisdiction="UZ", payload={})
+    llm = ScriptedLLM(responses=["не json вообще"])
+
+    report = process_changes(store, classifier_llm=llm)
+
+    assert report.events_no_candidates == 1
+    assert store.impacts == []
+
+
+# ── In-house lawyer + ре-ревью ───────────────────────────────────────────
+
+
+def test_lawyer_needs_reimplementation_triggers_rerun_item():
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_published_requirement("UZ", "req-1", "Акцизная марка на сигареты")
+    store.add_pipeline_item("req-1", "item-1")
+    store.add_event(event_type="amended", jurisdiction="UZ", payload={"act_id": LEGALX_ACT_ID})
+    lawyer = InHouseLawyer(ScriptedLLM(responses=[lawyer_response(True, "norm")]))
+    orchestrator = RecordingOrchestrator()
+
+    report = process_changes(store, lawyer=lawyer, orchestrator=orchestrator)
+
+    assert orchestrator.calls == [("item-1", "norm")]
+    assert report.rereviews_enqueued == 1
+    # флаг всё равно стоит независимо от решения юриста
+    assert store.requirements["req-1"]["review_flag"] == "flagged_by_change"
+
+
+def test_lawyer_no_reimplementation_does_not_call_rerun_item():
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_published_requirement("UZ", "req-1", "Акцизная марка на сигареты")
+    store.add_pipeline_item("req-1", "item-1")
+    store.add_event(event_type="amended", jurisdiction="UZ", payload={"act_id": LEGALX_ACT_ID})
+    lawyer = InHouseLawyer(ScriptedLLM(responses=[lawyer_response(False, None)]))
+    orchestrator = RecordingOrchestrator()
+
+    report = process_changes(store, lawyer=lawyer, orchestrator=orchestrator)
+
+    assert orchestrator.calls == []
+    assert report.rereviews_enqueued == 0
+    assert store.requirements["req-1"]["review_flag"] == "flagged_by_change"
+
+
+def test_rerun_skipped_when_no_pipeline_item_for_requirement():
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_published_requirement("UZ", "req-1", "Акцизная марка на сигареты")
+    # НЕ добавляем pipeline item — требование пришло из легаси import-report
+    store.add_event(event_type="amended", jurisdiction="UZ", payload={"act_id": LEGALX_ACT_ID})
+    lawyer = InHouseLawyer(ScriptedLLM(responses=[lawyer_response(True, "norm")]))
+    orchestrator = RecordingOrchestrator()
+
+    report = process_changes(store, lawyer=lawyer, orchestrator=orchestrator)
+
+    assert orchestrator.calls == []
+    assert report.rereviews_enqueued == 0
+
+
+def test_rerun_skipped_without_orchestrator_even_if_lawyer_says_needs_true():
+    store = InMemoryMonitoringStore()
+    store.add_citation(LEGALX_ACT_ID, "req-1")
+    store.add_published_requirement("UZ", "req-1", "Акцизная марка на сигареты")
+    store.add_pipeline_item("req-1", "item-1")
+    store.add_event(event_type="amended", jurisdiction="UZ", payload={"act_id": LEGALX_ACT_ID})
+    lawyer = InHouseLawyer(ScriptedLLM(responses=[lawyer_response(True, "norm")]))
+
+    report = process_changes(store, lawyer=lawyer, orchestrator=None)
+
+    assert report.rereviews_enqueued == 0
+
+
+# ── идемпотентность фан-аута ─────────────────────────────────────────────
+
+
+def test_fanout_notifications_is_idempotent():
+    store = InMemoryMonitoringStore()
+    store.add_applicable_user("req-1", "user-1", product_id="prod-1")
+    impacts = store.save_impacts("event-1", ["req-1"])
+    impact_ids = [imp.id for imp in impacts]
+
+    first = store.fanout_notifications(impact_ids)
+    second = store.fanout_notifications(impact_ids)
+
+    assert first == 1
+    assert second == 0
+    assert len(store.notifications) == 1
+
+
+def test_save_impacts_is_idempotent_for_same_event_and_requirement():
+    store = InMemoryMonitoringStore()
+    first = store.save_impacts("event-1", ["req-1"])
+    second = store.save_impacts("event-1", ["req-1"])
+
+    assert first[0].id == second[0].id
+    assert len(store.impacts) == 1
+
+
+# ── InHouseLawyer напрямую (валидация ответа, ретрай) ────────────────────
+
+
+def test_in_house_lawyer_happy_path_needs_true():
+    lawyer = InHouseLawyer(ScriptedLLM(responses=[lawyer_response(True, "sanctions", "нужен пересчёт санкций")]))
+
+    decision = lawyer.decide(
+        _event(summary="увеличен штраф"), "Требование о маркировке",
+    )
+
+    assert decision.needs_reimplementation is True
+    assert decision.from_step == "sanctions"
+    assert decision.note == "нужен пересчёт санкций"
+
+
+def test_in_house_lawyer_happy_path_needs_false_from_step_must_be_null():
+    lawyer = InHouseLawyer(ScriptedLLM(responses=[lawyer_response(False, None, "чисто техническая правка")]))
+
+    decision = lawyer.decide(_event(), "Требование о маркировке")
+
+    assert decision.needs_reimplementation is False
+    assert decision.from_step is None
+
+
+def test_in_house_lawyer_uses_expensive_tier_model():
+    llm = ScriptedLLM(responses=[lawyer_response(False, None)])
+    lawyer = InHouseLawyer(llm)
+
+    lawyer.decide(_event(), "Требование")
+
+    config = load_models_config()
+    assert llm.calls[0][1] == config.tiers["expensive"]
+
+
+def test_in_house_lawyer_retries_once_on_invalid_response_then_succeeds():
+    # первый ответ невалиден (from_step отсутствует, хотя needs=true)
+    invalid = json.dumps({"needs_reimplementation": True, "from_step": None, "note": "x"})
+    llm = ScriptedLLM(responses=[invalid, lawyer_response(True, "norm")])
+    lawyer = InHouseLawyer(llm)
+
+    decision = lawyer.decide(_event(), "Требование")
+
+    assert decision.needs_reimplementation is True
+    assert decision.from_step == "norm"
+    assert len(llm.calls) == 2
+
+
+def test_in_house_lawyer_raises_after_two_invalid_responses():
+    invalid = json.dumps({"needs_reimplementation": True, "from_step": "not-a-real-step", "note": "x"})
+    llm = ScriptedLLM(responses=[invalid, invalid])
+    lawyer = InHouseLawyer(llm)
+
+    with pytest.raises(AgentLLMError):
+        lawyer.decide(_event(), "Требование")
+
+
+def test_in_house_lawyer_rejects_from_step_outside_step_order():
+    assert "not-a-real-step" not in STEP_ORDER  # sanity check фикстуры выше
+
+
+def _event(summary: str | None = "изменение нормы", jurisdiction: str = "UZ"):
+    from importer.monitoring.impact_mapper import ChangeEventRecord
+
+    return ChangeEventRecord(
+        id="event-1", event_type="amended", jurisdiction=jurisdiction,
+        effective_date="2027-01-01", summary=summary, payload={"act_id": LEGALX_ACT_ID},
+    )
