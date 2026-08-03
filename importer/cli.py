@@ -16,10 +16,16 @@ from importer.build.orchestrator import (
     SupabaseBuildStore,
 )
 from importer.build.registry import build_step_registry
+from importer.build.steps import load_default_steps
 from importer.build.trace import Tracer, cost_report
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
+from importer.monitoring.impact_mapper import (
+    InHouseLawyer,
+    SupabaseMonitoringStore,
+    process_changes,
+)
 from importer.pipeline import run_import
 
 
@@ -50,6 +56,21 @@ def _build_llm_runner(prompt: str, model: str) -> str:
         "Живой LLM-runner для Build-конвейера ещё не подключён — 'build run' "
         "заработает после получения живого LLM-ключа (см. "
         "importer/build/llm_client.py:RunnerAgentLLM)"
+    )
+
+
+def _monitor_llm_runner(prompt: str, model: str) -> str:
+    """Заглушка runner'а для CLI `monitor process-changes` (Задача 40): тот
+    же принцип отсрочки, что и `_build_llm_runner`/`_cartographer_llm_runner`
+    — падает только при РЕАЛЬНОМ вызове модели (Classifier-кандидаты пути
+    (б) или In-house lawyer), не при построении `InHouseLawyer`/вызове
+    `process_changes` на событии, которое разрешилось точным цитатным
+    совпадением (путь а) без единого обращения к LLM. Живое подключение —
+    после получения живого LLM-ключа, как и у остальных LLM-раннеров CLI."""
+    raise NotImplementedError(
+        "Живой LLM-runner для мониторинга ещё не подключён — "
+        "'monitor process-changes' заработает после получения живого "
+        "LLM-ключа (см. importer/build/llm_client.py:RunnerAgentLLM)"
     )
 
 
@@ -116,6 +137,18 @@ def main(argv=None):
         "--save-baseline", action="store_true",
         help="записать текущий прогон в importer/golden/baseline.json (следующий прогон "
              "покажет дельту против него)",
+    )
+
+    # Задача 40: мониторинг изменений (Impact-маппер + In-house lawyer +
+    # ре-ревью). Продовый запуск — cron-джоб Railway каждые 15 минут
+    # (`python -m importer monitor process-changes`, без публичного
+    # endpoint — YAGNI, докстринг `importer/monitoring/impact_mapper.py`);
+    # сама настройка джоба — вне репозитория.
+    p_monitor = sub.add_parser("monitor", help="мониторинг изменений LegalX (Задача 40)")
+    monitor_sub = p_monitor.add_subparsers(dest="monitor_cmd", required=True)
+    monitor_sub.add_parser(
+        "process-changes",
+        help="необработанные change_events -> impacts + флаг + ре-ревью + уведомления",
     )
 
     args = parser.parse_args(argv)
@@ -250,6 +283,44 @@ def main(argv=None):
                     encoding="utf-8",
                 )
                 print(f"baseline сохранён -> {baseline_path}")
+        return
+
+    if args.cmd == "monitor":
+        if args.monitor_cmd == "process-changes":
+            monitor_store = SupabaseMonitoringStore(ix)
+            # Оркестратор ре-ревью — БЕЗ явного steps= (глобальный реестр
+            # `get_step`, наполняется `load_default_steps()` ниже): в
+            # отличие от `build run`, у `rerun_item` нет одной карты
+            # (group_ref/jurisdiction), из которой `build_step_registry`
+            # мог бы собрать per-run реестр — затронутые требования этого
+            # прогона мониторинга могут быть из РАЗНЫХ групп/юрисдикций.
+            # Глобальный реестр использует заглушки `_STUB_GROUP_REF=""`/
+            # `DEFAULT_JURISDICTION='UZ'` (см. докстринг `registry.py`) —
+            # корректно для UZ-прогонов по группе, случайно совпавшей с
+            # заглушкой; полная привязка per-item реестра к его исходной
+            # карте — известный технический долг, тот же, что уже
+            # зафиксирован в `registry.py`, не новый для этой задачи.
+            load_default_steps()
+            build_store = SupabaseBuildStore(ix)
+            orchestrator = Orchestrator(build_store)
+            lawyer = InHouseLawyer(RunnerAgentLLM(_monitor_llm_runner))
+            report = process_changes(
+                monitor_store,
+                classifier_llm=RunnerAgentLLM(_monitor_llm_runner),
+                lawyer=lawyer,
+                orchestrator=orchestrator,
+            )
+            print(
+                f"events_seen={report.events_seen} processed={report.events_processed} "
+                f"duplicates_skipped={report.duplicates_skipped} "
+                f"no_candidates={report.events_no_candidates}"
+            )
+            print(
+                f"impacts_created={report.impacts_created} "
+                f"requirements_flagged={report.requirements_flagged} "
+                f"rereviews_enqueued={report.rereviews_enqueued} "
+                f"notifications_sent={report.notifications_sent}"
+            )
         return
 
     if args.rev_cmd == "list":
