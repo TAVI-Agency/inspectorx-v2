@@ -33,6 +33,9 @@ import { COUNTRIES, type CountryCode, type LifecycleStatus } from './countries'
 import { categoryChipOf } from './taxonomy'
 import { formatFine, type Fine } from '@/i18n/format'
 import {
+  createCalendarTokenReal,
+  deleteCalendarTokenReal,
+  fetchCalendarTokenReal,
   fetchCardReal,
   fetchComparisonReal,
   fetchLawyerReviewsReal,
@@ -47,6 +50,7 @@ import {
   searchServicesReal,
   setReviewVoteReal,
   worseLifecycle,
+  type CalendarTokenRow,
 } from './real'
 import {
   CIGARETTES_PRODUCT_ID,
@@ -677,4 +681,23 @@ export function buildPortfolio(productIds: string[], feed: ChangeCard[]): Portfo
       statusLine: nearest?.effectiveDate ?? '',
     }
   })
+}
+
+// ── Календарь дедлайнов (Блок 5) ────────────────────────────────────
+// Чистый проброс к real.ts: данные всегда настоящие (своя строка юзера),
+// мок-оверлея нет — демо-состояние без сессии рисует сам компонент
+// (см. CSettingsPage), в слой данных не заходя.
+
+export type { CalendarTokenRow }
+
+export async function fetchCalendarToken(): Promise<CalendarTokenRow | null> {
+  return fetchCalendarTokenReal()
+}
+
+export async function createCalendarToken(userId: string): Promise<CalendarTokenRow> {
+  return createCalendarTokenReal(userId)
+}
+
+export async function deleteCalendarToken(userId: string): Promise<void> {
+  return deleteCalendarTokenReal(userId)
 }
