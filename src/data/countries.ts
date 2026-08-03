@@ -9,6 +9,13 @@ export type CountryCode = 'UZ' | 'KZ' | 'AE'
 
 export const COUNTRIES: readonly CountryCode[] = ['UZ', 'KZ', 'AE'] as const
 
+/** Разбор ?country= из URL (Задача 31): нет значения или невалидный код → УЗ. */
+export function parseCountryParam(value: string | null): CountryCode {
+  return value != null && (COUNTRIES as readonly string[]).includes(value)
+    ? (value as CountryCode)
+    : 'UZ'
+}
+
 /**
  * Вычисляемый статус требования (public.lifecycle_status(), view
  * requirements_with_status) — НЕ хранится текстом, считается на лету из

@@ -73,6 +73,13 @@ export const ru = {
     suggestOfficial: 'Официальное название кода',
   },
 
+  /** Человекочитаемые названия стран (коды — CountryCode в src/data/countries.ts) */
+  countries: {
+    UZ: 'Узбекистан',
+    KZ: 'Казахстан',
+    AE: 'ОАЭ',
+  },
+
   product: {
     checkedStamp: (date: string) => `Проверено ${date}`,
     complexity: (n: number) => `Сложность ${n}/10`,
@@ -98,6 +105,17 @@ export const ru = {
       'Оставьте заявку — наполним и сообщим. Это бесплатно.',
     notifyWhenReady: 'Уведомить, когда готово',
     notifyDone: 'Заявка принята. Сообщим, когда наполним.',
+    // Табы стран на карточке товара (Задача 31, Блок 4)
+    countryTabsLabel: 'Страна',
+    countryTabLabel: (name: string, published: number, state: 'live' | 'preview' | 'none') =>
+      state === 'none' ? name : `${name} · ${published}${state === 'preview' ? ' (превью)' : ''}`,
+    countryPreview: 'Предварительные данные — проверка юристом впереди.',
+    countryNoneTitle: 'Для этой страны требования ещё не наполнены',
+    countryNoneText:
+      'Сообщите — мы приоритизируем наполнение и напишем, когда будет готово.',
+    countryNoneCta: 'Сообщить, когда появится',
+    countryNoneDone: 'Заявка принята. Сообщим, когда наполним.',
+    countryNoneError: 'Не получилось. Попробуйте ещё раз.',
   },
 
   service: {
