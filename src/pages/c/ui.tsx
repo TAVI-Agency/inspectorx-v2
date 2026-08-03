@@ -13,9 +13,11 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { Deontic, Operation } from '@/data/types'
+import type { LifecycleStatus } from '@/data/countries'
 import type { RequirementCategory } from '@/data/taxonomy'
 import { CATEGORY_LABEL } from '@/data/taxonomy'
 import { ru } from '@/i18n/ru'
+import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /**
@@ -178,6 +180,50 @@ export function CDeonticChip({ deontic }: { deontic: Deontic }) {
       )}
     >
       {ru.requirement.deontic[deontic]}
+    </span>
+  )
+}
+
+/**
+ * Бейдж вычисляемого lifecycle-статуса (requirements_with_status.lifecycle):
+ * отдельная ось от «что изменилось» (RequirementStatus) — тут «на какой
+ * стадии действия сейчас норма». in_force — молчаливая норма, бейджа нет.
+ */
+export function CLifecycleBadge({
+  lifecycle,
+  effectiveFrom,
+  transitionUntil,
+  validTo,
+  className,
+}: {
+  lifecycle: LifecycleStatus
+  effectiveFrom?: string
+  transitionUntil?: string
+  validTo?: string
+  className?: string
+}) {
+  if (lifecycle === 'in_force') return null
+  const label =
+    lifecycle === 'upcoming'
+      ? ru.requirement.lifecycle.upcoming(formatDate(effectiveFrom))
+      : lifecycle === 'transitional'
+        ? ru.requirement.lifecycle.transitional(formatDate(transitionUntil))
+        : lifecycle === 'expiring'
+          ? ru.requirement.lifecycle.expiring(formatDate(validTo))
+          : ru.requirement.lifecycle.repealed
+  return (
+    <span
+      className={cn(
+        'inline-flex h-[19px] shrink-0 items-center rounded-[6px] px-1.5 text-[11px] font-medium',
+        lifecycle === 'upcoming' && 'bg-primary/10 text-primary',
+        lifecycle === 'transitional' &&
+          'bg-brass/10 text-brass ring-1 ring-brass/25 ring-inset',
+        lifecycle === 'expiring' && 'bg-sanction/10 text-sanction ring-1 ring-sanction/25 ring-inset',
+        lifecycle === 'repealed' && 'bg-secondary text-muted-foreground',
+        className,
+      )}
+    >
+      {label}
     </span>
   )
 }

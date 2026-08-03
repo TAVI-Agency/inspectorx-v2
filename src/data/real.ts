@@ -527,7 +527,7 @@ export interface RequirementListReal {
   verifiedAt?: string
 }
 
-const REQUIREMENT_LIST_SELECT = `id, jurisdiction, lifecycle, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at, requirement_category, nature,
+const REQUIREMENT_LIST_SELECT = `id, jurisdiction, lifecycle, effective_from, transition_until, valid_to, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at, requirement_category, nature,
        lifecycle_stages(id, name_ru, sort_order),
        authorities(name_ru),
        requirement_contents(lang, title, sanction_summary),
@@ -543,6 +543,9 @@ interface RawListRow {
   id: string | null
   jurisdiction: string | null
   lifecycle: string | null
+  effective_from: string | null
+  transition_until: string | null
+  valid_to: string | null
   deontic: RequirementRow['deontic'] | null
   operation: RequirementRow['operation'] | null
   transport_type: RequirementRow['transport'] | null
@@ -643,6 +646,9 @@ function listFromData(data: RawListRow[]): RequirementListReal {
       title,
       jurisdiction: toCountryCode(r.jurisdiction),
       lifecycle: toLifecycle(r.lifecycle),
+      effectiveFrom: r.effective_from ?? undefined,
+      transitionUntil: r.transition_until ?? undefined,
+      validTo: r.valid_to ?? undefined,
       deontic: r.deontic,
       roles: r.addressee_roles,
       operation: r.operation,
@@ -705,7 +711,7 @@ export async function fetchCardReal(
       .maybeSingle(),
     supabase
       .from('requirement_details')
-      .select('lang, description, how_to_comply, documents, sanctions')
+      .select('lang, description, how_to_comply, documents, sanctions, status_note')
       .eq('requirement_id', requirementId),
     supabase
       .from('requirement_citations')
@@ -745,6 +751,7 @@ export async function fetchCardReal(
       steps: parseSteps(d.how_to_comply),
       documents: parseDocuments(d.documents),
       sanctions: parseSanctions(d.sanctions),
+      statusNote: d.status_note ?? undefined,
     })
   } else if (isSubscriber) {
     detail = ok({ description: undefined, steps: [], documents: [], sanctions: [] })

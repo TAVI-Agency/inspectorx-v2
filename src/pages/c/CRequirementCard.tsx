@@ -15,7 +15,7 @@ import type { Citation, Gated, HistoryEntry, RequirementRow } from '@/data/types
 import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { AskQuestionDialog, useAskDialogState } from '@/components/AskQuestionDialog'
-import { CEyebrow, CPaywallGate, CPaywallPanel, CTrustStamp } from './ui'
+import { CEyebrow, CLifecycleBadge, CPaywallGate, CPaywallPanel, CTrustStamp } from './ui'
 import { CLawyerReviewsSection } from './CLawyerReviews'
 
 /** Шаги переноса v1 приходят с префиксом «(Пункт 35 …)\n» — выносим в реквизит */
@@ -58,10 +58,25 @@ export function CRequirementCard({
     <div className="border-t border-border bg-background/40 px-4 py-5 sm:px-6">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
-          <CTrustStamp
-            trust={row.trustLabel}
-            date={row.trustDate ? formatDate(row.trustDate) : undefined}
-          />
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CTrustStamp
+                trust={row.trustLabel}
+                date={row.trustDate ? formatDate(row.trustDate) : undefined}
+              />
+              <CLifecycleBadge
+                lifecycle={row.lifecycle}
+                effectiveFrom={row.effectiveFrom}
+                transitionUntil={row.transitionUntil}
+                validTo={row.validTo}
+              />
+            </div>
+            {detail?.statusNote && (
+              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+                {detail.statusNote}
+              </p>
+            )}
+          </div>
 
           {locked && <CPaywallGate />}
 

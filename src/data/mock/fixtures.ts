@@ -33,6 +33,11 @@ function isoDaysFromNow(days: number): string {
   return d.toISOString()
 }
 
+/** Дата без времени (requirements.effective_from/transition_until/valid_to — колонки типа date) */
+function dateOnlyDaysFromNow(days: number): string {
+  return isoDaysFromNow(days).slice(0, 10)
+}
+
 // ── Паспорта ───────────────────────────────────────────────────────
 
 /** Мок-дополнения к реальному паспорту молока (ИКПУ в схеме нет — см. QUESTIONS №1) */
@@ -131,16 +136,19 @@ function defineReq(
     | 'unread'
     | 'underReview'
     | 'status'
-  > & { status?: RequirementRow['status'] },
+  > & { status?: RequirementRow['status']; lifecycle?: RequirementRow['lifecycle'] },
   rest: Omit<MockReq, 'row'>,
 ): MockReq {
   const req: MockReq = {
     row: {
       ...row,
       id,
-      // Мок-товары (молоко/парацетамол) живут только в УЗ, действуют сейчас
+      // Мок-товары (молоко/парацетамол) живут только в УЗ
       jurisdiction: 'UZ',
-      lifecycle: 'in_force',
+      // По умолчанию действует сейчас; конкретным строкам ниже можно задать
+      // другую стадию ЖЦ демо-датами (effectiveFrom/transitionUntil/validTo) —
+      // это отдельная ось от status (та отвечает за ленту изменений).
+      lifecycle: row.lifecycle ?? 'in_force',
       status: row.status ?? { kind: 'active' },
       unread: false,
       underReview: false,
@@ -176,6 +184,9 @@ defineReq(
     sanctionSummary: 'штраф до 50 БРВ',
     trustLabel: 'lawyer_verified',
     trustDate: isoDaysFromNow(-6),
+    // Демо lifecycle-бейджа (Задача 34): переходный период по новому регламенту сертификации
+    lifecycle: 'transitional',
+    transitionUntil: dateOnlyDaysFromNow(30),
   },
   {
     authority: { name: 'Агентство «Узстандарт»', phone: '+998 71 202-02-02', website: 'https://standart.uz' },
@@ -196,6 +207,8 @@ defineReq(
         { text: 'Штраф до 50 БРВ за реализацию без сертификата', article: 'ст. 204 КоАО' },
         { text: 'Запрет реализации партии до устранения нарушения' },
       ],
+      statusNote:
+        'До конца переходного периода принимаются сертификаты по старой и новой схеме — успейте переоформить партии на новую схему заранее.',
     },
     citations: [
       {
@@ -276,6 +289,9 @@ defineReq(
     sanctionSummary: 'штраф до 100 БРВ',
     trustLabel: 'lawyer_verified',
     trustDate: isoDaysFromNow(-6),
+    // Демо lifecycle-бейджа (Задача 34): норма отменена, карточка остаётся видимой (история)
+    lifecycle: 'repealed',
+    validTo: dateOnlyDaysFromNow(-14),
   },
   {
     authority: { name: 'Комитет санитарно-эпидемиологического благополучия', phone: '+998 71 241-04-50' },
@@ -296,6 +312,8 @@ defineReq(
         { text: 'Штраф до 100 БРВ за выпуск продукции без заключения', article: 'ст. 55 КоАО' },
         { text: 'Изъятие партии из оборота' },
       ],
+      statusNote:
+        'Отдельное СЭЗ отменено — микробиологические показатели теперь проверяются в рамках сертификации соответствия (см. этап «Оценка соответствия»).',
     },
     citations: [
       {
@@ -457,6 +475,9 @@ defineReq(
     sanctionSummary: 'санкция не установлена — льгота',
     trustLabel: 'lawyer_verified',
     trustDate: isoDaysFromNow(-12),
+    // Демо lifecycle-бейджа (Задача 34): льгота ещё не вступила в силу
+    lifecycle: 'upcoming',
+    effectiveFrom: dateOnlyDaysFromNow(60),
   },
   {
     detail: {
