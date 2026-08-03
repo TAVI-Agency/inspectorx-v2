@@ -64,6 +64,21 @@ export type CountryCoverage = {
   state: 'live' | 'preview' | 'none'
 }
 
+/**
+ * Матрица сравнения стран по категориям требований (Задача 32) — бесплатный
+ * тизер над карточкой товара: только requirements-уровень (category_slug +
+ * lifecycle), без деталей/цитат за пейволлом (решение грил-сессии №4).
+ * Строки — категории из requirement_categories, колонки — страны.
+ */
+export type ComparisonMatrix = {
+  categories: { slug: string; name: string; sortOrder: number }[] // из requirement_categories
+  countries: CountryCode[]
+  cells: Record<
+    string /*slug*/,
+    Record<CountryCode, { state: 'present' | 'absent' | 'preview'; worstLifecycle?: LifecycleStatus }>
+  >
+}
+
 // ── Паспорт товара ─────────────────────────────────────────────────
 
 export interface ProductPassport {

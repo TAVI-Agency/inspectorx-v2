@@ -12,6 +12,7 @@ import {
   locked,
   ok,
   type ChangeCard,
+  type ComparisonMatrix,
   type CountryCoverage,
   type Gated,
   type LawyerReview,
@@ -28,9 +29,11 @@ import {
   type TelemetryStats,
   type WeekSummary,
 } from './types'
-import { COUNTRIES, type CountryCode } from './countries'
+import { COUNTRIES, type CountryCode, type LifecycleStatus } from './countries'
+import { categoryChipOf } from './taxonomy'
 import {
   fetchCardReal,
+  fetchComparisonReal,
   fetchLawyerReviewsReal,
   fetchPassportReal,
   fetchRequirementsReal,
@@ -42,6 +45,7 @@ import {
   searchProductsReal,
   searchServicesReal,
   setReviewVoteReal,
+  worseLifecycle,
 } from './real'
 import {
   CIGARETTES_PRODUCT_ID,
@@ -348,6 +352,55 @@ export async function fetchProductBundle(
     stages: stagesFromRows(rows),
     metrics: metricsFor(productId, rows, ctx),
   }
+}
+
+// ── Матрица сравнения стран (Задача 32, Блок 4) ────────────────────
+
+/** Категория + lifecycle из произвольного набора строк (мок или KZ-превью) — тем же правилом «худшести», что и real.ts. */
+function aggregateRowsByCategory(
+  rows: RequirementRow[],
+): Record<string, { count: number; worstLifecycle: LifecycleStatus }> {
+  const out: Record<string, { count: number; worstLifecycle: LifecycleStatus }> = {}
+  for (const row of rows) {
+    const slug = categoryChipOf(row)
+    if (!slug) continue
+    const existing = out[slug]
+    if (existing) {
+      existing.count += 1
+      existing.worstLifecycle = worseLifecycle(existing.worstLifecycle, row.lifecycle)
+    } else {
+      out[slug] = { count: 1, worstLifecycle: row.lifecycle }
+    }
+  }
+  return out
+}
+
+/**
+ * Матрица сравнения стран — бесплатный тизер: только category_slug +
+ * lifecycle, без деталей/цитат за пейволлом (решение грила №4). УЗ — из БД
+ * (fetchComparisonReal) для живых товаров; для мок-товаров (молоко/парацетамол,
+ * для них в базе требований ещё нет) — из их фикстурных rows. КЗ — превью-
+ * фикстуры kz-fixtures (сейчас есть только по сигаретам/стикам). ОАЭ —
+ * раскатки ещё нет, все ячейки 'absent'.
+ */
+export async function fetchComparisonMatrix(productId: string): Promise<ComparisonMatrix> {
+  const { categories, uz: dbUz } = await fetchComparisonReal(productId)
+  const isFixtureOnly = productId === MILK_PRODUCT_ID || productId === PARACETAMOL_PRODUCT_ID
+  const uz = isFixtureOnly ? aggregateRowsByCategory(mockRowsFor(productId)) : dbUz
+  const kz = aggregateRowsByCategory(kzRowsFor(productId))
+
+  const cells: ComparisonMatrix['cells'] = {}
+  for (const cat of categories) {
+    const uzAgg = uz[cat.slug]
+    const kzAgg = kz[cat.slug]
+    cells[cat.slug] = {
+      UZ: uzAgg ? { state: 'present', worstLifecycle: uzAgg.worstLifecycle } : { state: 'absent' },
+      KZ: kzAgg ? { state: 'preview', worstLifecycle: kzAgg.worstLifecycle } : { state: 'absent' },
+      AE: { state: 'absent' },
+    }
+  }
+
+  return { categories, countries: [...COUNTRIES], cells }
 }
 
 // ── Страница услуги ────────────────────────────────────────────────

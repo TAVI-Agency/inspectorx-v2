@@ -117,6 +117,23 @@ export const ru = {
     countryNoneCta: 'Сообщить, когда появится',
     countryNoneDone: 'Заявка принята. Сообщим, когда наполним.',
     countryNoneError: 'Не получилось. Попробуйте ещё раз.',
+    // Матрица сравнения стран (Задача 32, Блок 4) — бесплатный тизер
+    compareCta: 'Сравнить страны',
+    compareDialogTitle: 'Сравнение стран по категориям',
+    compareDialogText:
+      'Бесплатный тизер: есть ли требования категории в стране, без деталей и цитат закона.',
+    compareCategoryHeader: 'Категория',
+    compareLegendPresent: 'есть требования',
+    compareLegendAbsent: 'нет данных / не регулируется',
+    compareLegendPreview: 'превью — данные ещё не проверены юристом',
+    compareError: 'Не получилось загрузить сравнение. Обновите страницу.',
+    compareLifecycleLabel: {
+      upcoming: 'скоро',
+      in_force: 'действует',
+      transitional: 'переходный период',
+      expiring: 'истекает',
+      repealed: 'отменено',
+    },
   },
 
   service: {

@@ -5,6 +5,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type UseQueryResult,
 } from '@tanstack/react-query'
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
@@ -12,6 +13,7 @@ import { supabase } from '@/lib/supabase'
 import { ru } from '@/i18n/ru'
 import type {
   AppNotification,
+  ComparisonMatrix,
   LawyerReview,
   RequirementRow,
   ReviewVerdict,
@@ -24,6 +26,7 @@ import {
   demoPortfolioIds,
   fetchCard,
   fetchChangeFeed,
+  fetchComparisonMatrix,
   fetchLawyerReviews,
   fetchProductBundle,
   fetchReviewStats,
@@ -116,6 +119,19 @@ export function useServiceBundle(serviceId: string | undefined) {
     queryFn: () => fetchServiceBundle(serviceId!),
     enabled: Boolean(serviceId),
     staleTime: 60_000,
+  })
+}
+
+/**
+ * Матрица сравнения стран (Задача 32) — лениво: смонтирована только пока
+ * открыт диалог CCompareMatrixButton, чтобы не грузить её на каждый визит
+ * страницы товара.
+ */
+export function useComparisonMatrix(productId: string): UseQueryResult<ComparisonMatrix> {
+  return useQuery({
+    queryKey: ['comparison', productId],
+    queryFn: () => fetchComparisonMatrix(productId),
+    staleTime: 5 * 60_000,
   })
 }
 
