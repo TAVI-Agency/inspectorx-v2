@@ -25,6 +25,7 @@ import { CCard, CEyebrow, CLockedValue, CStatTile, CountUp } from './ui'
 import { CRouteNav, CRouteNavMobile } from './CRouteNav'
 import { CRequirementList } from './CRequirementList'
 import { CCountryNoneState, CCountryPreviewBanner, CCountryTabs } from './product/CCountryTabs'
+import { CCompareMatrixButton } from './product/CCompareMatrix'
 
 /**
  * Досье товара в дизайне C: паспорт → приборные метрики → маршрут
@@ -211,12 +212,14 @@ export function CProductPage() {
         )
       })()}
 
-      <CCountryTabs
-        className="mt-7"
-        coverage={passport.countries}
-        country={country}
-        onChange={selectCountry}
-      />
+      <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <CCountryTabs
+          coverage={passport.countries}
+          country={country}
+          onChange={selectCountry}
+        />
+        <CCompareMatrixButton productId={passport.id} />
+      </div>
 
       <div className="mt-5">
         {switchingCountry && (

@@ -407,6 +407,93 @@ export async function fetchServiceDocumentsCountReal(
   return count
 }
 
+// ── Матрица сравнения стран (Задача 32) ─────────────────────────────
+
+/**
+ * Порядок «худшести» lifecycle для агрегата матрицы сравнения: индекс —
+ * приоритет тревожности (меньше — тревожнее). При нескольких требованиях
+ * категории показываем самый тревожный статус: repealed (отменено) и
+ * expiring (истекает) важнее показать пользователю, чем transitional
+ * (переходный период) и upcoming (вступит в силу); in_force («действует»
+ * без оговорок) — наименее тревожный, бейджем не отмечается (см. CCompareMatrix).
+ */
+const LIFECYCLE_SEVERITY: LifecycleStatus[] = [
+  'repealed',
+  'expiring',
+  'transitional',
+  'upcoming',
+  'in_force',
+]
+
+export function worseLifecycle(a: LifecycleStatus, b: LifecycleStatus): LifecycleStatus {
+  return LIFECYCLE_SEVERITY.indexOf(a) <= LIFECYCLE_SEVERITY.indexOf(b) ? a : b
+}
+
+export interface ComparisonAggregate {
+  count: number
+  worstLifecycle: LifecycleStatus
+}
+
+/**
+ * Категории требований (requirement_categories, публичное чтение) + агрегат
+ * по УЗ для товара: сколько опубликованных требований в каждой категории и
+ * самый тревожный lifecycle среди них. Требования резолвятся по HS-коду
+ * товара — тот же паттерн applicability, что и в fetchRequirementsReal.
+ * У мок-товаров (молоко/парацетамол) продукта с таким id в products нет
+ * (или для него в базе ещё нет published-требований) — агрегат вернётся
+ * пустым; index.ts в этом случае считает его сам из фикстурных rows.
+ */
+export async function fetchComparisonReal(productId: string): Promise<{
+  categories: { slug: string; name: string; sortOrder: number }[]
+  uz: Record<string, ComparisonAggregate>
+}> {
+  // Мок-id (парацетамол) — не UUID, products.id его 400-нёт; index.ts всё
+  // равно считает УЗ-агрегат сам из фикстур для таких товаров (см. вызов ниже).
+  const productQuery = productId.startsWith('mock-')
+    ? Promise.resolve({ data: null })
+    : supabase.from('products').select('hs_code').eq('id', productId).maybeSingle()
+  const [categoriesRes, productRes] = await Promise.all([
+    supabase
+      .from('requirement_categories')
+      .select('slug, name_ru, sort_order')
+      .eq('is_active', true)
+      .order('sort_order'),
+    productQuery,
+  ])
+  const categories = (categoriesRes.data ?? []).map((c) => ({
+    slug: c.slug,
+    name: c.name_ru,
+    sortOrder: c.sort_order,
+  }))
+
+  const hsCode = productRes.data?.hs_code
+  if (!hsCode) return { categories, uz: {} }
+
+  const { data, error } = await supabase
+    .from('requirements_with_status')
+    .select('category_slug, lifecycle, requirement_applicability!inner(code, scope)')
+    .eq('status', 'published')
+    .eq('jurisdiction', 'UZ' satisfies CountryCode)
+    .or(`code.eq.${hsCode},scope.eq.all_products`, {
+      referencedTable: 'requirement_applicability',
+    })
+  if (error) throw error
+
+  const uz: Record<string, ComparisonAggregate> = {}
+  for (const row of data ?? []) {
+    if (!row.category_slug) continue
+    const lc = toLifecycle(row.lifecycle)
+    const existing = uz[row.category_slug]
+    if (existing) {
+      existing.count += 1
+      existing.worstLifecycle = worseLifecycle(existing.worstLifecycle, lc)
+    } else {
+      uz[row.category_slug] = { count: 1, worstLifecycle: lc }
+    }
+  }
+  return { categories, uz }
+}
+
 // ── Список требований (уровень 0) ──────────────────────────────────
 
 export interface RequirementListReal {
