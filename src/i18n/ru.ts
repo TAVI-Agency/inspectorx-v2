@@ -110,6 +110,7 @@ export const ru = {
     countryTabLabel: (name: string, published: number, state: 'live' | 'preview' | 'none') =>
       state === 'none' ? name : `${name} · ${published}${state === 'preview' ? ' (превью)' : ''}`,
     countryPreview: 'Предварительные данные — проверка юристом впереди.',
+    countrySwitching: 'Загружаем требования…',
     countryNoneTitle: 'Для этой страны требования ещё не наполнены',
     countryNoneText:
       'Сообщите — мы приоритизируем наполнение и напишем, когда будет готово.',
