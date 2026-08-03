@@ -159,19 +159,17 @@ function CRow({
   reviewStats?: RequirementReviewStats
 }) {
   return (
-    <li
-      className={cn(
-        'transition-colors',
-        expanded && 'bg-accent/25',
-        // Отменённое требование — история для юзера, не скрываем, а приглушаем
-        row.lifecycle === 'repealed' && 'opacity-60',
-      )}
-    >
+    <li className={cn('transition-colors', expanded && 'bg-accent/25')}>
       <button
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:px-5"
+        className={cn(
+          'group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:px-5',
+          // Отменённое требование — история для юзера, не скрываем строку, а приглушаем;
+          // раскрытая карточка ниже остаётся в полную силу — читать историю должно быть удобно
+          row.lifecycle === 'repealed' && 'opacity-60',
+        )}
       >
         <span className="relative mt-0.5 shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
           {String(number).padStart(2, '0')}
