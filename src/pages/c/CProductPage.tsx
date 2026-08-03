@@ -34,7 +34,13 @@ export function CProductPage() {
   const { productId } = useParams<{ productId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const country = parseCountryParam(searchParams.get('country'))
-  const { data, isLoading, isError } = useProductBundle(productId, country)
+  const { data, isLoading, isError, isFetching, isPlaceholderData } = useProductBundle(
+    productId,
+    country,
+  )
+  // placeholderData (Задача 31) держит на экране данные ПРЕЖНЕЙ страны, пока грузится
+  // новая — без этого флага список/плашка preview молча врут под уже переключённым табом
+  const switchingCountry = isFetching && isPlaceholderData
 
   const rows = useMemo(() => data?.rows ?? [], [data])
   const nodes = useMemo(() => buildOperationNodes(rows), [rows])
@@ -212,67 +218,91 @@ export function CProductPage() {
         onChange={selectCountry}
       />
 
-      {countryState === 'none' ? (
-        <CCountryNoneState className="mt-5" productId={passport.id} country={country} />
-      ) : (
-        <>
-          {countryState === 'preview' && <CCountryPreviewBanner className="mt-5" />}
+      <div className="mt-5">
+        {switchingCountry && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground"
+          >
+            <span
+              aria-hidden
+              className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary"
+            />
+            {ru.product.countrySwitching}
+          </div>
+        )}
 
-          {rows.length === 0 ? (
-            <CCard className="mt-5 p-8 text-center">
-              <h2 className="text-lg font-semibold tracking-tight">
-                {ru.product.noRequirementsTitle}
-              </h2>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-                {ru.product.noRequirementsText}
-              </p>
-            </CCard>
+        {/* Пока грузится новая страна, данные ниже — ещё от прежней (placeholderData):
+            приглушаем и блокируем клики, чтобы список требований не выглядел как
+            уже актуальный под переключённым табом. Плашка preview — по той же причине
+            только когда данные действительно её страны, не чужие. */}
+        <div className={cn(switchingCountry && 'pointer-events-none opacity-40 transition-opacity')}>
+          {countryState === 'none' ? (
+            <CCountryNoneState productId={passport.id} country={country} />
           ) : (
-            <div className="mt-5 grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
-              <aside className="hidden lg:sticky lg:top-8 lg:block lg:self-start">
-                <CRouteNav
-                  nodes={nodes}
-                  activeOp={activeOp}
-                  transport={transport}
-                  onSelectOp={selectOp}
-                  onSelectTransport={setTransport}
-                />
-              </aside>
+            <>
+              {!switchingCountry && countryState === 'preview' && (
+                <CCountryPreviewBanner className="mb-5" />
+              )}
 
-              <div className="min-w-0">
-                <div className="lg:hidden">
-                  <CRouteNavMobile
-                    nodes={nodes}
-                    activeOp={activeOp}
-                    transport={transport}
-                    onSelectOp={selectOp}
-                    onSelectTransport={setTransport}
-                  />
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 lg:mt-0">
+              {rows.length === 0 ? (
+                <CCard className="p-8 text-center">
                   <h2 className="text-lg font-semibold tracking-tight">
-                    {operationMeta(activeOp).full}
-                    <span className="ml-2 font-mono text-sm font-normal text-muted-foreground tabular-nums">
-                      {filteredRows.length}
-                    </span>
+                    {ru.product.noRequirementsTitle}
                   </h2>
-                </div>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                    {ru.product.noRequirementsText}
+                  </p>
+                </CCard>
+              ) : (
+                <div className="grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
+                  <aside className="hidden lg:sticky lg:top-8 lg:block lg:self-start">
+                    <CRouteNav
+                      nodes={nodes}
+                      activeOp={activeOp}
+                      transport={transport}
+                      onSelectOp={selectOp}
+                      onSelectTransport={setTransport}
+                    />
+                  </aside>
 
-                <div className="mt-4">
-                  <CRequirementList
-                    key={`${activeOp}-${transport ?? 'all'}`}
-                    rows={filteredRows}
-                    stages={stages}
-                    productId={passport.id}
-                    initialRequirementId={initialRequirementId}
-                  />
+                  <div className="min-w-0">
+                    <div className="lg:hidden">
+                      <CRouteNavMobile
+                        nodes={nodes}
+                        activeOp={activeOp}
+                        transport={transport}
+                        onSelectOp={selectOp}
+                        onSelectTransport={setTransport}
+                      />
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 lg:mt-0">
+                      <h2 className="text-lg font-semibold tracking-tight">
+                        {operationMeta(activeOp).full}
+                        <span className="ml-2 font-mono text-sm font-normal text-muted-foreground tabular-nums">
+                          {filteredRows.length}
+                        </span>
+                      </h2>
+                    </div>
+
+                    <div className="mt-4">
+                      <CRequirementList
+                        key={`${activeOp}-${transport ?? 'all'}`}
+                        rows={filteredRows}
+                        stages={stages}
+                        productId={passport.id}
+                        initialRequirementId={initialRequirementId}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
   )
 }
