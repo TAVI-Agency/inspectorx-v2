@@ -149,10 +149,13 @@ function parseSanctions(json: Json): SanctionItem[] {
 }
 
 /**
- * До 5 кейсов из снапшота SudX (importer/build/steps_cases.py:
- * `[{case_url, case_title, summary_line, outcome, amount}]`). Пустой массив
- * («не нашли» — верифицирован в шаге cases) для витрины неотличим от null
- * («не искали») — оба «Данных пока нет» (TARGET_FORMAT §4в).
+ * До 5 кейсов из снапшота SudX. Шаг 'cases' кладёт в ctx.data ключ
+ * `summary_line` (importer/build/steps_cases.py), но Assembler переименовывает
+ * его в `summary` перед записью в БД — так колонка документирована в
+ * `20260711120000_initial_schema.sql` (`{case_url, case_title, summary,
+ * outcome, amount}`), см. `_court_cases_for_details` в assembler.py.
+ * Читаем `summary` как основной ключ; `summary_line` — оборонительный
+ * фолбэк на случай прямой вставки в формате шага.
  */
 function parseCourtCases(json: Json): CourtCase[] | null {
   if (!Array.isArray(json)) return null
@@ -161,7 +164,12 @@ function parseCourtCases(json: Json): CourtCase[] | null {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const o = item as Record<string, Json | undefined>
     const caseUrl = typeof o.case_url === 'string' ? o.case_url : ''
-    const summaryLine = typeof o.summary_line === 'string' ? o.summary_line : ''
+    const summaryLine =
+      typeof o.summary === 'string'
+        ? o.summary
+        : typeof o.summary_line === 'string'
+          ? o.summary_line
+          : ''
     if (!caseUrl || !summaryLine) continue
     out.push({
       caseUrl,
