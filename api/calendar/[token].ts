@@ -107,20 +107,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  const events: DeadlineEvent[] = (rows ?? []).flatMap((row) => {
-    if (!row.requirement_id || !row.event_kind || !row.event_date || !row.title) return []
-    if (!isDeadlineEventKind(row.event_kind)) return []
-    return [
-      {
-        requirementId: row.requirement_id,
-        eventKind: row.event_kind,
-        eventDate: row.event_date,
-        title: row.title,
-      },
-    ]
-  })
+  // Дедуп по (requirement_id, event_kind): у view user_deadline_events уже
+  // стоит SELECT DISTINCT на юзера (supabase/migrations/
+  // 20260803180000_calendar_notifications.sql:106, «select distinct»), так
+  // что дублей пары (requirement_id, event_kind) сегодня быть не должно —
+  // отсюда и формат UID в buildIcs (`${requirementId}-${eventKind}`). Map
+  // здесь — не рабочая логика, а страховка: если view когда-нибудь
+  // перестанет быть distinct (правка миграции, join без него и т.п.),
+  // повторный UID в .ics молча ломает часть календарных клиентов — пусть
+  // лучше тихо схлопнется здесь, чем всплывёт как баг у подписчика.
+  const dedupedEvents = new Map<string, DeadlineEvent>()
+  for (const row of rows ?? []) {
+    if (!row.requirement_id || !row.event_kind || !row.event_date || !row.title) continue
+    if (!isDeadlineEventKind(row.event_kind)) continue
+    const key = `${row.requirement_id}-${row.event_kind}`
+    if (dedupedEvents.has(key)) continue
+    dedupedEvents.set(key, {
+      requirementId: row.requirement_id,
+      eventKind: row.event_kind,
+      eventDate: row.event_date,
+      title: row.title,
+    })
+  }
 
-  const ics = buildIcs(events)
+  const ics = buildIcs(Array.from(dedupedEvents.values()))
 
   res
     .status(200)
