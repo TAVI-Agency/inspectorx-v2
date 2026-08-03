@@ -59,7 +59,8 @@ function CCompareMatrixBody({ productId }: { productId: string }) {
   if (isLoading || !data) {
     return (
       <div className="space-y-2">
-        {Array.from({ length: 5 }, (_, i) => (
+        {/* 8 — число активных категорий в requirement_categories (см. миграцию) */}
+        {Array.from({ length: 8 }, (_, i) => (
           <Skeleton key={i} className="h-9 w-full" />
         ))}
       </div>

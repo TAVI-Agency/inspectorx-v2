@@ -450,7 +450,7 @@ export async function fetchComparisonReal(productId: string): Promise<{
   // Мок-id (парацетамол) — не UUID, products.id его 400-нёт; index.ts всё
   // равно считает УЗ-агрегат сам из фикстур для таких товаров (см. вызов ниже).
   const productQuery = productId.startsWith('mock-')
-    ? Promise.resolve({ data: null })
+    ? Promise.resolve({ data: null, error: null })
     : supabase.from('products').select('hs_code').eq('id', productId).maybeSingle()
   const [categoriesRes, productRes] = await Promise.all([
     supabase
@@ -460,6 +460,10 @@ export async function fetchComparisonReal(productId: string): Promise<{
       .order('sort_order'),
     productQuery,
   ])
+  // Без этой проверки сбой запроса справочника молча схлопывал бы всю
+  // матрицу в «нигде ничего нет» вместо явной ошибки на экране.
+  if (categoriesRes.error) throw categoriesRes.error
+  if (productRes.error) throw productRes.error
   const categories = (categoriesRes.data ?? []).map((c) => ({
     slug: c.slug,
     name: c.name_ru,
