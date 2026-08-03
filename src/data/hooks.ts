@@ -23,7 +23,10 @@ import type {
 import type { CountryCode } from './countries'
 import {
   buildPortfolio,
+  createCalendarToken,
+  deleteCalendarToken,
   demoPortfolioIds,
+  fetchCalendarToken,
   fetchCard,
   fetchChangeFeed,
   fetchComparisonMatrix,
@@ -237,6 +240,45 @@ export function useUpdateProfile() {
       await updateProfileReal(session.user.id, input)
     },
     onSuccess: () => void refreshProfile(),
+  })
+}
+
+// ── Календарь дедлайнов (Блок 5, Задача 37) ──────────────────────────
+// Ключ несёт id юзера (как useLeaderboard/useMyReviews) — токен персональный
+// секрет, чужой строки в кэше после смены аккаунта в той же вкладке
+// оставаться не должно.
+
+export function useCalendarToken() {
+  const { session, realSubscriber } = useAuth()
+  return useQuery({
+    queryKey: ['calendar-token', session?.user.id ?? 'anon'],
+    queryFn: fetchCalendarToken,
+    enabled: Boolean(session) && realSubscriber,
+    staleTime: 30_000,
+  })
+}
+
+export function useConnectCalendar() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      if (!session) throw new Error('auth-required')
+      return createCalendarToken(session.user.id)
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar-token'] }),
+  })
+}
+
+export function useDisconnectCalendar() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      if (!session) throw new Error('auth-required')
+      await deleteCalendarToken(session.user.id)
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar-token'] }),
   })
 }
 

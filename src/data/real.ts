@@ -1583,3 +1583,40 @@ export async function removeChosenReal(chosenId: string): Promise<void> {
   const { error } = await supabase.from('chosen_products').delete().eq('id', chosenId)
   if (error) throw error
 }
+
+// ── Календарь дедлайнов (calendar_tokens, Блок 5) ───────────────────
+// RLS: владелец select/insert/delete своей строки (PK — user_id, см.
+// 20260803180000_calendar_notifications.sql). Гейт по подписке — не здесь:
+// insert доступен любому залогиненному, а собственно .ics-фид (Задача 36,
+// api/calendar/[token].ts) отдаёт 403 не-подписчику. UI прячет блок
+// подключения от не-подписчика сам (см. CSettingsPage) — иначе токен
+// создаётся, но реально никогда не наполнится событиями.
+
+export interface CalendarTokenRow {
+  token: string
+  createdAt: string
+}
+
+export async function fetchCalendarTokenReal(): Promise<CalendarTokenRow | null> {
+  const { data, error } = await supabase
+    .from('calendar_tokens')
+    .select('token, created_at')
+    .maybeSingle()
+  if (error) throw error
+  return data ? { token: data.token, createdAt: data.created_at } : null
+}
+
+export async function createCalendarTokenReal(userId: string): Promise<CalendarTokenRow> {
+  const { data, error } = await supabase
+    .from('calendar_tokens')
+    .insert({ user_id: userId })
+    .select('token, created_at')
+    .single()
+  if (error) throw error
+  return { token: data.token, createdAt: data.created_at }
+}
+
+export async function deleteCalendarTokenReal(userId: string): Promise<void> {
+  const { error } = await supabase.from('calendar_tokens').delete().eq('user_id', userId)
+  if (error) throw error
+}

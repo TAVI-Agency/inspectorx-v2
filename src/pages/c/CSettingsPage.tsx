@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Settings } from 'lucide-react'
+import { Check, Copy, Lock, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
-import { useUpdateProfile } from '@/data/hooks'
+import {
+  useCalendarToken,
+  useConnectCalendar,
+  useDisconnectCalendar,
+  useUpdateProfile,
+} from '@/data/hooks'
 import {
   loadDigestSettings,
   saveDigestSettings,
@@ -15,6 +20,17 @@ import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { CCard, CEyebrow } from './ui'
 import { CLawyerApplicationCard } from './CLawyerCabinet'
+
+/** Демо-подписка на календарь без входа (мок-режим) — токен ненастоящий */
+const DEMO_CALENDAR_TOKEN = 'demo-token-8f3ac21e'
+
+/** Хост фикс. — фид (Задача 36) живёт только на проде, webcal:// не умеет localhost */
+function calendarUrl(token: string): string {
+  return `webcal://inspectorx.uz/api/calendar/${token}.ics`
+}
+
+const readonlyInputClass =
+  'mt-1 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
 
 type Tab = 'profile' | 'notifications' | 'subscription'
 
@@ -216,40 +232,210 @@ function CNotifsTab() {
   }
 
   return (
+    <>
+      <CCard className="p-4 sm:p-5">
+        <div className="space-y-4">
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>
+              <span className="block font-medium">{ru.settings.notifs.emailTitle}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {ru.settings.notifs.emailHint}
+              </span>
+            </span>
+            <Switch size="sm" checked={settings.email} onCheckedChange={(v) => update({ email: v })} />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>
+              <span className="block font-medium">{ru.settings.notifs.telegramTitle}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {ru.settings.notifs.telegramHint}
+              </span>
+            </span>
+            <Switch
+              size="sm"
+              checked={settings.telegram}
+              onCheckedChange={(v) => update({ telegram: v })}
+            />
+          </label>
+        </div>
+        <p
+          aria-live="polite"
+          className={cn(
+            'mt-3.5 text-xs text-positive transition-opacity duration-300',
+            savedFlash ? 'opacity-100' : 'opacity-0',
+          )}
+        >
+          {ru.cabinet.digestSaved}
+        </p>
+      </CCard>
+      <CCalendarSyncCard />
+    </>
+  )
+}
+
+/**
+ * Календарь дедлайнов (Блок 5, Задача 37): диспетчер трёх состояний —
+ * подписчик (реальное подключение), не-подписчик (пейволл-CTA), мок-режим
+ * без входа (демо-токен, кнопки задизейблены — insert невозможен без
+ * auth.uid()).
+ */
+function CCalendarSyncCard() {
+  const { session, realSubscriber } = useAuth()
+  if (!session) return <CCalendarDemoCard />
+  if (!realSubscriber) return <CCalendarPaywallCard />
+  return <CCalendarConnectCard />
+}
+
+/** Подписчик: подключить / показать ссылку + скопировать / отключить */
+function CCalendarConnectCard() {
+  const t = ru.settings.calendar
+  const { data: token, isLoading } = useCalendarToken()
+  const connect = useConnectCalendar()
+  const disconnect = useDisconnectCalendar()
+  const [copied, setCopied] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 2000)
+    return () => clearTimeout(timer)
+  }, [copied])
+
+  const url = token ? calendarUrl(token.token) : null
+
+  async function copyUrl() {
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+    } catch {
+      // Буфер обмена недоступен (напр. нет разрешения) — ссылку можно
+      // выделить в поле руками, страницу не роняем.
+    }
+  }
+
+  return (
     <CCard className="p-4 sm:p-5">
-      <div className="space-y-4">
-        <label className="flex items-center justify-between gap-3 text-sm">
-          <span>
-            <span className="block font-medium">{ru.settings.notifs.emailTitle}</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              {ru.settings.notifs.emailHint}
-            </span>
-          </span>
-          <Switch size="sm" checked={settings.email} onCheckedChange={(v) => update({ email: v })} />
-        </label>
-        <label className="flex items-center justify-between gap-3 text-sm">
-          <span>
-            <span className="block font-medium">{ru.settings.notifs.telegramTitle}</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              {ru.settings.notifs.telegramHint}
-            </span>
-          </span>
-          <Switch
-            size="sm"
-            checked={settings.telegram}
-            onCheckedChange={(v) => update({ telegram: v })}
-          />
-        </label>
+      <p className="text-sm font-semibold">{t.title}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{t.text}</p>
+
+      {isLoading && <p className="mt-3.5 text-xs text-muted-foreground">{ru.common.loading}</p>}
+
+      {!token && !isLoading && (
+        <>
+          <Button className="mt-3.5" size="sm" disabled={connect.isPending} onClick={() => connect.mutate()}>
+            {connect.isPending ? t.connecting : t.connectCta}
+          </Button>
+          {connect.isError && <p className="mt-2 text-xs text-destructive">{t.connectError}</p>}
+        </>
+      )}
+
+      {token && url && (
+        <div className="mt-3.5 space-y-3">
+          <label className="block text-xs font-medium">
+            {t.urlLabel}
+            <input
+              readOnly
+              value={url}
+              onFocus={(e) => e.currentTarget.select()}
+              className={cn(readonlyInputClass, 'font-mono text-xs')}
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button size="sm" variant="outline" onClick={copyUrl}>
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              {copied ? t.copied : t.copy}
+            </Button>
+            {!confirming && (
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+                {t.disconnect}
+              </Button>
+            )}
+          </div>
+          {confirming && (
+            <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5">
+              <span className="text-xs text-muted-foreground">{t.disconnectConfirm}</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={disconnect.isPending}
+                onClick={() =>
+                  disconnect.mutate(undefined, { onSuccess: () => setConfirming(false) })
+                }
+              >
+                {disconnect.isPending ? t.disconnecting : t.disconnectConfirmCta}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+                {ru.common.cancel}
+              </Button>
+            </div>
+          )}
+          {disconnect.isError && <p className="text-xs text-destructive">{t.disconnectError}</p>}
+          <div className="border-t border-border pt-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">{t.howToTitle}</p>
+            <p className="mt-1">{t.howToGoogle}</p>
+            <p className="mt-1">{t.howToApple}</p>
+          </div>
+        </div>
+      )}
+    </CCard>
+  )
+}
+
+/** Не-подписчик: пейволл-CTA в стиле CPaywallGate/CPaywallPanel, ссылка на /pricing */
+function CCalendarPaywallCard() {
+  const t = ru.settings.calendar
+  return (
+    <CCard className="border-brass/30 p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full border border-brass/40 text-brass">
+          <Lock className="size-4" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold">{t.paywallTitle}</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{t.paywallText}</p>
+          <Button className="mt-3" size="sm" nativeButton={false} render={<Link to="/pricing" />}>
+            {t.paywallCta}
+          </Button>
+        </div>
       </div>
-      <p
-        aria-live="polite"
-        className={cn(
-          'mt-3.5 text-xs text-positive transition-opacity duration-300',
-          savedFlash ? 'opacity-100' : 'opacity-0',
-        )}
-      >
-        {ru.cabinet.digestSaved}
-      </p>
+    </CCard>
+  )
+}
+
+/**
+ * Мок-подписчик без входа: реальный insert невозможен (нет auth.uid()) —
+ * показываем уже «подключённое» демо-состояние на фейковом токене, кнопки
+ * задизейблены. Так витрина/скриншоты остаются содержательными без логина.
+ */
+function CCalendarDemoCard() {
+  const t = ru.settings.calendar
+  const url = calendarUrl(DEMO_CALENDAR_TOKEN)
+  return (
+    <CCard className="p-4 sm:p-5">
+      <p className="text-sm font-semibold">{t.title}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{t.text}</p>
+      <div className="mt-3.5 space-y-3">
+        <label className="block text-xs font-medium">
+          {t.urlLabel}
+          <input readOnly value={url} className={cn(readonlyInputClass, 'font-mono text-xs')} />
+        </label>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button size="sm" variant="outline" disabled>
+            <Copy className="size-3.5" />
+            {t.copy}
+          </Button>
+          <Button size="sm" variant="ghost" disabled>
+            {t.disconnect}
+          </Button>
+        </div>
+        <div className="border-t border-border pt-3 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">{t.howToTitle}</p>
+          <p className="mt-1">{t.howToGoogle}</p>
+          <p className="mt-1">{t.howToApple}</p>
+        </div>
+        <p className="text-xs text-brass">{t.demoNote}</p>
+      </div>
     </CCard>
   )
 }
