@@ -110,6 +110,11 @@ from importer.build.steps import STEP_ORDER
 if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл impact_mapper<->trace
     from importer.build.trace import Tracer
 
+# Задача 41 (история изменений) — импорт ПО ЗНАЧЕНИЮ безопасен: change_history
+# импортирует MonitoringStore обратно ТОЛЬКО под TYPE_CHECKING (см. докстринг
+# change_history.py), поэтому цикла на рантайме нет, в отличие от Tracer выше.
+from importer.monitoring.change_history import build_change_history
+
 logger = logging.getLogger(__name__)
 
 # Порог скора Classifier-кандидата (путь б) — решение контроллера задачи:
@@ -172,6 +177,38 @@ class LawyerDecision:
     note: str
 
 
+@dataclass(frozen=True)
+class HistorySourceEvent:
+    """`change_events`, каким его видит `change_history.build_change_history`
+    (Задача 41) — шире `ChangeEventRecord`: несёт `title`/`created_at`/
+    `was_text`/`now_text`, которые фронт реально читает через join
+    `requirement_revisions -> change_events(title, was_text, now_text)`
+    (`src/data/real.ts:fetchRequirementCard`). Отдельный тип, а не расширение
+    `ChangeEventRecord`, — путь (а)/(б) маппинга эти поля не использует."""
+
+    change_event_id: str
+    event_type: str
+    effective_date: str | None
+    created_at: str
+    summary: str | None
+    title: str
+    was_text: str | None
+    now_text: str | None
+
+
+@dataclass(frozen=True)
+class ApprovedMapRecord:
+    """Строка `pipeline.maps(status='approved')`, какой её видит discovery
+    (Задача 41, `discovery.py`) — только то, что нужно прогону вопросов:
+    без `approved_at`/`approved_by`, в отличие от `orchestrator.py:
+    MapRecord`."""
+
+    id: str
+    group_ref: str
+    jurisdiction: str
+    payload: list[dict]
+
+
 @dataclass
 class ProcessingReport:
     """Итог одного вызова `process_changes` — сколько событий куда пришли."""
@@ -189,6 +226,11 @@ class ProcessingReport:
     # требовании — событие/остальные требования этого события ИДУТ ДАЛЬШЕ
     # (см. докстринг `process_changes`), это только счётчик для наблюдения.
     lawyer_errors: int = 0
+    # Задача 41: сколько строк `requirement_revisions` реально добавлено
+    # `build_change_history` за этот прогон (по всем затронутым требованиям
+    # всех обработанных событий) — идемпотентные пропуски сюда не считаются,
+    # см. `change_history.HistoryBuildReport.revisions_added`.
+    revisions_recorded: int = 0
 
 
 class RerunOrchestratorLike(Protocol):
@@ -275,6 +317,86 @@ class MonitoringStore(Protocol):
         changes`), только резолвит `item_id`. `None`, если у требования нет
         айтема Build-конвейера (например, оно из легаси `import-report`) —
         ре-ревью для такого требования технически невозможен."""
+        ...
+
+    # ── Задача 41: история изменений (change_history.py) ──────────────────
+
+    def list_change_events_for_requirement(
+        self, requirement_id: str
+    ) -> list[HistorySourceEvent]:
+        """Все `change_events`, связанные с `requirement_id` через
+        `requirement_change_impacts` (Задача 40) — вход `change_history.
+        build_change_history`. Дублей `change_event_id` быть не может
+        (уникальность `(change_event_id, requirement_id)`, см. `save_impacts`);
+        порядок — по `created_at` события (хронология для фронта)."""
+        ...
+
+    def list_existing_revision_event_ids(self, requirement_id: str) -> set[str]:
+        """`requirement_revisions.change_event_id`, уже записанные для этого
+        требования, — идемпотентность `build_change_history` (докстринг
+        `change_history.py`): событие с уже существующей ревизией
+        пропускается, повторный вызов не плодит дублей."""
+        ...
+
+    def save_revision(
+        self,
+        requirement_id: str,
+        *,
+        change_event_id: str,
+        change_note: str | None,
+        snapshot: dict,
+        created_at: str,
+    ) -> str:
+        """Вставляет строку `requirement_revisions` — `revision_no` считает
+        сам стор (следующий свободный для `requirement_id`, `unique
+        (requirement_id, revision_no)` из `20260711120000_initial_schema.sql`).
+        `created_at` — ЯВНО переданное значение (`event.effective_date` либо
+        `event.created_at`, см. `change_history.build_change_history`), не
+        дефолт колонки `now()`: ревизия обязана нести дату СОБЫТИЯ, а не
+        момента, когда её досчитал этот скрипт. Возвращает `id` новой строки."""
+        ...
+
+    # ── Задача 41: discovery новых актов (discovery.py) ────────────────────
+
+    def list_new_events_without_impacts(self) -> list[ChangeEventRecord]:
+        """`change_events(event_type='new')`, уже обработанные Impact-
+        маппером (`processed_at is not null`), но БЕЗ ни одного
+        `requirement_change_impacts` — «свежий акт, никем не связанный»
+        (докстринг `discovery.py`, сужение брифа Задачи 41: вместо
+        самостоятельного обхода LegalX используются уже пришедшие webhook-
+        события)."""
+        ...
+
+    def list_approved_maps(self, jurisdiction: str) -> list[ApprovedMapRecord]:
+        """`pipeline.maps(status='approved', jurisdiction=...)` — вход
+        discovery: вопросы каждого айтема карты гоняются против нового акта
+        события той же юрисдикции."""
+        ...
+
+    def find_existing_discovery_item(
+        self, map_id: str, expected_item: str
+    ) -> str | None:
+        """Есть ли УЖЕ `pipeline.items` с этим `expected_item` под каким-либо
+        `pipeline.runs` этой карты — идемпотентность discovery (Задача 41).
+        В схеме `pipeline.*` нет колонки «этот item породило discovery
+        события X» (миграция вне периметра этой задачи, см. докстринг
+        `discovery.py`), поэтому идемпотентность держится на паре
+        `(map_id, expected_item)`: тот же текст айтема карты не даёт двух
+        кандидатов. Возвращает `id` найденного айтема либо `None`."""
+        ...
+
+    def create_discovery_run(self, map_id: str) -> str:
+        """Новый `pipeline.runs` для карты — «специальный discovery-run»
+        (докстринг `discovery.py`), отдельный от обычных прогонов
+        `Orchestrator.run_group`, но та же таблица/схема."""
+        ...
+
+    def create_discovery_item(
+        self, run_id: str, expected_item: str, category_slug: str
+    ) -> str:
+        """`pipeline.items(status='pending')` — кандидат, дособерёт обычный
+        Build; черновой `requirements` здесь НЕ создаётся (докстринг
+        `discovery.py`). Возвращает `id` новой строки."""
         ...
 
 
@@ -575,6 +697,14 @@ def process_changes(
             store.flag_requirement(requirement_id, event.id)
             report.requirements_flagged += 1
 
+            # Задача 41: история изменений СРАЗУ по свежему impact'у, не
+            # отдельным cron'ом — build_change_history сама идемпотентна
+            # (пропускает уже записанные change_event_id), поэтому повторный
+            # вызов на том же требовании в рамках следующего события — не
+            # дублирует уже существующие ревизии, только добавляет новую.
+            history_report = build_change_history(store, requirement_id)
+            report.revisions_recorded += history_report.revisions_added
+
             if lawyer is None:
                 continue
             title = titles_by_id.get(requirement_id, requirement_id)
@@ -800,3 +930,168 @@ class SupabaseMonitoringStore:
             .data
         )
         return rows[0]["id"] if rows else None
+
+    # ── Задача 41: история изменений ────────────────────────────────────────
+
+    def list_change_events_for_requirement(
+        self, requirement_id: str
+    ) -> list[HistorySourceEvent]:
+        impacts = (
+            self._client.table("requirement_change_impacts")
+            .select("change_event_id")
+            .eq("requirement_id", requirement_id)
+            .execute()
+            .data
+        )
+        event_ids = list(dict.fromkeys(row["change_event_id"] for row in impacts))
+        if not event_ids:
+            return []
+        rows = (
+            self._client.table("change_events")
+            .select("id, event_type, effective_date, created_at, summary, title, was_text, now_text")
+            .in_("id", event_ids)
+            .order("created_at")
+            .execute()
+            .data
+        )
+        return [
+            HistorySourceEvent(
+                change_event_id=row["id"],
+                event_type=row["event_type"],
+                effective_date=row.get("effective_date"),
+                created_at=row["created_at"],
+                summary=row.get("summary"),
+                title=row["title"],
+                was_text=row.get("was_text"),
+                now_text=row.get("now_text"),
+            )
+            for row in rows
+        ]
+
+    def list_existing_revision_event_ids(self, requirement_id: str) -> set[str]:
+        rows = (
+            self._client.table("requirement_revisions")
+            .select("change_event_id")
+            .eq("requirement_id", requirement_id)
+            .execute()
+            .data
+        )
+        return {row["change_event_id"] for row in rows if row.get("change_event_id")}
+
+    def save_revision(
+        self,
+        requirement_id: str,
+        *,
+        change_event_id: str,
+        change_note: str | None,
+        snapshot: dict,
+        created_at: str,
+    ) -> str:
+        existing = (
+            self._client.table("requirement_revisions")
+            .select("revision_no")
+            .eq("requirement_id", requirement_id)
+            .order("revision_no", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        next_revision_no = (existing[0]["revision_no"] + 1) if existing else 1
+        row = (
+            self._client.table("requirement_revisions")
+            .insert(
+                {
+                    "requirement_id": requirement_id,
+                    "revision_no": next_revision_no,
+                    "change_event_id": change_event_id,
+                    "change_note": change_note,
+                    "snapshot": snapshot,
+                    "created_at": created_at,
+                }
+            )
+            .execute()
+            .data[0]
+        )
+        return row["id"]
+
+    # ── Задача 41: discovery новых актов ────────────────────────────────────
+
+    def list_new_events_without_impacts(self) -> list[ChangeEventRecord]:
+        rows = (
+            self._client.table("change_events")
+            .select("id, event_type, jurisdiction, effective_date, summary, payload")
+            .eq("event_type", "new")
+            .not_.is_("processed_at", "null")
+            .order("created_at")
+            .execute()
+            .data
+        )
+        if not rows:
+            return []
+        event_ids = [row["id"] for row in rows]
+        impacted = (
+            self._client.table("requirement_change_impacts")
+            .select("change_event_id")
+            .in_("change_event_id", event_ids)
+            .execute()
+            .data
+        )
+        impacted_ids = {row["change_event_id"] for row in impacted}
+        return [_event_from_row(row) for row in rows if row["id"] not in impacted_ids]
+
+    def list_approved_maps(self, jurisdiction: str) -> list[ApprovedMapRecord]:
+        rows = (
+            self._pipeline.table("maps")
+            .select("id, group_ref, jurisdiction, payload")
+            .eq("status", "approved")
+            .eq("jurisdiction", jurisdiction)
+            .execute()
+            .data
+        )
+        return [
+            ApprovedMapRecord(
+                id=row["id"],
+                group_ref=row["group_ref"],
+                jurisdiction=row["jurisdiction"],
+                payload=row["payload"],
+            )
+            for row in rows
+        ]
+
+    def find_existing_discovery_item(self, map_id: str, expected_item: str) -> str | None:
+        run_rows = (
+            self._pipeline.table("runs").select("id").eq("map_id", map_id).execute().data
+        )
+        run_ids = [row["id"] for row in run_rows]
+        if not run_ids:
+            return None
+        rows = (
+            self._pipeline.table("items")
+            .select("id")
+            .in_("run_id", run_ids)
+            .eq("expected_item", expected_item)
+            .limit(1)
+            .execute()
+            .data
+        )
+        return rows[0]["id"] if rows else None
+
+    def create_discovery_run(self, map_id: str) -> str:
+        row = self._pipeline.table("runs").insert({"map_id": map_id}).execute().data[0]
+        return row["id"]
+
+    def create_discovery_item(self, run_id: str, expected_item: str, category_slug: str) -> str:
+        row = (
+            self._pipeline.table("items")
+            .insert(
+                {
+                    "run_id": run_id,
+                    "expected_item": expected_item,
+                    "category_slug": category_slug,
+                    "status": "pending",
+                }
+            )
+            .execute()
+            .data[0]
+        )
+        return row["id"]
