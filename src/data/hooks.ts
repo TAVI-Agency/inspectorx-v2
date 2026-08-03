@@ -103,6 +103,8 @@ export function useProductBundle(productId: string | undefined, country: Country
     queryFn: () => fetchProductBundle(productId!, ctx, country),
     enabled: Boolean(productId),
     staleTime: 60_000,
+    // Смена страны (табы, Задача 31) не должна мигать полным скелетоном
+    placeholderData: (prev) => prev,
   })
 }
 

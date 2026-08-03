@@ -10,6 +10,7 @@ import {
   useProductBundle,
 } from '@/data/hooks'
 import type { Operation, TransportType } from '@/data/types'
+import { parseCountryParam, type CountryCode } from '@/data/countries'
 import {
   buildOperationNodes,
   filterRows,
@@ -23,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { CCard, CEyebrow, CLockedValue, CStatTile, CountUp } from './ui'
 import { CRouteNav, CRouteNavMobile } from './CRouteNav'
 import { CRequirementList } from './CRequirementList'
+import { CCountryNoneState, CCountryPreviewBanner, CCountryTabs } from './product/CCountryTabs'
 
 /**
  * Досье товара в дизайне C: паспорт → приборные метрики → маршрут
@@ -30,8 +32,9 @@ import { CRequirementList } from './CRequirementList'
  */
 export function CProductPage() {
   const { productId } = useParams<{ productId: string }>()
-  const [searchParams] = useSearchParams()
-  const { data, isLoading, isError } = useProductBundle(productId)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const country = parseCountryParam(searchParams.get('country'))
+  const { data, isLoading, isError } = useProductBundle(productId, country)
 
   const rows = useMemo(() => data?.rows ?? [], [data])
   const nodes = useMemo(() => buildOperationNodes(rows), [rows])
@@ -43,6 +46,19 @@ export function CProductPage() {
   const [opState, setOpState] = useState<Operation | null>(null)
   const [transport, setTransport] = useState<TransportType | null>(null)
   const activeOp = opState ?? defaultOp
+
+  /** Смена страны: сбрасывает выбор операции (у неё другой набор строк) и deep-link req */
+  function selectCountry(next: CountryCode) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (next === 'UZ') params.delete('country')
+      else params.set('country', next)
+      params.delete('req')
+      return params
+    })
+    setOpState(null)
+    setTransport(null)
+  }
 
   const filteredRows = useMemo(
     () => filterRows(rows, activeOp, transport),
@@ -79,6 +95,7 @@ export function CProductPage() {
   }
 
   const { passport, metrics } = data
+  const countryState = passport.countries.find((c) => c.country === country)?.state ?? 'live'
   const deeplinkInView = reqParam && filteredRows.some((r) => r.id === reqParam)
   const initialRequirementId = deeplinkInView ? reqParam : filteredRows[0]?.id
 
@@ -188,58 +205,73 @@ export function CProductPage() {
         )
       })()}
 
-      {rows.length === 0 ? (
-        <CCard className="mt-9 p-8 text-center">
-          <h2 className="text-lg font-semibold tracking-tight">
-            {ru.product.noRequirementsTitle}
-          </h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-            {ru.product.noRequirementsText}
-          </p>
-        </CCard>
+      <CCountryTabs
+        className="mt-7"
+        coverage={passport.countries}
+        country={country}
+        onChange={selectCountry}
+      />
+
+      {countryState === 'none' ? (
+        <CCountryNoneState className="mt-5" productId={passport.id} country={country} />
       ) : (
-        <div className="mt-9 grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="hidden lg:sticky lg:top-8 lg:block lg:self-start">
-            <CRouteNav
-              nodes={nodes}
-              activeOp={activeOp}
-              transport={transport}
-              onSelectOp={selectOp}
-              onSelectTransport={setTransport}
-            />
-          </aside>
+        <>
+          {countryState === 'preview' && <CCountryPreviewBanner className="mt-5" />}
 
-          <div className="min-w-0">
-            <div className="lg:hidden">
-              <CRouteNavMobile
-                nodes={nodes}
-                activeOp={activeOp}
-                transport={transport}
-                onSelectOp={selectOp}
-                onSelectTransport={setTransport}
-              />
-            </div>
-
-            <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 lg:mt-0">
+          {rows.length === 0 ? (
+            <CCard className="mt-5 p-8 text-center">
               <h2 className="text-lg font-semibold tracking-tight">
-                {operationMeta(activeOp).full}
-                <span className="ml-2 font-mono text-sm font-normal text-muted-foreground tabular-nums">
-                  {filteredRows.length}
-                </span>
+                {ru.product.noRequirementsTitle}
               </h2>
-            </div>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                {ru.product.noRequirementsText}
+              </p>
+            </CCard>
+          ) : (
+            <div className="mt-5 grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
+              <aside className="hidden lg:sticky lg:top-8 lg:block lg:self-start">
+                <CRouteNav
+                  nodes={nodes}
+                  activeOp={activeOp}
+                  transport={transport}
+                  onSelectOp={selectOp}
+                  onSelectTransport={setTransport}
+                />
+              </aside>
 
-            <div className="mt-4">
-              <CRequirementList
-                key={`${activeOp}-${transport ?? 'all'}`}
-                rows={filteredRows}
-                stages={stages}
-                productId={passport.id}
-                initialRequirementId={initialRequirementId}
-              />
+              <div className="min-w-0">
+                <div className="lg:hidden">
+                  <CRouteNavMobile
+                    nodes={nodes}
+                    activeOp={activeOp}
+                    transport={transport}
+                    onSelectOp={selectOp}
+                    onSelectTransport={setTransport}
+                  />
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 lg:mt-0">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    {operationMeta(activeOp).full}
+                    <span className="ml-2 font-mono text-sm font-normal text-muted-foreground tabular-nums">
+                      {filteredRows.length}
+                    </span>
+                  </h2>
+                </div>
+
+                <div className="mt-4">
+                  <CRequirementList
+                    key={`${activeOp}-${transport ?? 'all'}`}
+                    rows={filteredRows}
+                    stages={stages}
+                    productId={passport.id}
+                    initialRequirementId={initialRequirementId}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   )
