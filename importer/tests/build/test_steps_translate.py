@@ -25,6 +25,8 @@ from importer.build.agents import load_models_config, verifier_model_for
 from importer.build.legalx import NormFragment
 from importer.build.steps import ItemContext, ItemRecord
 from importer.build.steps_translate import TranslateStep
+from importer.build.trace import Tracer
+from importer.tests.build.stores import InMemoryStore
 
 
 # ── Мок LLM для скриптовки ответов ───────────────────────────────────────────
@@ -476,3 +478,50 @@ def test_translate_step_result_structure_complete():
     assert "steps" in translations["lawyer_instruction"]
     assert "verdict" in translations["lawyer_instruction"]
     assert len(translations["lawyer_instruction"]["steps"]) == 3
+
+
+# ── Трейсинг _translate (гейт живого прогона, LAUNCH_CHECKLIST.md п.3) ──────
+
+
+def test_translate_step_translator_call_is_traced_when_tracer_given():
+    """Пин-тест: раньше `_translate` звал `self._llm.complete(...)` в обход
+    `agents.py` — вызов переводчика не попадал в `pipeline.llm_calls`, хотя
+    `self._tracer` уже прокидывался конструктору (использовался только
+    Verifier'ом). С `tracer=` — запись под role='translator' появляется, ОТДЕЛЬНО
+    от уже существующей role='verifier'."""
+    store = InMemoryStore()
+    tracer = Tracer(store, "run-1")
+    llm = ScriptedLLM([
+        translation_json("Узбекский перевод"),
+        verdict_json(True),
+    ])
+    step = TranslateStep(llm, target_lang="uz", tracer=tracer)
+    ctx = item_ctx()
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    roles = [call["role"] for call in store.llm_calls]
+    assert roles.count("translator") == 1
+    assert roles.count("verifier") == 1
+    translator_call = next(c for c in store.llm_calls if c["role"] == "translator")
+    assert translator_call["run_id"] == "run-1"
+    assert translator_call["input_tokens"] > 0
+
+
+def test_translate_step_without_tracer_writes_no_llm_calls():
+    """Без tracer= (дефолт `None`) — ни один вызов LLM шага 'translate' не
+    попадает в pipeline.llm_calls, тот же no-op, что и у остальных
+    generic-агентов без tracer (см. `agents.py:_trace_llm_call`)."""
+    store = InMemoryStore()  # доступен, но НЕ передан в TranslateStep
+    llm = ScriptedLLM([
+        translation_json("Узбекский перевод"),
+        verdict_json(True),
+    ])
+    step = TranslateStep(llm, target_lang="uz")  # tracer не задан
+    ctx = item_ctx()
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert store.llm_calls == []

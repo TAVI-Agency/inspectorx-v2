@@ -58,6 +58,12 @@ from importer.build.agents import (
     ModelsConfig,
     Verdict,
     Verifier,
+    # _trace_llm_call — приватный хелпер agents.py, импортируется явно (не
+    # export API модуля), чтобы шаг 'translate' считал токены/cost_usd ТЕМ
+    # ЖЕ способом, что и generic-агенты (Retriever/Verifier/Classifier/
+    # Summarizer) — см. докстринг `TranslateStep._translate` (гейт живого
+    # прогона, LAUNCH_CHECKLIST.md, пункт 3).
+    _trace_llm_call,
     load_models_config,
 )
 from importer.build.llm_client import AgentLLMClient, AgentLLMError, RunnerAgentLLM
@@ -188,7 +194,19 @@ class TranslateStep:
         return payload
 
     def _translate(self, payload: dict, model: str) -> str:
-        """Вызывает LLM-транслятор с профилем."""
+        """Вызывает LLM-транслятор с профилем.
+
+        Гейт живого прогона (LAUNCH_CHECKLIST.md, пункт 3): раньше вызов шёл
+        `self._llm.complete(...)` мимо `agents.py` целиком — `self._tracer`
+        конструктор получал ТОЛЬКО ради `Verifier` (см. `_run`), сам перевод
+        в `pipeline.llm_calls` не попадал, хотя `build cost --run <id>`
+        (`trace.py:cost_report`) заявляет покрытие по ролям — дыра ровно на
+        переводах. Трейсим ТЕМ ЖЕ хелпером `_trace_llm_call`, что и
+        generic-агенты (`agents.py`) — одинаковая оценка токенов
+        (`llm.last_usage`, иначе `len(...)//4` фолбэк) и тот же no-op при
+        `tracer=None` (обратная совместимость вызовов без tracer). Роль —
+        `'translator'`, отдельная от `'verifier'` (та же функция ниже уже
+        трейсит Verifier под своей ролью) — разные строки cost-отчёта."""
         prompt = (
             f"{self._profile.system_prompt}\n\n"
             f"Целевой язык: {self._target_lang}\n\n"
@@ -198,7 +216,9 @@ class TranslateStep:
             f"как в исходных данных (null оставляй null, списки сохраняй такой же длины)."
         )
 
-        return self._llm.complete(prompt, model)
+        answer = self._llm.complete(prompt, model)
+        _trace_llm_call(self._tracer, "translator", self._llm, model, prompt, answer)
+        return answer
 
     def _build_verifier_fragment(self, translation_data: dict) -> str:
         """Собирает кратко переведённый текст для проверки Verifier'ом."""

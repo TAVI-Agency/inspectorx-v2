@@ -16,7 +16,6 @@ from importer.build.orchestrator import (
     SupabaseBuildStore,
 )
 from importer.build.registry import build_step_registry
-from importer.build.steps import load_default_steps
 from importer.build.trace import Tracer, cost_report
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
@@ -25,6 +24,7 @@ from importer.monitoring.change_history import build_change_history
 from importer.monitoring.discovery import run_discovery
 from importer.monitoring.impact_mapper import (
     InHouseLawyer,
+    MapAwareRerunOrchestrator,
     SupabaseMonitoringStore,
     process_changes,
 )
@@ -308,21 +308,23 @@ def main(argv=None):
     if args.cmd == "monitor":
         if args.monitor_cmd == "process-changes":
             monitor_store = SupabaseMonitoringStore(ix)
-            # Оркестратор ре-ревью — БЕЗ явного steps= (глобальный реестр
-            # `get_step`, наполняется `load_default_steps()` ниже): в
-            # отличие от `build run`, у `rerun_item` нет одной карты
-            # (group_ref/jurisdiction), из которой `build_step_registry`
-            # мог бы собрать per-run реестр — затронутые требования этого
-            # прогона мониторинга могут быть из РАЗНЫХ групп/юрисдикций.
-            # Глобальный реестр использует заглушки `_STUB_GROUP_REF=""`/
-            # `DEFAULT_JURISDICTION='UZ'` (см. докстринг `registry.py`) —
-            # корректно для UZ-прогонов по группе, случайно совпавшей с
-            # заглушкой; полная привязка per-item реестра к его исходной
-            # карте — известный технический долг, тот же, что уже
-            # зафиксирован в `registry.py`, не новый для этой задачи.
-            load_default_steps()
+            # Гейт живого прогона (LAUNCH_CHECKLIST.md, пункт 2): затронутые
+            # требования одного прогона мониторинга могут принадлежать
+            # РАЗНЫМ картам (group_ref/jurisdiction) — раньше здесь стоял
+            # `Orchestrator(build_store)` БЕЗ `steps=`, что уводило ре-ревью
+            # в ГЛОБАЛЬНЫЙ реестр `steps.py` (заглушки `_STUB_GROUP_REF=""`/
+            # `DEFAULT_JURISDICTION='UZ'`, см. докстринг `registry.py`) —
+            # `LoadStep.external_key` строился как `':UZ:hash'` и
+            # `save_requirement_draft` создавал НОВОЕ published-требование
+            # дублем старого. `MapAwareRerunOrchestrator` (`impact_mapper.py`)
+            # резолвит РЕАЛЬНУЮ карту каждого айтема (`resolve_item_map_ref`)
+            # и строит `build_step_registry` под неё per-item, кэшируя по
+            # `map_id` в рамках прогона — `load_default_steps()`/глобальный
+            # реестр здесь больше не нужны.
             build_store = SupabaseBuildStore(ix)
-            orchestrator = Orchestrator(build_store)
+            orchestrator = MapAwareRerunOrchestrator(
+                build_store, monitor_store, _monitor_llm_runner, get_legalx_client(),
+            )
             lawyer = InHouseLawyer(RunnerAgentLLM(_monitor_llm_runner))
             report = process_changes(
                 monitor_store,
