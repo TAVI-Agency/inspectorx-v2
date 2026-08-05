@@ -5,6 +5,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type UseQueryResult,
 } from '@tanstack/react-query'
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
@@ -12,17 +13,23 @@ import { supabase } from '@/lib/supabase'
 import { ru } from '@/i18n/ru'
 import type {
   AppNotification,
+  ComparisonMatrix,
   LawyerReview,
   RequirementRow,
   ReviewVerdict,
   SearchKind,
   UserQuestion,
 } from './types'
+import type { CountryCode } from './countries'
 import {
   buildPortfolio,
+  createCalendarToken,
+  deleteCalendarToken,
   demoPortfolioIds,
+  fetchCalendarToken,
   fetchCard,
   fetchChangeFeed,
+  fetchComparisonMatrix,
   fetchLawyerReviews,
   fetchProductBundle,
   fetchReviewStats,
@@ -39,12 +46,14 @@ import {
   fetchLawyerNotificationsReal,
   fetchLawyerStatsReal,
   fetchLeaderboardReal,
+  fetchLifecycleNotificationsReal,
   fetchMyLawyerProfileReal,
   fetchMyQuestionsReal,
   fetchMyReviewsReal,
   fetchReviewQueueReal,
   fetchSubscriptionRequests,
   markLawyerNotificationReadReal,
+  markLifecycleNotificationReadReal,
   removeChosenReal,
   submitContentRequest,
   submitLawyerApplicationReal,
@@ -88,13 +97,22 @@ export function useSearchQuery(query: string, kind: SearchKind) {
   })
 }
 
-export function useProductBundle(productId: string | undefined) {
+export function useProductBundle(productId: string | undefined, country: CountryCode = 'UZ') {
   const ctx = useDataCtx()
   return useQuery({
-    queryKey: ['product', productId, ctx.realSubscriber, ctx.mockSubscriber, ctx.verifiedLawyer],
-    queryFn: () => fetchProductBundle(productId!, ctx),
+    queryKey: [
+      'product',
+      productId,
+      country,
+      ctx.realSubscriber,
+      ctx.mockSubscriber,
+      ctx.verifiedLawyer,
+    ],
+    queryFn: () => fetchProductBundle(productId!, ctx, country),
     enabled: Boolean(productId),
     staleTime: 60_000,
+    // Смена страны (табы, Задача 31) не должна мигать полным скелетоном
+    placeholderData: (prev) => prev,
   })
 }
 
@@ -106,6 +124,19 @@ export function useServiceBundle(serviceId: string | undefined) {
     queryFn: () => fetchServiceBundle(serviceId!),
     enabled: Boolean(serviceId),
     staleTime: 60_000,
+  })
+}
+
+/**
+ * Матрица сравнения стран (Задача 32) — лениво: смонтирована только пока
+ * открыт диалог CCompareMatrixButton, чтобы не грузить её на каждый визит
+ * страницы товара.
+ */
+export function useComparisonMatrix(productId: string): UseQueryResult<ComparisonMatrix> {
+  return useQuery({
+    queryKey: ['comparison', productId],
+    queryFn: () => fetchComparisonMatrix(productId),
+    staleTime: 5 * 60_000,
   })
 }
 
@@ -214,6 +245,51 @@ export function useUpdateProfile() {
   })
 }
 
+// ── Календарь дедлайнов (Блок 5, Задача 37) ──────────────────────────
+// Ключ несёт id юзера (как useLeaderboard/useMyReviews) — токен персональный
+// секрет, чужой строки в кэше после смены аккаунта в той же вкладке
+// оставаться не должно.
+
+export function useCalendarToken() {
+  const { session, realSubscriber } = useAuth()
+  return useQuery({
+    queryKey: ['calendar-token', session?.user.id ?? 'anon'],
+    queryFn: fetchCalendarToken,
+    enabled: Boolean(session) && realSubscriber,
+    staleTime: 30_000,
+  })
+}
+
+export function useConnectCalendar() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  const key = ['calendar-token', session?.user.id ?? 'anon']
+  return useMutation({
+    mutationFn: async () => {
+      if (!session) throw new Error('auth-required')
+      return createCalendarToken(session.user.id)
+    },
+    // setQueryData вместо invalidate: значение уже на руках после insert,
+    // фоновый рефетч по инвалидации на миг вернул бы кэш к старому null
+    // (initial fetch уже резолвился в null, isLoading больше не true) —
+    // кнопка «Подключить» мигнула бы обратно до завершения рефетча.
+    onSuccess: (token) => void qc.setQueryData(key, token),
+  })
+}
+
+export function useDisconnectCalendar() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  const key = ['calendar-token', session?.user.id ?? 'anon']
+  return useMutation({
+    mutationFn: async () => {
+      if (!session) throw new Error('auth-required')
+      await deleteCalendarToken(session.user.id)
+    },
+    onSuccess: () => void qc.setQueryData(key, null),
+  })
+}
+
 // ── Центр уведомлений (колокольчик) ────────────────────────────────
 
 /**
@@ -229,8 +305,10 @@ export function useNotificationCenter() {
   const { data: lawyerProfile } = useMyLawyerProfile()
   const verified = lawyerProfile?.status === 'verified'
   const { data: lawyerNotifs } = useLawyerNotifications(verified)
+  const { data: lifecycleNotifs } = useLifecycleNotifications()
   const markChange = useMarkChangeRead()
   const markLawyer = useMarkNotificationRead()
+  const markLifecycle = useMarkLifecycleNotificationRead()
 
   const items: AppNotification[] = []
 
@@ -279,12 +357,26 @@ export function useNotificationCenter() {
     })
   }
 
+  for (const n of lifecycleNotifs ?? []) {
+    items.push({
+      id: `lifecycle-${n.id}`,
+      kind: 'lifecycle',
+      sourceId: n.id,
+      title: ru.notifications.lifecycle[n.event],
+      subtitle: n.requirementTitle,
+      link: n.link,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+    })
+  }
+
   items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   const markRead = (n: AppNotification) => {
     if (n.isRead) return
     if (n.kind === 'change') markChange.mutate(n.sourceId)
     else if (n.kind === 'lawyer') markLawyer.mutate(n.sourceId)
+    else if (n.kind === 'lifecycle') markLifecycle.mutate(n.sourceId)
     else {
       markQuestionAnswerRead(n.sourceId)
       void qc.invalidateQueries({ queryKey: ['my-questions'] })
@@ -513,6 +605,27 @@ export function useMarkNotificationRead() {
     mutationFn: (id: string) => markLawyerNotificationReadReal(id),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ['lawyer-notifications'] }),
+  })
+}
+
+/** Lifecycle-уведомления (user_notifications, kind='lifecycle') — заводит cron Задачи 38 */
+export function useLifecycleNotifications() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['lifecycle-notifications', session?.user.id ?? 'anon'],
+    queryFn: fetchLifecycleNotificationsReal,
+    enabled: Boolean(session),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+}
+
+export function useMarkLifecycleNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => markLifecycleNotificationReadReal(id),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['lifecycle-notifications'] }),
   })
 }
 

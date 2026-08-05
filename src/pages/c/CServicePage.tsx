@@ -7,6 +7,7 @@ import { useServiceBundle } from '@/data/hooks'
 import type { StageInfo } from '@/data/types'
 import { inProgressStageIds, productLinkForService } from '@/data/cross-links'
 import { formatDate } from '@/lib/format'
+import { codeSystemLabel } from '@/i18n/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { CCard, CEyebrow, CLockedValue, CStatTile, CountUp } from './ui'
@@ -92,12 +93,12 @@ export function CServicePage() {
           )}
           {passport.okedCode && (
             <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
-              {ru.service.okedLabel} {passport.okedCode}
+              {codeSystemLabel('oked')} {passport.okedCode}
             </span>
           )}
           {passport.ikpuCode && (
             <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
-              {ru.product.ikpuLabel} {passport.ikpuCode}
+              {codeSystemLabel('ikpu')} {passport.ikpuCode}
             </span>
           )}
           {passport.complexity != null && <ComplexityMeter value={passport.complexity} />}

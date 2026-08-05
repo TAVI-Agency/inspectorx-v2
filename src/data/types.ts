@@ -3,6 +3,7 @@
  * откуда пришли данные (Supabase или мок), решает слой src/data.
  */
 import type { RequirementCategory } from './taxonomy'
+import type { CountryCode, LifecycleStatus } from './countries'
 
 export type Deontic = 'obligation' | 'prohibition' | 'permission'
 export type PartyRole =
@@ -54,6 +55,30 @@ export interface SearchHit {
   categoryName?: string
 }
 
+// ── Мультистрановость (ADR-0004/0005, Блок 4) ──────────────────────
+
+/** Покрытие товара/услуги по стране — бейдж таба на карточке. */
+export type CountryCoverage = {
+  country: CountryCode
+  published: number
+  state: 'live' | 'preview' | 'none'
+}
+
+/**
+ * Матрица сравнения стран по категориям требований (Задача 32) — бесплатный
+ * тизер над карточкой товара: только requirements-уровень (category_slug +
+ * lifecycle), без деталей/цитат за пейволлом (решение грил-сессии №4).
+ * Строки — категории из requirement_categories, колонки — страны.
+ */
+export type ComparisonMatrix = {
+  categories: { slug: string; name: string; sortOrder: number }[] // из requirement_categories
+  countries: CountryCode[]
+  cells: Record<
+    string /*slug*/,
+    Record<CountryCode, { state: 'present' | 'absent' | 'preview'; worstLifecycle?: LifecycleStatus }>
+  >
+}
+
 // ── Паспорт товара ─────────────────────────────────────────────────
 
 export interface ProductPassport {
@@ -67,6 +92,10 @@ export interface ProductPassport {
   hierarchyLevels: string[]
   complexity?: number
   verifiedAt?: string
+  /** Покрытие по всем странам (табы UZ/KZ/AE) — считается независимо от выбранной страны */
+  countries: CountryCoverage[]
+  /** Нац. коды ВЫБРАННОЙ страны из catalog.country_codes (по product_type_id) */
+  codes: { system: string; code: string }[]
 }
 
 // ── Паспорт услуги ─────────────────────────────────────────────────
@@ -112,6 +141,15 @@ export interface StageInfo {
 export interface RequirementRow {
   id: string
   title: string
+  jurisdiction: CountryCode
+  /** Вычисляемый статус жизненного цикла (requirements_with_status.lifecycle) */
+  lifecycle: LifecycleStatus
+  /** Даты ЖЦ для бейджа (requirements.effective_from) — когда lifecycle='upcoming' */
+  effectiveFrom?: string
+  /** requirements.transition_until — когда lifecycle='transitional' */
+  transitionUntil?: string
+  /** requirements.valid_to — когда lifecycle='expiring' */
+  validTo?: string
   deontic: Deontic
   roles: PartyRole[]
   operation: Operation
@@ -160,11 +198,44 @@ export interface FaqItem {
   trustLabel: TrustLabel
 }
 
+/** Судебный кейс — снапшот из SudX (requirement_details.court_cases), только UZ */
+export interface CourtCase {
+  caseUrl: string
+  caseTitle: string
+  summaryLine: string
+  outcome: string
+  amount?: string
+}
+
+/** Шаблон документа от Template hunter (requirement_details.templates) */
+export interface DocumentTemplate {
+  name: string
+  sourceUrl: string
+  note?: string
+}
+
+/** Рекомендация in-house юриста (requirement_details.lawyer_instruction) */
+export interface LawyerInstruction {
+  verdict: string
+  steps: string[]
+}
+
 export interface RequirementDetail {
   description?: string
   steps: HowToStep[]
   documents: RequiredDocument[]
   sanctions: SanctionItem[]
+  /** Пояснение юриста к бейджу lifecycle-статуса (requirement_details.status_note) */
+  statusNote?: string
+  /**
+   * До 5 кейсов по статье санкции (TARGET_FORMAT §4б); отсутствие поля или
+   * null/[] — «Данных пока нет» (§4в), блок внутри карточки не скрывается.
+   */
+  courtCases?: CourtCase[] | null
+  /** Шаблоны документов; null/[] — «Данных пока нет» (различие серверное) */
+  templates?: DocumentTemplate[] | null
+  /** null — «Данных пока нет» */
+  lawyerInstruction?: LawyerInstruction | null
 }
 
 export interface AuthorityInfo {
@@ -195,6 +266,8 @@ export interface HistoryEntry {
 
 export interface RequirementCard {
   requirementId: string
+  jurisdiction: CountryCode
+  lifecycle: LifecycleStatus
   authority?: AuthorityInfo
   detail: Gated<RequirementDetail>
   citations: Gated<Citation[]>
@@ -287,6 +360,22 @@ export interface LawyerNotification {
   createdAt: string
 }
 
+/** Событие ЖЦ требования — ключ payload->>'event' в user_notifications (Задача 38) */
+export type LifecycleEventKind = 'effective_from' | 'transition_until' | 'valid_to'
+
+/** Lifecycle-уведомление из user_notifications (kind='lifecycle'), заводит cron Задачи 38 */
+export interface LifecycleNotification {
+  id: string
+  event: LifecycleEventKind
+  date: string
+  requirementId: string
+  requirementTitle: string
+  /** Страница товара/услуги с раскрытым требованием */
+  link?: string
+  isRead: boolean
+  createdAt: string
+}
+
 /** Строка очереди «Ждут проверки» */
 export interface ReviewQueueItem {
   requirementId: string
@@ -336,13 +425,15 @@ export interface UserQuestion {
 
 // ── Центр уведомлений (колокольчик) ────────────────────────────────
 
-export type AppNotificationKind = 'change' | 'question' | 'lawyer'
+export type AppNotificationKind = 'change' | 'question' | 'lawyer' | 'lifecycle'
 
 /**
  * Строка центра уведомлений. Источники:
  * change — мок-лента изменений портфеля (прочитанность — ix-read-changes),
  * question — ответ на вопрос пользователя (прочитанность — локальный стор),
- * lawyer — реальные уведомления юриста (lawyer_notifications).
+ * lawyer — реальные уведомления юриста (lawyer_notifications),
+ * lifecycle — переход даты ЖЦ требования, реальные user_notifications
+ *   (kind='lifecycle'), заводит cron Задачи 38.
  */
 export interface AppNotification {
   id: string

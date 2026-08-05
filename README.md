@@ -8,7 +8,7 @@ Compliance-платформа для Узбекистана: «чек-лист �
 
 ## Стек
 
-Vite + React + TypeScript + Tailwind v4 + shadcn/ui · Supabase (Postgres, Auth, RLS) · позже: Railway (конвейер Bridge)
+Vite + React + TypeScript + Tailwind v4 + shadcn/ui · Supabase (Postgres, Auth, RLS) · Railway (Hobby) — Python-воркеры LegalX и InspectorX, см. `docs/adr/0002-ecosystem-topology.md`
 
 ## Запуск
 
@@ -26,7 +26,9 @@ npm run dev
 supabase db start && supabase db reset --local
 ```
 
-Накат на прод — `supabase db push` (линкованный проект) или Supabase MCP.
+Накат на прод — автоматический: мёрж в `main` применяет новые миграции к боевой базе через
+GitHub-интеграцию Supabase. Ручной путь (`supabase db push`) — запасной.
+Аккаунты и доступы — `docs/INFRA_ACCOUNTS.md`.
 
 Ключевые инварианты схемы:
 

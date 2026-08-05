@@ -6,6 +6,17 @@
 > Где лежат старые сессии физически — memory/session-recovery-map.md
 > (каталоги `~/.claude/projects/-Users-abduraxmonturdiyev-inspector-x-final*`).
 
+> **02–04.08.2026 (дополнение, мастер-план №1, ветка `feat/master-plan-1`, не в
+> проде):** рядом с этим треком реализован НОВЫЙ Build-конвейер — `importer/build/`
+> (Cartographer + 14-узловой Orchestrator + coverage + publish + golden set +
+> трейсинг стоимости, контур A/D из Miro; статус — `docs/ARCHITECTURE_FLOW.md`,
+> раздел «СЛОЙ 2 → Целевое решение»). Он не заменяет и не трогает legacy-код
+> ниже (`importer/pipeline.py`, `parser.py`, `resolver.py`, `verifier.py`,
+> `research-loop/`) — тот остаётся как есть, работа над ним (фазы 3–4 UZ-first)
+> не продолжалась. Оба конвейера физически живут в одном пакете `importer/`, но
+> не пересекаются кодом; `importer/cli.py` — общая точка входа для обоих
+> (`import-report` — legacy, `build …`/`monitor …` — новый).
+
 ## Таймлайн
 
 | Дата | Что было | Артефакты |
@@ -75,7 +86,10 @@
 - Сессии Claude: старые в `~/.claude/projects/`, новые в `~/.claude-personal/projects/`.
 - lex.uz: `/docs/-N` и `/docs/N` — разные документы; у каждой языковой версии свой doc_id;
   UZ-версию искать по ссылкам в шапке (`docContentHeader__item-link`).
-- Supabase CLI: `env -u SUPABASE_ACCESS_TOKEN`; MCP смотрит в чужой аккаунт — CLI/psql.
+- Supabase (обновлено 02.08.2026 после переезда проектов на основной аккаунт): токен
+  `SUPABASE_ACCESS_TOKEN` из `.env.importer` протух (`403`), CLI залогинен в посторонний
+  аккаунт, MCP не авторизован. Работает только `IX_SUPABASE_SERVICE_KEY` — через него и
+  ходить. Порядок починки — `INFRA_ACCOUNTS.md`.
 - Сетевые команды в песочнице падают — dangerouslyDisableSandbox.
 - gh: два аккаунта; репо видит только TAVI-Agency (`gh auth switch -u TAVI-Agency`).
 - Тесты: `.venv-importer/bin/python -m pytest importer/tests -q` из корня worktree.

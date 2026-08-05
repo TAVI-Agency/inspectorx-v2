@@ -10,7 +10,22 @@ enabled = true
 port = 54331
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# `pipeline` — схема оркестратора Build (Задача 11/14, docs/adr/0003-agent-flow.md):
+# без неё supabase-py `.schema("pipeline")` падает PGRST106 даже под service_role.
+# Безопасно экспонировать: RLS на всех таблицах схемы deny anon/authenticated,
+# grants только у service_role (см. supabase/migrations/20260803170000_pipeline_schema.sql).
+# ПРОД: та же схема должна быть добавлена в Exposed schemas (Dashboard → API)
+# при мёрже — иначе SupabaseBuildStore не заработает на проде.
+# `catalog` — товарный каталог (ADR-0004, docs/adr/0004-product-catalog.md):
+# без неё `.schema("catalog")` (SupabaseBuildStore.list_group_product_types,
+# Задача 20) падает тем же PGRST106. Комментарий миграции
+# `20260803100000_catalog_schema.sql` («схема не экспоузится через PostgREST»)
+# устарел этим фиксом — актуальное решение здесь, миграцию задним числом не
+# правим. Экспонировать безопасно: RLS публичное чтение (не платный контент,
+# пейволл — на requirement_details), запись только у service_role.
+# ПРОД: та же схема должна быть добавлена в Exposed schemas (Dashboard → API)
+# при мёрже — иначе SupabaseBuildStore.list_group_product_types не заработает.
+schemas = ["public", "graphql_public", "pipeline", "catalog"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size

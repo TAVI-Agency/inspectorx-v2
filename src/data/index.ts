@@ -12,6 +12,8 @@ import {
   locked,
   ok,
   type ChangeCard,
+  type ComparisonMatrix,
+  type CountryCoverage,
   type Gated,
   type LawyerReview,
   type PortfolioItem,
@@ -27,8 +29,15 @@ import {
   type TelemetryStats,
   type WeekSummary,
 } from './types'
+import { COUNTRIES, type CountryCode, type LifecycleStatus } from './countries'
+import { categoryChipOf } from './taxonomy'
+import { formatFine, type Fine } from '@/i18n/format'
 import {
+  createCalendarTokenReal,
+  deleteCalendarTokenReal,
+  fetchCalendarTokenReal,
   fetchCardReal,
+  fetchComparisonReal,
   fetchLawyerReviewsReal,
   fetchPassportReal,
   fetchRequirementsReal,
@@ -40,6 +49,8 @@ import {
   searchProductsReal,
   searchServicesReal,
   setReviewVoteReal,
+  worseLifecycle,
+  type CalendarTokenRow,
 } from './real'
 import {
   CIGARETTES_PRODUCT_ID,
@@ -63,6 +74,7 @@ import {
 } from './mock/fixtures'
 import { loadMockReviewVotes, readChangeIds, saveMockReviewVote } from './mock/read-store'
 import { CAFE_SERVICE_ID, PHARMACY_SERVICE_ID } from './cross-links'
+import { isKzRequirementId, kzCardFor, kzCodesFor, kzRowsFor, kzStagesFor } from './mock/kz-fixtures'
 
 export interface DataCtx {
   /** Реальная подписка (profiles.is_subscribed под сессией) */
@@ -196,15 +208,54 @@ function changes30dFor(productId: string): number {
   ).length
 }
 
+/**
+ * Единицы санкций, которые конвейер уже писал в открытый текст (регистр
+ * источника не важен — «до 200 брв» встречается наравне с «БРВ»). Список не
+ * заменяет общий разбор ниже, а расширяет его: новую/незнакомую единицу
+ * будущей страны код всё равно подхватит по общему правилу «слово заглавными
+ * буквами сразу после числа» — сюда добавляются только единицы, которые
+ * встречались НЕ заглавными в реальном контенте (иначе делать регистр
+ * нечувствительным для них не нужно).
+ */
+const KNOWN_FINE_UNITS = new Set(['БРВ', 'МРП', 'AED'])
+
+/**
+ * Разбор «сумма + единица» из открытого текста уровня 0 (sanction_summary):
+ * не завязан на конкретную единицу измерения — конвейер пишет её как есть,
+ * своя для каждой юрисдикции, код её не выбирает и не хардкодит
+ * (TARGET_FORMAT §4, доп. 02.08.2026 «Санкции — структура»). Единица —
+ * слово из 3–6 букв сразу после числа (`\p{L}`, не `\b`: латиница и
+ * кириллица вперемешку, а `\b` в JS не видит границы слова у кириллицы),
+ * которое либо входит в KNOWN_FINE_UNITS (регистр не важен), либо целиком
+ * заглавное в исходном тексте — так отсекаются обычные слова рядом с числом
+ * («до 5 лет», «в течение 30 дней»: пишутся строчными и не входят в список)
+ * и смешанный регистр отсылок к кодексу («ст. 128 КоАО»), но не отсекаются
+ * будущие незнакомые единицы других юрисдикций, если конвейер напишет их
+ * заглавными — тем же способом, каким уже пишет БРВ/МРП.
+ */
+function extractMaxFine(text: string | undefined): Fine | null {
+  if (!text) return null
+  let best: Fine | null = null
+  for (const m of text.matchAll(/(\d+)\s*(\p{L}{3,6})(?!\p{L})/gu)) {
+    const amount = Number(m[1])
+    if (amount <= 0) continue
+    const raw = m[2]
+    const unit = raw.toUpperCase()
+    const looksLikeUnit = KNOWN_FINE_UNITS.has(unit) || raw === unit
+    if (looksLikeUnit && (!best || amount > best.amount)) best = { amount, unit }
+  }
+  return best
+}
+
 /** Макс. санкция из ОТКРЫТЫХ строк уровня 0 — то, что аноним и так видит.
  *  Закрывать метрику, когда суммы напечатаны в списке, — ложь интерфейса. */
-function maxSanctionFromRows(rows: RequirementRow[]): string | null {
-  let max = 0
+function maxSanctionFromRows(rows: RequirementRow[], country: CountryCode): string | null {
+  let max: Fine | null = null
   for (const r of rows) {
-    const m = r.sanctionSummary?.match(/до\s+(\d+)\s*БРВ/i)
-    if (m) max = Math.max(max, Number(m[1]))
+    const fine = extractMaxFine(r.sanctionSummary)
+    if (fine && (!max || fine.amount > max.amount)) max = fine
   }
-  return max > 0 ? `до ${max} БРВ` : null
+  return max ? formatFine(max, country) : null
 }
 
 function metricsFor(
@@ -217,7 +268,8 @@ function metricsFor(
   let documents: Gated<number> = locked
   if (subscriber && mock) documents = ok(mock.documents)
 
-  const openMax = maxSanctionFromRows(rows)
+  // metricsFor зовётся только для УЗ-ветки бандла (previewMetrics — для KZ/AE)
+  const openMax = maxSanctionFromRows(rows, 'UZ')
   let maxSanction: Gated<string> = openMax
     ? ok(openMax)
     : subscriber && mock
@@ -232,44 +284,177 @@ function metricsFor(
   }
 }
 
+/** Метрики для превью-стран (KZ/AE) — без подписочного оверлея, санкции только из открытых строк. */
+function previewMetrics(rows: RequirementRow[], country: CountryCode): SummaryMetrics {
+  const openMax = maxSanctionFromRows(rows, country)
+  return {
+    requirements: rows.length,
+    documents: locked,
+    maxSanction: openMax ? ok(openMax) : locked,
+    changes30d: 0,
+  }
+}
+
+function emptyMetrics(): SummaryMetrics {
+  return { requirements: 0, documents: locked, maxSanction: locked, changes30d: 0 }
+}
+
+/** Состояние страны фиксировано (стадия раскатки), published — per-товар. */
+const COUNTRY_STATE: Record<CountryCode, CountryCoverage['state']> = {
+  UZ: 'live',
+  KZ: 'preview',
+  AE: 'none',
+}
+
+function countriesCoverage(productId: string, uzPublished: number): CountryCoverage[] {
+  return COUNTRIES.map((country) => ({
+    country,
+    published:
+      country === 'UZ' ? uzPublished : country === 'KZ' ? kzRowsFor(productId).length : 0,
+    state: COUNTRY_STATE[country],
+  }))
+}
+
 export async function fetchProductBundle(
   productId: string,
   ctx: DataCtx,
+  country: CountryCode = 'UZ',
 ): Promise<ProductBundle | null> {
-  // Полностью мок-товар
+  // Полностью мок-товар (UZ-only; для KZ/AE у него ещё нет требований)
   if (productId === PARACETAMOL_PRODUCT_ID) {
-    const rows = applyChangeOverlay(productId, mockRowsFor(productId))
+    const uzRows = mockRowsFor(productId)
+    const countries = countriesCoverage(productId, uzRows.length)
+    if (country === 'UZ') {
+      const rows = applyChangeOverlay(productId, uzRows)
+      return {
+        passport: { ...paracetamolPassport, countries },
+        rows,
+        stages: stagesFromRows(rows),
+        metrics: metricsFor(productId, rows, ctx),
+      }
+    }
+    const rows = country === 'KZ' ? kzRowsFor(productId) : []
     return {
-      passport: paracetamolPassport,
+      passport: { ...paracetamolPassport, countries, codes: kzCodesFor(productId) },
       rows,
-      stages: stagesFromRows(rows),
-      metrics: metricsFor(productId, rows, ctx),
+      stages: kzStagesFor(productId),
+      metrics: previewMetrics(rows, country),
     }
   }
 
-  const passport = await fetchPassportReal(productId)
+  const passport = await fetchPassportReal(productId, country)
   if (!passport) return null
 
-  // Реальный товар с мок-требованиями (молоко)
+  // Реальный товар с мок-требованиями (молоко) — тоже UZ-only демо
   if (productId === MILK_PRODUCT_ID) {
-    const rows = applyChangeOverlay(productId, mockRowsFor(productId))
+    const uzRows = mockRowsFor(productId)
+    const countries = countriesCoverage(productId, uzRows.length)
+    // ИКПУ молока — мок-поле (в схеме БД его нет, см. milkPassportExtras),
+    // остальные коды (ТН ВЭД) уже пришли из catalog.country_codes реальным
+    // паспортом; KZ/AE-ветка ниже полностью заменяет codes на kzCodesFor —
+    // ИКПУ (фискальный код УЗ) там ни при чём, перезапишется корректно.
+    const milkPassport = {
+      ...passport,
+      ...milkPassportExtras,
+      displayName: passport.displayName,
+      codes: [...passport.codes, { system: 'ikpu', code: milkPassportExtras.ikpuCode }],
+    }
+    if (country === 'UZ') {
+      const rows = applyChangeOverlay(productId, uzRows)
+      return {
+        passport: { ...milkPassport, countries },
+        rows,
+        stages: stagesFromRows(rows),
+        metrics: metricsFor(productId, rows, ctx),
+      }
+    }
+    const rows = country === 'KZ' ? kzRowsFor(productId) : []
     return {
-      passport: { ...passport, ...milkPassportExtras, displayName: passport.displayName },
+      passport: { ...milkPassport, countries, codes: kzCodesFor(productId) },
       rows,
-      stages: stagesFromRows(rows),
-      metrics: metricsFor(productId, rows, ctx),
+      stages: kzStagesFor(productId),
+      metrics: previewMetrics(rows, country),
     }
   }
 
   // Живые данные (сигареты и все остальные наполненные товары)
-  const list = await fetchRequirementsReal(passport.hsCode)
-  const rows = applyChangeOverlay(productId, list.rows)
+  const uzList = await fetchRequirementsReal(passport.hsCode, 'UZ')
+  const countries = countriesCoverage(productId, uzList.rows.length)
+
+  if (country === 'KZ') {
+    const rows = kzRowsFor(productId)
+    return {
+      passport: { ...passport, countries, codes: kzCodesFor(productId) },
+      rows,
+      stages: kzStagesFor(productId),
+      metrics: previewMetrics(rows, country),
+    }
+  }
+  if (country === 'AE') {
+    return {
+      passport: { ...passport, countries, codes: [] },
+      rows: [],
+      stages: [],
+      metrics: emptyMetrics(),
+    }
+  }
+
+  const rows = applyChangeOverlay(productId, uzList.rows)
   return {
-    passport: { ...passport, verifiedAt: list.verifiedAt },
+    passport: { ...passport, verifiedAt: uzList.verifiedAt, countries },
     rows,
     stages: stagesFromRows(rows),
     metrics: metricsFor(productId, rows, ctx),
   }
+}
+
+// ── Матрица сравнения стран (Задача 32, Блок 4) ────────────────────
+
+/** Категория + lifecycle из произвольного набора строк (мок или KZ-превью) — тем же правилом «худшести», что и real.ts. */
+function aggregateRowsByCategory(
+  rows: RequirementRow[],
+): Record<string, { count: number; worstLifecycle: LifecycleStatus }> {
+  const out: Record<string, { count: number; worstLifecycle: LifecycleStatus }> = {}
+  for (const row of rows) {
+    const slug = categoryChipOf(row)
+    if (!slug) continue
+    const existing = out[slug]
+    if (existing) {
+      existing.count += 1
+      existing.worstLifecycle = worseLifecycle(existing.worstLifecycle, row.lifecycle)
+    } else {
+      out[slug] = { count: 1, worstLifecycle: row.lifecycle }
+    }
+  }
+  return out
+}
+
+/**
+ * Матрица сравнения стран — бесплатный тизер: только category_slug +
+ * lifecycle, без деталей/цитат за пейволлом (решение грила №4). УЗ — из БД
+ * (fetchComparisonReal) для живых товаров; для мок-товаров (молоко/парацетамол,
+ * для них в базе требований ещё нет) — из их фикстурных rows. КЗ — превью-
+ * фикстуры kz-fixtures (сейчас есть только по сигаретам/стикам). ОАЭ —
+ * раскатки ещё нет, все ячейки 'absent'.
+ */
+export async function fetchComparisonMatrix(productId: string): Promise<ComparisonMatrix> {
+  const { categories, uz: dbUz } = await fetchComparisonReal(productId)
+  const isFixtureOnly = productId === MILK_PRODUCT_ID || productId === PARACETAMOL_PRODUCT_ID
+  const uz = isFixtureOnly ? aggregateRowsByCategory(mockRowsFor(productId)) : dbUz
+  const kz = aggregateRowsByCategory(kzRowsFor(productId))
+
+  const cells: ComparisonMatrix['cells'] = {}
+  for (const cat of categories) {
+    const uzAgg = uz[cat.slug]
+    const kzAgg = kz[cat.slug]
+    cells[cat.slug] = {
+      UZ: uzAgg ? { state: 'present', worstLifecycle: uzAgg.worstLifecycle } : { state: 'absent' },
+      KZ: kzAgg ? { state: 'preview', worstLifecycle: kzAgg.worstLifecycle } : { state: 'absent' },
+      AE: { state: 'absent' },
+    }
+  }
+
+  return { categories, countries: [...COUNTRIES], cells }
 }
 
 // ── Страница услуги ────────────────────────────────────────────────
@@ -295,7 +480,8 @@ export async function fetchServiceBundle(
   const docsCount = await fetchServiceDocumentsCountReal(rows.map((r) => r.id))
   const documents: Gated<number> = docsCount === null ? locked : ok(docsCount)
 
-  const openMax = maxSanctionFromRows(rows)
+  // Услуги пока UZ-only (ADR-0004: многострановый пока только товарный каталог)
+  const openMax = maxSanctionFromRows(rows, 'UZ')
   return {
     passport: { ...passport, verifiedAt: list.verifiedAt },
     rows,
@@ -317,6 +503,14 @@ export async function fetchCard(
   row?: RequirementRow,
 ): Promise<RequirementCard> {
   const subscriber = effectiveSubscriber(ctx)
+
+  if (isKzRequirementId(requirementId)) {
+    const card = kzCardFor(requirementId)
+    if (!card) throw new Error(`Unknown KZ mock requirement: ${requirementId}`)
+    if (subscriber) return card
+    // Превью-страна тоже за пейволлом — тизер честный, детали закрыты
+    return { ...card, detail: locked, citations: locked, faqs: locked, history: locked }
+  }
 
   if (isMockRequirementId(requirementId)) {
     const card = mockCardFor(requirementId)
@@ -400,7 +594,7 @@ async function resolveCigaretteSlotIds(): Promise<Map<string, string>> {
   // requirementId для изменений по сигаретам — из живых строк
   const map = new Map<string, string>()
   try {
-    const list = await fetchRequirementsReal('2404110001')
+    const list = await fetchRequirementsReal('2404110001', 'UZ')
     for (const slot of cigaretteChangeSlots) {
       const row =
         list.rows.find((r) =>
@@ -487,4 +681,23 @@ export function buildPortfolio(productIds: string[], feed: ChangeCard[]): Portfo
       statusLine: nearest?.effectiveDate ?? '',
     }
   })
+}
+
+// ── Календарь дедлайнов (Блок 5) ────────────────────────────────────
+// Чистый проброс к real.ts: данные всегда настоящие (своя строка юзера),
+// мок-оверлея нет — демо-состояние без сессии рисует сам компонент
+// (см. CSettingsPage), в слой данных не заходя.
+
+export type { CalendarTokenRow }
+
+export async function fetchCalendarToken(): Promise<CalendarTokenRow | null> {
+  return fetchCalendarTokenReal()
+}
+
+export async function createCalendarToken(userId: string): Promise<CalendarTokenRow> {
+  return createCalendarTokenReal(userId)
+}
+
+export async function deleteCalendarToken(userId: string): Promise<void> {
+  return deleteCalendarTokenReal(userId)
 }
