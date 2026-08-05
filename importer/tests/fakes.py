@@ -5,6 +5,13 @@
   table(name).insert(row).execute() -> .data (с автогенерённым id)
   table(name).update(patch).eq(...).execute() -> патч по отфильтрованным строкам
   table(name).delete().eq(...).execute() -> удаление отфильтрованных строк
+  schema(name).table(...) -> тот же `FakeClient` (общий словарь `store` —
+    в тестах схема не важна, важны только имена таблиц)
+  rpc(name, params).execute() -> .data пуст, вызов фиксируется в
+    store["_rpc_calls"] как (name, params) — гейт живого прогона (Задача
+    «транзакционность save_requirement_draft»): SQL-функции (например
+    `replace_requirement_children`) реальной логики не исполняют, тест
+    проверяет только ЧТО было вызвано и с какими параметрами.
 """
 
 
@@ -70,9 +77,29 @@ class FakeTable:
         return _result(result)
 
 
+class FakeRPC:
+    def __init__(self, store, name, params):
+        self.store = store
+        self.name = name
+        self.params = params
+
+    def execute(self):
+        self.store.setdefault("_rpc_calls", []).append((self.name, self.params))
+        return _result([])
+
+
 class FakeClient:
     def __init__(self, store):
         self.store = store
 
     def table(self, name):
         return FakeTable(self.store, name)
+
+    def schema(self, _name):
+        # Тестам имя схемы не важно — таблицы разных "схем" делят один
+        # словарь store по имени таблицы (коллизий имён между public/pipeline
+        # в текущих тестах нет).
+        return self
+
+    def rpc(self, name, params=None):
+        return FakeRPC(self.store, name, params or {})

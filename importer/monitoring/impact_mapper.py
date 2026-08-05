@@ -100,12 +100,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Callable, Literal, Protocol
 
 from importer.build.agents import Classifier, ModelsConfig, load_models_config
+from importer.build.legalx import LegalXClient
 from importer.build.llm_client import AgentLLMClient, AgentLLMError
+from importer.build.orchestrator import BuildStore, Orchestrator
 from importer.build.profiles import Profile
-from importer.build.steps import STEP_ORDER
+from importer.build.registry import build_step_registry
+from importer.build.steps import STEP_ORDER, StepFn
 
 if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл impact_mapper<->trace
     from importer.build.trace import Tracer
@@ -326,6 +329,30 @@ class MonitoringStore(Protocol):
         changes`), только резолвит `item_id`. `None`, если у требования нет
         айтема Build-конвейера (например, оно из легаси `import-report`) —
         ре-ревью для такого требования технически невозможен."""
+        ...
+
+    def resolve_item_map_ref(self, item_id: str) -> tuple[str, str, str] | None:
+        """Гейт живого прогона (`docs/LAUNCH_CHECKLIST.md`, пункт 2):
+        `pipeline.items.id -> run_id -> pipeline.runs.map_id -> pipeline.maps
+        (group_ref, jurisdiction)` — цепочка резолва карты айтема, который
+        собирается пересобрать `rerun_item` (Задача 40, `process_changes`).
+
+        Возвращает `(map_id, group_ref, jurisdiction)`. `MapAwareRerun
+        Orchestrator` (ниже) строит `build_step_registry` РОВНО для этих
+        `group_ref`/`jurisdiction` — той же карты, с которой требование было
+        изначально собрано `build run` — а не глобальных заглушек
+        `_STUB_GROUP_REF=''`/`DEFAULT_JURISDICTION='UZ'` (докстринг
+        `registry.py`): без этого реестра `LoadStep.external_key` строился
+        бы как `f'{"":UZ}:hash'` = `':UZ:hash'`, `save_requirement_draft` не
+        находил бы существующую строку по этому ключу и создавал НОВОЕ
+        `published`-требование дублем старого.
+
+        `None`, если айтем/ран/карта не резолвятся (айтем не из Build-
+        конвейера, либо повреждённые/удалённые данные) — вызывающий код
+        (`MapAwareRerunOrchestrator.rerun_item`) в этом случае пропускает
+        ре-ревью с warning, не падает (тот же принцип устойчивости, что и у
+        `InHouseLawyer.decide`, упавшего на одном требовании, см. докстринг
+        `process_changes`)."""
         ...
 
     # ── Задача 41: история изменений (change_history.py) ──────────────────
@@ -652,6 +679,99 @@ class InHouseLawyer:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# MapAwareRerunOrchestrator — гейт живого прогона, пункт 2 (LAUNCH_CHECKLIST.md)
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class MapAwareRerunOrchestrator:
+    """Реализует `RerunOrchestratorLike` (`rerun_item(item_id, from_step)`)
+    для `process_changes` — ЗАМЕНА старому `Orchestrator(build_store)` без
+    `steps=`, который в `cli.py` шёл по ГЛОБАЛЬНОМУ реестру `steps.py`
+    (`load_default_steps()`), заполненному заглушками `_STUB_GROUP_REF=''`/
+    `DEFAULT_JURISDICTION='UZ'` (докстринг `registry.py`).
+
+    Проблема заглушек: `LoadStep.external_key` строился бы как
+    `f'{_STUB_GROUP_REF}:{jurisdiction}:{slug}'` = `':UZ:hash'`, а не
+    реальным `group_ref` карты, с которой требование было изначально
+    опубликовано `build run` — `save_requirement_draft` не находил бы
+    существующую строку по этому ключу и создавал НОВОЕ `published`-
+    требование дублем старого (см. `docs/LAUNCH_CHECKLIST.md`, гейт живого
+    прогона, пункт 2).
+
+    Фикс: на каждый `rerun_item(item_id, from_step)` резолвит РЕАЛЬНУЮ карту
+    айтема через `MonitoringStore.resolve_item_map_ref` (`item_id -> run_id
+    -> map_id -> (group_ref, jurisdiction)`) и строит `build_step_registry`
+    ИМЕННО для этих `group_ref`/`jurisdiction` — тот же путь, что и `cli.py:
+    build run` (см. `registry.py`), только per-item, не per-map-CLI-вызов.
+
+    Реестр шагов кэшируется по `map_id` В РАМКАХ ОДНОГО экземпляра (обычно
+    — одного вызова `process_changes`): разные затронутые требования одного
+    события/прогона мониторинга почти всегда принадлежат разным картам, но
+    `build_step_registry` дорогой (собирает generic-агентов под каждый из
+    14 шагов STEP_ORDER) — не нужно пересобирать его дважды для одной и той
+    же карты в рамках прогона.
+
+    Айтем, чья карта не резолвится (не из Build-конвейера, либо
+    повреждённые/удалённые данные), — WARNING в лог, ре-ревью для НЕГО
+    пропускается (тот же принцип устойчивости к «ядовитому» требованию, что
+    и у `InHouseLawyer.decide`, см. докстринг `process_changes`) — остальная
+    очередь не блокируется."""
+
+    def __init__(
+        self,
+        build_store: BuildStore,
+        monitor_store: "MonitoringStore",
+        llm_runner: Callable[[str, str], str],
+        legalx: LegalXClient,
+        *,
+        tracer: "Tracer | None" = None,
+        registry_factory: Callable[..., dict[str, StepFn]] = build_step_registry,
+    ):
+        self._build_store = build_store
+        self._monitor_store = monitor_store
+        self._llm_runner = llm_runner
+        self._legalx = legalx
+        # Late-bound Tracer (`Orchestrator.__init__`/`build run` в `cli.py` —
+        # тот же принцип, Задача 29): None -> авто-создаём, только если стор
+        # умеет `save_llm_call` (реальный `SupabaseBuildStore`), иначе
+        # остаётся None (InMemoryStore тестов без трейсинга — не обязателен).
+        if tracer is not None:
+            self._tracer = tracer
+        elif hasattr(build_store, "save_llm_call"):
+            from importer.build.trace import Tracer  # локальный импорт — см. TYPE_CHECKING выше
+
+            self._tracer = Tracer(build_store)
+        else:
+            self._tracer = None
+        self._registry_factory = registry_factory
+        self._registry_cache: dict[str, dict[str, StepFn]] = {}
+
+    def rerun_item(self, item_id: str, from_step: str) -> None:
+        resolved = self._monitor_store.resolve_item_map_ref(item_id)
+        if resolved is None:
+            logger.warning(
+                "MapAwareRerunOrchestrator: не удалось резолвить карту айтема "
+                "item_id=%s (item_id/run_id/map_id не найдены) — ре-ревью "
+                "пропущен",
+                item_id,
+            )
+            return
+        map_id, group_ref, jurisdiction = resolved
+
+        registry = self._registry_cache.get(map_id)
+        if registry is None:
+            registry = self._registry_factory(
+                self._build_store, self._llm_runner, self._legalx,
+                group_ref=group_ref, jurisdiction=jurisdiction, tracer=self._tracer,
+            )
+            self._registry_cache[map_id] = registry
+
+        Orchestrator(self._build_store, steps=registry, tracer=self._tracer).rerun_item(
+            item_id, from_step
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # process_changes — оркестрация (см. докстринг модуля)
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -949,6 +1069,31 @@ class SupabaseMonitoringStore:
             .data
         )
         return rows[0]["id"] if rows else None
+
+    def resolve_item_map_ref(self, item_id: str) -> tuple[str, str, str] | None:
+        items = (
+            self._pipeline.table("items").select("run_id")
+            .eq("id", item_id).execute().data
+        )
+        if not items:
+            return None
+        run_id = items[0]["run_id"]
+
+        runs = (
+            self._pipeline.table("runs").select("map_id")
+            .eq("id", run_id).execute().data
+        )
+        if not runs:
+            return None
+        map_id = runs[0]["map_id"]
+
+        maps = (
+            self._pipeline.table("maps").select("group_ref, jurisdiction")
+            .eq("id", map_id).execute().data
+        )
+        if not maps:
+            return None
+        return map_id, maps[0]["group_ref"], maps[0]["jurisdiction"]
 
     # ── Задача 41: история изменений ────────────────────────────────────────
 

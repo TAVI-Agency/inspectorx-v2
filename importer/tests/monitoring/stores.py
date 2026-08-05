@@ -282,6 +282,25 @@ class InMemoryMonitoringStore:
     def enqueue_rereview(self, requirement_id: str) -> str | None:
         return self.pipeline_items_by_requirement.get(requirement_id)
 
+    def resolve_item_map_ref(self, item_id: str) -> tuple[str, str, str] | None:
+        """Тот же 3-хоповый резолв, что и `SupabaseMonitoringStore`
+        (`impact_mapper.py`), но по фикстурам `pipeline_items`/
+        `pipeline_runs`/`approved_maps` этого фейка — заводятся
+        `add_pipeline_item_for_map`/`add_approved_map` (уже существуют,
+        Задача 41: discovery)."""
+        item = next((it for it in self.pipeline_items if it["id"] == item_id), None)
+        if item is None:
+            return None
+        run = next((r for r in self.pipeline_runs if r["id"] == item["run_id"]), None)
+        if run is None:
+            return None
+        map_id = run["map_id"]
+        for rows in self.approved_maps.values():
+            for row in rows:
+                if row["id"] == map_id:
+                    return map_id, row["group_ref"], row["jurisdiction"]
+        return None
+
     # ── Задача 41: история изменений ────────────────────────────────────────
 
     def list_change_events_for_requirement(
