@@ -152,29 +152,30 @@ Build-конвейер (`importer/build/`) сейчас гоняется тол�
 эта заглушка сейчас маскирует и которые нужно закрыть/перепроверить ДО первого прогона с
 реальным ключом:
 
-1. ❌ **Транзакционность `save_requirement_draft`** (`importer/build/orchestrator.py:862`) —
-   delete+insert по каждой из `requirement_contents`/`requirement_details`/
-   `requirement_applicability`/`requirement_rules` четырьмя отдельными вызовами, без общей
-   транзакции. Сбой между `delete` и последующим `insert` для уже `published` требования
-   оставляет строку `requirements` в статусе `published`, но без контента — карточка исчезает
-   с витрины (RLS-таблицы отдают пусто), хотя формально существует. Нужна транзакция/RPC или
-   insert-before-delete.
-2. ❌ **Заглушки `group_ref`/`jurisdiction` в глобальном реестре ре-ревью**
-   (`importer/cli.py` monitor-путь, `importer/build/steps_load.py:_STUB_GROUP_REF=""`) —
-   `monitor process-changes` строит `Orchestrator` без per-run реестра шагов (докстринг в
-   `cli.py`, ветка `monitor process-changes`), поэтому `LoadStep` считает `external_key` как
-   `f"{_STUB_GROUP_REF}:{jurisdiction}:{slug}"` = `":UZ:hash"` вместо реального `group_ref`,
-   с которым требование было опубликовано через `build run`. `save_requirement_draft` ищет
-   существующую строку по `external_key`, не находит совпадения — создаёт НОВОЕ
-   `published`-требование дублем старого. Нужна привязка per-item реестра к исходной карте
-   айтема (тот же долг, что уже зафиксирован в `registry.py`).
-3. ❌ **`TranslateStep._translate` зовёт LLM в обход `agents.py`**
-   (`importer/build/steps_translate.py`, метод `_translate`) — `self._llm.complete(prompt,
-   model)` напрямую, без `_trace_llm_call` (тот пишет `pipeline.llm_calls`, на нём стоит
-   cost-отчёт — см. `agents.py` и его вызовы в `Retriever`/`Verifier`/`Classifier`/
-   `Generator`). У `TranslateStep` уже есть `self._tracer` в конструкторе (используется только
-   для внутреннего `Verifier`), но сам перевод в трейсинг не попадает — дыра в cost-отчёте
-   ровно на переводах.
+1. ✅ **Транзакционность `save_requirement_draft`** (`importer/build/orchestrator.py`) —
+   закрыто веткой `fix/live-run-gate`: замена `requirement_contents`/`requirement_details`/
+   `requirement_applicability`/`requirement_rules` теперь ОДНИМ RPC-вызовом SQL-функции
+   `public.replace_requirement_children` (миграция
+   `20260804130000_replace_requirement_children.sql`, security definer, grant только
+   `service_role`) — все delete+insert четырёх таблиц атомарны в одной транзакции Postgres.
+   `InMemoryStore` не менялся (и так атомарен). Тесты — `importer/tests/build/
+   test_supabase_store.py` + локальный SQL-смоук (`supabase db reset --local`, ручной вызов
+   функции с проверкой replace-семантики).
+2. ✅ **Заглушки `group_ref`/`jurisdiction` в глобальном реестре ре-ревью** — закрыто веткой
+   `fix/live-run-gate`: `MapAwareRerunOrchestrator` (`importer/monitoring/impact_mapper.py`)
+   на каждый `rerun_item` резолвит РЕАЛЬНУЮ карту айтема
+   (`MonitoringStore.resolve_item_map_ref`: `item_id -> run_id -> map_id -> (group_ref,
+   jurisdiction)`) и строит `build_step_registry` под неё, с кэшем реестра по `map_id` в
+   рамках прогона; `importer/cli.py` (`monitor process-changes`) переведён на неё вместо
+   `Orchestrator(build_store)` без `steps=`. Пин-тесты —
+   `importer/tests/monitoring/test_impact_mapper.py` (фейк-фабрика реестра проверяет реальные
+   group_ref/jurisdiction, кэш по карте, изоляция ошибок резолва).
+3. ✅ **`TranslateStep._translate` зовёт LLM в обход `agents.py`** — закрыто веткой
+   `fix/live-run-gate`: `_translate` (`importer/build/steps_translate.py`) теперь вызывает
+   `agents.py:_trace_llm_call(self._tracer, "translator", ...)` тем же способом, что и
+   generic-агенты — вызов переводчика попадает в `pipeline.llm_calls` под ролью `'translator'`
+   (no-op без `tracer=`, обратная совместимость). Пин-тесты —
+   `importer/tests/build/test_steps_translate.py`.
 4. ✅ **Дедуп при partial-rerun мимо шага 'summary'** (`importer/build/steps_dedup.py:
    DedupStep._run`) — исправлено этим фикс-вейвом: `text = ctx.data.get("summary") or
    ctx.item.summary_text or ctx.item.expected_item` (было без `ctx.item.summary_text` —
