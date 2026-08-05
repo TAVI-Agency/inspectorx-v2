@@ -28,6 +28,7 @@ import pytest
 
 from importer.build.embeddings import cosine_similarity
 from importer.build.orchestrator import MapRecord, Orchestrator
+from importer.build.agents import Verdict
 from importer.build.steps import STEP_ORDER, ItemContext, ItemRecord, StepResult
 from importer.build.steps_dedup import DUP_THRESHOLD_HIGH, DUP_THRESHOLD_LOW, DedupStep
 from importer.tests.build.stores import InMemoryStore
@@ -479,7 +480,12 @@ def test_dedup_step_ignores_pending_candidate_even_if_returned_by_store():
 
 
 def _ok_step(ctx: ItemContext) -> StepResult:
-    return StepResult(status="ok")
+    # pass-вердикт как у настоящего шага: publish_ready больше не публикует
+    # айтем без единого вердикта (план фотоконтроля §3)
+    return StepResult(
+        status="ok",
+        verdicts=[Verdict(passed=True, reason="заглушка: подтверждено", model="stub")],
+    )
 
 
 def test_integration_orchestrator_run_group_dedup_ignores_not_yet_processed_items():

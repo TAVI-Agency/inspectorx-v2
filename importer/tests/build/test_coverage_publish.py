@@ -192,19 +192,22 @@ def test_coverage_report_without_manager_leaves_suggestion_none():
 # ══════════════════════════════════════════════════════════════════════════
 
 
-def test_publish_ready_publishes_item_with_no_verdicts_and_requirement():
+def test_publish_ready_blocks_item_with_no_verdicts_at_all():
+    """План фотоконтроля §3 («вакуальный pass»): `all(...)` над ПУСТЫМ словарём
+    вердиктов — True, и айтем без единой верификации публиковался как готовый.
+    Айтем без вердиктов — это непроверенный айтем: needs_attention, не витрина."""
     store = InMemoryStore()
-    map_id, run_id, items = _seed_run(store, payload=[{"expected_item": "чистый айтем"}])
+    map_id, run_id, items = _seed_run(store, payload=[{"expected_item": "непроверенный айтем"}])
     item = items[0]
     requirement_id = store.save_requirement_draft(_minimal_card(), item_id=item.id)
     store.update_item_status(item.id, "draft_loaded", requirement_id=requirement_id)
 
     count = publish_ready(store, run_id)
 
-    assert count == 1
-    assert store.requirements[requirement_id]["status"] == "published"
-    assert store.requirements[requirement_id]["published_at"] is not None
-    assert store.items[item.id].status == "published"
+    assert count == 0
+    assert store.requirements[requirement_id]["status"] == "draft"
+    assert store.items[item.id].status == "needs_attention"
+    assert "нет ни одного вердикта" in store.items[item.id].last_error
 
 
 def test_publish_ready_publishes_item_with_all_passing_verdicts():
