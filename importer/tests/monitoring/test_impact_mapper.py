@@ -34,12 +34,14 @@ import pytest
 
 from importer.build.agents import load_models_config
 from importer.build.llm_client import AgentLLMError
-from importer.build.steps import STEP_ORDER
+from importer.build.steps import STEP_ORDER, ItemRecord, StepResult
 from importer.monitoring.impact_mapper import (
     CANDIDATE_SCORE_THRESHOLD,
     InHouseLawyer,
+    MapAwareRerunOrchestrator,
     process_changes,
 )
+from importer.tests.build.stores import InMemoryStore
 from importer.tests.monitoring.stores import InMemoryMonitoringStore
 
 # ── тестовые дублёры (тот же паттерн, что test_steps_samples_lawyer.py) ────
@@ -489,3 +491,144 @@ def _event(summary: str | None = "изменение нормы", jurisdiction: 
         id="event-1", event_type="amended", jurisdiction=jurisdiction,
         effective_date="2027-01-01", summary=summary, payload={"act_id": LEGALX_ACT_ID},
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# MapAwareRerunOrchestrator — гейт живого прогона, пункт 2 (LAUNCH_CHECKLIST.md)
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def _noop_steps() -> dict:
+    """Реестр шагов-заглушек: каждый шаг сразу `ok` — `Orchestrator.
+    rerun_item` доходит до конца STEP_ORDER без реальных LLM/сети."""
+    return {step: (lambda ctx: StepResult(status="ok")) for step in STEP_ORDER}
+
+
+def make_fake_registry_factory(calls: list[dict]):
+    """Фейковая замена `build_step_registry` — фиксирует `group_ref`/
+    `jurisdiction`, с которыми её вызвали, вместо реальной сборки
+    generic-агентов (задача просит именно «инспекцию registry» через
+    фейк-фабрику)."""
+
+    def factory(build_store, llm_runner, legalx, *, group_ref, jurisdiction, tracer=None):
+        calls.append({"group_ref": group_ref, "jurisdiction": jurisdiction})
+        return _noop_steps()
+
+    return factory
+
+
+def _seed_item(monitor_store: InMemoryMonitoringStore, build_store: InMemoryStore, *, map_id: str) -> str:
+    """Заводит ОДИН и тот же `item_id` в обоих сторах — как в реальности
+    `SupabaseMonitoringStore`/`SupabaseBuildStore` читают одну и ту же
+    строку `pipeline.items`, просто разными Python-обёртками."""
+    item_id = monitor_store.add_pipeline_item_for_map(map_id, "норма X")
+    item = monitor_store.pipeline_items[-1]
+    build_store.items[item_id] = ItemRecord(id=item_id, run_id=item["run_id"], expected_item="норма X")
+    return item_id
+
+
+def test_map_aware_rerun_orchestrator_builds_registry_with_real_map_params_not_stubs():
+    """Пин-тест гейта живого прогона: ре-ревью айтема карты
+    (group_ref='2204', jurisdiction='UZ') строит реестр шагов ИМЕННО с
+    этими значениями, не с заглушками `_STUB_GROUP_REF=''`/
+    `DEFAULT_JURISDICTION='UZ'` глобального реестра."""
+    monitor_store = InMemoryMonitoringStore()
+    build_store = InMemoryStore()
+    map_id = monitor_store.add_approved_map(jurisdiction="UZ", payload=[], group_ref="2204")
+    item_id = _seed_item(monitor_store, build_store, map_id=map_id)
+
+    calls: list[dict] = []
+    orchestrator = MapAwareRerunOrchestrator(
+        build_store, monitor_store, lambda p, m: "", legalx=object(),
+        registry_factory=make_fake_registry_factory(calls),
+    )
+
+    orchestrator.rerun_item(item_id, STEP_ORDER[0])
+
+    assert calls == [{"group_ref": "2204", "jurisdiction": "UZ"}]
+    assert build_store.items[item_id].status == "draft_loaded"
+
+
+def test_map_aware_rerun_orchestrator_caches_registry_per_map_id():
+    """Два айтема ОДНОЙ карты — реестр строится ОДИН раз (кэш по `map_id`),
+    не на каждый `rerun_item`."""
+    monitor_store = InMemoryMonitoringStore()
+    build_store = InMemoryStore()
+    map_id = monitor_store.add_approved_map(jurisdiction="UZ", payload=[], group_ref="2204")
+    item_1 = _seed_item(monitor_store, build_store, map_id=map_id)
+    item_2 = monitor_store.add_pipeline_item_for_map(map_id, "норма Y", run_id=monitor_store.pipeline_items[0]["run_id"])
+    build_store.items[item_2] = ItemRecord(
+        id=item_2, run_id=monitor_store.pipeline_items[0]["run_id"], expected_item="норма Y"
+    )
+
+    calls: list[dict] = []
+    orchestrator = MapAwareRerunOrchestrator(
+        build_store, monitor_store, lambda p, m: "", legalx=object(),
+        registry_factory=make_fake_registry_factory(calls),
+    )
+
+    orchestrator.rerun_item(item_1, STEP_ORDER[0])
+    orchestrator.rerun_item(item_2, STEP_ORDER[0])
+
+    assert calls == [{"group_ref": "2204", "jurisdiction": "UZ"}]  # ОДИН раз
+    assert build_store.items[item_1].status == "draft_loaded"
+    assert build_store.items[item_2].status == "draft_loaded"
+
+
+def test_map_aware_rerun_orchestrator_builds_separate_registries_for_different_maps():
+    """Айтемы РАЗНЫХ карт — реестр строится под каждую карту отдельно, с её
+    собственными group_ref/jurisdiction."""
+    monitor_store = InMemoryMonitoringStore()
+    build_store = InMemoryStore()
+    map_2204 = monitor_store.add_approved_map(jurisdiction="UZ", payload=[], group_ref="2204")
+    map_2402 = monitor_store.add_approved_map(jurisdiction="KZ", payload=[], group_ref="2402")
+    item_1 = _seed_item(monitor_store, build_store, map_id=map_2204)
+    item_2 = _seed_item(monitor_store, build_store, map_id=map_2402)
+
+    calls: list[dict] = []
+    orchestrator = MapAwareRerunOrchestrator(
+        build_store, monitor_store, lambda p, m: "", legalx=object(),
+        registry_factory=make_fake_registry_factory(calls),
+    )
+
+    orchestrator.rerun_item(item_1, STEP_ORDER[0])
+    orchestrator.rerun_item(item_2, STEP_ORDER[0])
+
+    assert calls == [
+        {"group_ref": "2204", "jurisdiction": "UZ"},
+        {"group_ref": "2402", "jurisdiction": "KZ"},
+    ]
+
+
+def test_map_aware_rerun_orchestrator_skips_unresolvable_item_with_warning(caplog):
+    """Айтем без резолвящейся карты (не заведён ни в `pipeline_items`
+    монитор-стора) — WARNING в лог, `rerun_item` НЕ падает и не строит
+    реестр (нечего строить — group_ref/jurisdiction неизвестны)."""
+    monitor_store = InMemoryMonitoringStore()
+    build_store = InMemoryStore()
+
+    calls: list[dict] = []
+    orchestrator = MapAwareRerunOrchestrator(
+        build_store, monitor_store, lambda p, m: "", legalx=object(),
+        registry_factory=make_fake_registry_factory(calls),
+    )
+
+    with caplog.at_level("WARNING"):
+        orchestrator.rerun_item("item-does-not-exist", "norm")
+
+    assert calls == []
+    assert any("item-does-not-exist" in rec.message for rec in caplog.records)
+
+
+def test_map_aware_rerun_orchestrator_default_registry_factory_is_real_build_step_registry():
+    """Без явного `registry_factory=` используется настоящий
+    `build_step_registry` (`registry.py`) — фейк в остальных тестах этого
+    блока не подменяет собой единственный путь конструирования."""
+    from importer.build.registry import build_step_registry
+
+    monitor_store = InMemoryMonitoringStore()
+    build_store = InMemoryStore()
+    orchestrator = MapAwareRerunOrchestrator(
+        build_store, monitor_store, lambda p, m: "", legalx=object(),
+    )
+    assert orchestrator._registry_factory is build_step_registry

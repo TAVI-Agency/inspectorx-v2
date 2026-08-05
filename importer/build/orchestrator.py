@@ -883,51 +883,45 @@ class SupabaseBuildStore:
             inserted = self._client.table("requirements").insert(requirement).execute().data[0]
             requirement_id = inserted["id"]
 
-        # replace-семантика (докстринг steps_load.py): удаляем старый набор
-        # строк требования, затем вставляем актуальный из card.
-        self._client.table("requirement_contents").delete().eq(
-            "requirement_id", requirement_id
-        ).execute()
+        # Гейт живого прогона, пункт 1 (LAUNCH_CHECKLIST.md): replace-
+        # семантика (докстринг steps_load.py) четырёх дочерних таблиц идёт
+        # ОДНИМ RPC-вызовом SQL-функции `replace_requirement_children`
+        # (миграция `20260804130000_replace_requirement_children.sql`) — вся
+        # замена атомарна в ОДНОЙ транзакции на стороне Postgres, а не
+        # 4×(delete+insert) отдельными PostgREST-запросами (было раньше):
+        # сбой посередине больше не может оставить `published`-требование
+        # без контента (карточка «молча» исчезает с витрины). Формат
+        # построчных dict'ов в payload — ТОТ ЖЕ, что раньше собирался для
+        # прямого `.insert(...)` — SQL-функция сама выбирает нужные ключи.
         contents_rows = [
             {**row, "requirement_id": requirement_id, "lang": lang}
             for lang, row in (card.get("contents") or {}).items()
         ]
-        if contents_rows:
-            self._client.table("requirement_contents").insert(contents_rows).execute()
-
-        self._client.table("requirement_details").delete().eq(
-            "requirement_id", requirement_id
-        ).execute()
         details_rows = [
             {**row, "requirement_id": requirement_id, "lang": lang}
             for lang, row in (card.get("details") or {}).items()
         ]
-        if details_rows:
-            self._client.table("requirement_details").insert(details_rows).execute()
-
-        self._client.table("requirement_applicability").delete().eq(
-            "requirement_id", requirement_id
-        ).execute()
         applicability = card.get("applicability")
-        if applicability:
-            self._client.table("requirement_applicability").insert(
-                {**applicability, "requirement_id": requirement_id}
-            ).execute()
-
-        self._client.table("requirement_rules").delete().eq(
-            "requirement_id", requirement_id
-        ).execute()
+        applicability_payload = (
+            {**applicability, "requirement_id": requirement_id} if applicability else None
+        )
         rules = card.get("rules") or []
-        if rules:
-            rule_rows = [
-                {
-                    "requirement_id": requirement_id,
-                    "rule": r["rule"],
-                    "verified": r["verified"],
-                }
-                for r in rules
-            ]
-            self._client.table("requirement_rules").insert(rule_rows).execute()
+        rule_rows = [
+            {
+                "requirement_id": requirement_id,
+                "rule": r["rule"],
+                "verified": r["verified"],
+            }
+            for r in rules
+        ]
+
+        self._client.rpc("replace_requirement_children", {
+            "p_requirement_id": requirement_id,
+            "p_contents": contents_rows,
+            "p_details": details_rows,
+            "p_applicability": applicability_payload,
+            "p_rules": rule_rows,
+        }).execute()
 
         return requirement_id
 
