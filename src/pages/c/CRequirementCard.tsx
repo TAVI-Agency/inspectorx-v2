@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import {
   ChevronDown,
+  ClipboardList,
   ExternalLink,
+  FileDown,
   FileText,
+  Gavel,
   Globe,
   MessageCircleQuestion,
   Phone,
@@ -11,11 +14,19 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { useRequirementCard } from '@/data/hooks'
-import type { Citation, Gated, HistoryEntry, RequirementRow } from '@/data/types'
+import type {
+  Citation,
+  CourtCase,
+  DocumentTemplate,
+  Gated,
+  HistoryEntry,
+  LawyerInstruction,
+  RequirementRow,
+} from '@/data/types'
 import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { AskQuestionDialog, useAskDialogState } from '@/components/AskQuestionDialog'
-import { CEyebrow, CPaywallGate, CPaywallPanel, CTrustStamp } from './ui'
+import { CEyebrow, CLifecycleBadge, CPaywallGate, CPaywallPanel, CTrustStamp } from './ui'
 import { CLawyerReviewsSection } from './CLawyerReviews'
 
 /** Шаги переноса v1 приходят с префиксом «(Пункт 35 …)\n» — выносим в реквизит */
@@ -58,10 +69,25 @@ export function CRequirementCard({
     <div className="border-t border-border bg-background/40 px-4 py-5 sm:px-6">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
-          <CTrustStamp
-            trust={row.trustLabel}
-            date={row.trustDate ? formatDate(row.trustDate) : undefined}
-          />
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CTrustStamp
+                trust={row.trustLabel}
+                date={row.trustDate ? formatDate(row.trustDate) : undefined}
+              />
+              <CLifecycleBadge
+                lifecycle={row.lifecycle}
+                effectiveFrom={row.effectiveFrom}
+                transitionUntil={row.transitionUntil}
+                validTo={row.validTo}
+              />
+            </div>
+            {detail?.statusNote && (
+              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+                {detail.statusNote}
+              </p>
+            )}
+          </div>
 
           {locked && <CPaywallGate />}
 
@@ -188,6 +214,15 @@ export function CRequirementCard({
             </section>
           )}
 
+          {/* Под санкциями — судебная практика по той же статье, дальше шаблоны
+              и инструкция юриста (TARGET_FORMAT §4б-в). Блоки внутри
+              раскрытой карточки не скрываются — пустой рисует «Данных пока нет». */}
+          {detail && <CCourtCasesSection cases={detail.courtCases ?? null} />}
+
+          {detail && <CTemplatesSection templates={detail.templates ?? null} />}
+
+          {detail && <CLawyerInstructionSection instruction={detail.lawyerInstruction ?? null} />}
+
           {faqs.length > 0 && (
             <section>
               <CEyebrow>{ru.requirement.card.faq}</CEyebrow>
@@ -234,6 +269,129 @@ export function CRequirementCard({
         requirementTitle={row.title}
       />
     </div>
+  )
+}
+
+/**
+ * Пустой блок ВНУТРИ раскрытой карточки — не скрывается (в отличие от
+ * пустых разделов страницы товара, TARGET_FORMAT §3): подписчик должен
+ * видеть, что блок существует и пока не наполнен, а не гадать, есть ли он.
+ */
+function CNoDataYet() {
+  return (
+    <p className="mt-3 rounded-lg border border-dashed border-border px-3.5 py-2.5 text-sm text-muted-foreground">
+      {ru.requirement.noDataYet}
+    </p>
+  )
+}
+
+/** Судебная практика по статье санкции: до 5 кейсов, раскрывашка со счётчиком, только UZ-снапшот */
+function CCourtCasesSection({ cases }: { cases: CourtCase[] | null }) {
+  return (
+    <section>
+      <CEyebrow>{ru.requirement.courtCases.title}</CEyebrow>
+      {!cases || cases.length === 0 ? (
+        <CNoDataYet />
+      ) : (
+        <details className="group mt-3 overflow-hidden rounded-lg border border-border bg-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-3 text-sm font-medium marker:hidden">
+            <span className="inline-flex items-center gap-2">
+              <Gavel className="size-4 text-primary/70" />
+              {ru.requirement.courtCases.button(cases.length)}
+            </span>
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground transition-transform duration-300 ease-[var(--ease-brand)] group-open:rotate-180" />
+          </summary>
+          <ul className="divide-y divide-border border-t border-border">
+            {cases.slice(0, 5).map((c, i) => (
+              <li key={i} className="px-3.5 py-3">
+                <p className="text-sm leading-relaxed">{c.summaryLine}</p>
+                {(c.outcome || c.amount) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {[c.outcome, c.amount].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                <a
+                  href={c.caseUrl}
+                  target="_blank"
+                  rel="noopener"
+                  className="mt-1.5 inline-flex items-center gap-1.5 font-mono text-[11px] text-primary underline-offset-2 hover:underline"
+                >
+                  {c.caseTitle}
+                  <ExternalLink className="size-3" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  )
+}
+
+/** Шаблоны документов от Template hunter: []/null неотличимо от null для пользователя */
+function CTemplatesSection({ templates }: { templates: DocumentTemplate[] | null }) {
+  return (
+    <section>
+      <CEyebrow>{ru.requirement.templates.title}</CEyebrow>
+      {!templates || templates.length === 0 ? (
+        <CNoDataYet />
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {templates.map((t, i) => (
+            <li
+              key={i}
+              className="flex items-start gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5"
+            >
+              <FileDown className="mt-0.5 size-4 shrink-0 text-primary/70" />
+              <div className="min-w-0">
+                <a
+                  href={t.sourceUrl}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-sm font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  {t.name}
+                </a>
+                {t.note && <p className="mt-0.5 text-xs text-muted-foreground">{t.note}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/** Рекомендация in-house юриста: вердикт сверху + шаги нумерованным списком */
+function CLawyerInstructionSection({ instruction }: { instruction: LawyerInstruction | null }) {
+  return (
+    <section>
+      <CEyebrow>{ru.requirement.lawyerInstruction.title}</CEyebrow>
+      {!instruction || (!instruction.verdict && instruction.steps.length === 0) ? (
+        <CNoDataYet />
+      ) : (
+        <div className="mt-3 space-y-3">
+          {instruction.verdict && (
+            <p className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/[0.04] px-3.5 py-2.5 text-sm font-medium">
+              <ClipboardList className="mt-0.5 size-4 shrink-0 text-primary/70" />
+              {instruction.verdict}
+            </p>
+          )}
+          {instruction.steps.length > 0 && (
+            <ol className="space-y-2">
+              {instruction.steps.map((step, i) => (
+                <li key={i} className="flex gap-2.5 text-sm">
+                  <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-primary/45 font-mono text-[11px] font-semibold text-primary">
+                    {i + 1}
+                  </span>
+                  <span className="leading-relaxed">{step}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 

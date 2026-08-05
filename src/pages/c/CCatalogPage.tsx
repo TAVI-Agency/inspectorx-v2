@@ -3,6 +3,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { exampleHits } from '@/data'
 import { OPERATIONS } from '@/data/taxonomy'
 import { formatHsCode, pluralize } from '@/lib/format'
+import { codeSystemLabel } from '@/i18n/format'
 import { ru } from '@/i18n/ru'
 import { CCard, CEyebrow } from './ui'
 import { CSearch } from './CSearch'
@@ -61,7 +62,7 @@ export function CCatalogPage() {
                     <span className="rounded-md bg-secondary px-2 py-1 font-mono text-[11px] text-secondary-foreground">
                       {hit.codeKind === 'hs'
                         ? formatHsCode(hit.code)
-                        : `${ru.service.okedLabel} ${hit.code}`}
+                        : `${codeSystemLabel(hit.codeKind)} ${hit.code}`}
                     </span>
                     <ArrowUpRight className="size-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary" />
                   </div>

@@ -33,6 +33,11 @@ function isoDaysFromNow(days: number): string {
   return d.toISOString()
 }
 
+/** Дата без времени (requirements.effective_from/transition_until/valid_to — колонки типа date) */
+function dateOnlyDaysFromNow(days: number): string {
+  return isoDaysFromNow(days).slice(0, 10)
+}
+
 // ── Паспорта ───────────────────────────────────────────────────────
 
 /** Мок-дополнения к реальному паспорту молока (ИКПУ в схеме нет — см. QUESTIONS №1) */
@@ -57,6 +62,14 @@ export const paracetamolPassport: ProductPassport = {
   ],
   complexity: 8,
   verifiedAt: isoDaysFromNow(-2),
+  // Полностью мок-товар — не привязан к catalog.product_types; countries считает index.ts
+  countries: [],
+  // Чипы паспорта (Задача 33) рендерятся из codes[], а не из hsCode/ikpuCode
+  // напрямую — нужны оба кода, а не только фискальный (ИКПУ).
+  codes: [
+    { system: 'tnved', code: '3004900002' },
+    { system: 'ikpu', code: '03808001001000000' },
+  ],
 }
 
 export const paracetamolHit: SearchHit = {
@@ -114,14 +127,28 @@ function defineReq(
   stage: { id: string; name: string; sortOrder: number },
   row: Omit<
     RequirementRow,
-    'id' | 'stageId' | 'stageName' | 'stageSortOrder' | 'unread' | 'underReview' | 'status'
-  > & { status?: RequirementRow['status'] },
+    | 'id'
+    | 'jurisdiction'
+    | 'lifecycle'
+    | 'stageId'
+    | 'stageName'
+    | 'stageSortOrder'
+    | 'unread'
+    | 'underReview'
+    | 'status'
+  > & { status?: RequirementRow['status']; lifecycle?: RequirementRow['lifecycle'] },
   rest: Omit<MockReq, 'row'>,
 ): MockReq {
   const req: MockReq = {
     row: {
       ...row,
       id,
+      // Мок-товары (молоко/парацетамол) живут только в УЗ
+      jurisdiction: 'UZ',
+      // По умолчанию действует сейчас; конкретным строкам ниже можно задать
+      // другую стадию ЖЦ демо-датами (effectiveFrom/transitionUntil/validTo) —
+      // это отдельная ось от status (та отвечает за ленту изменений).
+      lifecycle: row.lifecycle ?? 'in_force',
       status: row.status ?? { kind: 'active' },
       unread: false,
       underReview: false,
@@ -157,6 +184,9 @@ defineReq(
     sanctionSummary: 'штраф до 50 БРВ',
     trustLabel: 'lawyer_verified',
     trustDate: isoDaysFromNow(-6),
+    // Демо lifecycle-бейджа (Задача 34): переходный период по новому регламенту сертификации
+    lifecycle: 'transitional',
+    transitionUntil: dateOnlyDaysFromNow(30),
   },
   {
     authority: { name: 'Агентство «Узстандарт»', phone: '+998 71 202-02-02', website: 'https://standart.uz' },
@@ -177,6 +207,26 @@ defineReq(
         { text: 'Штраф до 50 БРВ за реализацию без сертификата', article: 'ст. 204 КоАО' },
         { text: 'Запрет реализации партии до устранения нарушения' },
       ],
+      statusNote:
+        'До конца переходного периода принимаются сертификаты по старой и новой схеме — успейте переоформить партии на новую схему заранее.',
+      // courtCases не задан — по этой обязанности кейсов нет, блок покажет «Данных пока нет»
+      templates: [
+        { name: 'Форма заявки на сертификацию (Узстандарт)', sourceUrl: 'https://standart.uz/templates/cert-application.docx' },
+        {
+          name: 'Шаблон протокола испытаний партии',
+          sourceUrl: 'https://standart.uz/templates/test-protocol.pdf',
+          note: 'заполняется аккредитованной лабораторией',
+        },
+      ],
+      lawyerInstruction: {
+        verdict:
+          'Сертификация обязательна для каждой партии — не начинайте отгрузку до получения сертификата и записи в реестре sert.uz.',
+        steps: [
+          'Проверьте, что образцы партии переданы в лабораторию заранее — испытания занимают до 5 рабочих дней',
+          'Убедитесь, что заявка подана от имени юрлица-производителя, а не дистрибьютора',
+          'После получения сертификата сверьте запись в реестре sert.uz — отгрузка до этого момента является нарушением',
+        ],
+      },
     },
     citations: [
       {
@@ -257,6 +307,9 @@ defineReq(
     sanctionSummary: 'штраф до 100 БРВ',
     trustLabel: 'lawyer_verified',
     trustDate: isoDaysFromNow(-6),
+    // Демо lifecycle-бейджа (Задача 34): норма отменена, карточка остаётся видимой (история)
+    lifecycle: 'repealed',
+    validTo: dateOnlyDaysFromNow(-14),
   },
   {
     authority: { name: 'Комитет санитарно-эпидемиологического благополучия', phone: '+998 71 241-04-50' },
@@ -277,6 +330,8 @@ defineReq(
         { text: 'Штраф до 100 БРВ за выпуск продукции без заключения', article: 'ст. 55 КоАО' },
         { text: 'Изъятие партии из оборота' },
       ],
+      statusNote:
+        'Отдельное СЭЗ отменено — микробиологические показатели теперь проверяются в рамках сертификации соответствия (см. этап «Оценка соответствия»).',
     },
     citations: [
       {
@@ -364,6 +419,44 @@ defineReq(
         { text: 'Штраф до 50 БРВ, при повторном нарушении — до 100 БРВ', article: 'ст. 204-1 КоАО' },
         { text: 'Снятие товара с реализации, возможна приостановка объекта торговли' },
       ],
+      courtCases: [
+        {
+          caseUrl: 'https://sud.uz/ru/case/4-1401-2602-1123',
+          caseTitle: 'Дело № 4-1401-2602/1123',
+          summaryLine: 'Реализация партии молока с истёкшим сроком годности в розничной сети',
+          outcome: 'штраф наложен, товар изъят',
+          amount: '50 БРВ',
+        },
+        {
+          caseUrl: 'https://sud.uz/ru/case/4-1401-2601-0847',
+          caseTitle: 'Дело № 4-1401-2601/847',
+          summaryLine: 'Повторная продажа просроченной молочной продукции тем же продавцом',
+          outcome: 'штраф увеличен за повторность',
+          amount: '100 БРВ',
+        },
+        {
+          caseUrl: 'https://sud.uz/ru/case/4-1401-2531-0512',
+          caseTitle: 'Дело № 4-1401-2531/512',
+          summaryLine: 'Продажа молока без контроля срока годности на витрине супермаркета',
+          outcome: 'штраф наложен, предписание устранить нарушение',
+          amount: '45 БРВ',
+        },
+      ],
+      templates: [
+        {
+          name: 'Форма акта списания просроченной продукции',
+          sourceUrl: 'https://istemolchi.uz/templates/write-off-act.docx',
+        },
+      ],
+      lawyerInstruction: {
+        verdict:
+          'Ответственность наступает даже за единичную позицию на витрине — контроль сроков должен быть ежедневным, а не выборочным.',
+        steps: [
+          'Настройте автоматическое исключение товара из продажи по системе FEFO при приближении даты',
+          'Проводите и фиксируйте ежедневную проверку витрин актом',
+          'При обнаружении просрочки — немедленно снимайте товар и оформляйте акт списания',
+        ],
+      },
     },
     citations: [
       {
@@ -438,6 +531,9 @@ defineReq(
     sanctionSummary: 'санкция не установлена — льгота',
     trustLabel: 'lawyer_verified',
     trustDate: isoDaysFromNow(-12),
+    // Демо lifecycle-бейджа (Задача 34): льгота ещё не вступила в силу
+    lifecycle: 'upcoming',
+    effectiveFrom: dateOnlyDaysFromNow(60),
   },
   {
     detail: {
@@ -797,6 +893,8 @@ export function mockCardFor(requirementId: string): RequirementCard | undefined 
         : []
   return {
     requirementId,
+    jurisdiction: req.row.jurisdiction,
+    lifecycle: req.row.lifecycle,
     authority: req.authority ?? (req.row.authorityName ? { name: req.row.authorityName } : undefined),
     detail: ok(req.detail),
     citations: ok(req.citations),
@@ -834,9 +932,49 @@ export function demoDetailFor(row: RequirementRow): RequirementCard {
       { text: 'Штраф до 50 БРВ', article: 'ст. 204 КоАО' },
       { text: 'Приостановка реализации партии до устранения' },
     ],
+    // Кейсы находятся по статье санкции — реалистично только для запретов
+    // (по обязанностям практика скуднее); null здесь честно показывает
+    // «Данных пока нет» на части карточек, а не выдумывает кейсы.
+    courtCases:
+      row.deontic === 'prohibition'
+        ? [
+            {
+              caseUrl: 'https://sud.uz/ru/case/4-0912-2603-0271',
+              caseTitle: 'Дело № 4-0912-2603/271',
+              summaryLine: 'Реализация табачной продукции несовершеннолетнему без проверки возраста',
+              outcome: 'штраф наложен, апелляция отклонена',
+              amount: '35 БРВ',
+            },
+            {
+              caseUrl: 'https://sud.uz/ru/case/4-0912-2544-0918',
+              caseTitle: 'Дело № 4-0912-2544/918',
+              summaryLine: 'Продажа сигарет без сопроводительных документов на партию',
+              outcome: 'штраф наложен',
+              amount: '50 БРВ',
+            },
+          ]
+        : null,
+    templates: [
+      { name: 'Форма акта о нарушении маркировки', sourceUrl: 'https://sud.uz/templates/act-marking.docx' },
+      {
+        name: 'Чек-лист самопроверки перед инспекцией',
+        sourceUrl: 'https://sud.uz/templates/self-check-list.pdf',
+        note: 'обновляется ежеквартально',
+      },
+    ],
+    lawyerInstruction: {
+      verdict: 'Требование применяется без исключений — готовьте документы заранее, не дожидаясь проверки.',
+      steps: [
+        'Сверьте текущий процесс с шагами выше и зафиксируйте расхождения',
+        'Соберите документы из раздела «Документы» и держите их доступными на месте продажи/производства',
+        'Назначьте ответственного за периодическую проверку исполнения',
+      ],
+    },
   }
   return {
     requirementId: row.id,
+    jurisdiction: row.jurisdiction,
+    lifecycle: row.lifecycle,
     authority: row.authorityName ? { name: row.authorityName } : undefined,
     detail: ok(detail),
     citations: ok([

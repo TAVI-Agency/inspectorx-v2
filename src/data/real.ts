@@ -8,21 +8,26 @@ import type { Json } from '@/lib/database.types'
 import { ru } from '@/i18n/ru'
 import { PHARMACY_SERVICE_ID } from './cross-links'
 import { CIGARETTES_PRODUCT_ID } from './mock/fixtures'
+import type { CountryCode, LifecycleStatus } from './countries'
 import {
   locked,
   ok,
   type AuthorityInfo,
   type Citation,
+  type CourtCase,
+  type DocumentTemplate,
   type FaqItem,
   type Gated,
   type HistoryEntry,
   type HowToStep,
+  type LawyerInstruction,
   type LawyerLeaderboard,
   type LawyerNotification,
   type LawyerProfile,
   type LawyerReview,
   type LawyerStats,
   type LeaderboardEntry,
+  type LifecycleNotification,
   type MyReviewItem,
   type RequiredDocument,
   type RequirementCard,
@@ -38,6 +43,17 @@ import {
   type StageInfo,
   type UserQuestion,
 } from './types'
+
+/** Значения вне известного enum'а (напр. будущая страна) не должны падать рендер витрины. */
+function toCountryCode(v: string | null | undefined): CountryCode {
+  return v === 'KZ' || v === 'AE' ? v : 'UZ'
+}
+
+function toLifecycle(v: string | null | undefined): LifecycleStatus {
+  return v === 'upcoming' || v === 'transitional' || v === 'expiring' || v === 'repealed'
+    ? v
+    : 'in_force'
+}
 
 // ── Разбор сырых полей ─────────────────────────────────────────────
 
@@ -99,6 +115,13 @@ function parseSteps(json: Json): HowToStep[] {
   })
 }
 
+/**
+ * Оба конвейера (importer/loader.py, importer/build/assembler.py) и схема
+ * (`20260711120000_initial_schema.sql`) пишут ключ `where_to_get`. Читаем
+ * его как основной; `where` — оборонительный фолбэк на случай прямой
+ * вставки в формате TS-типа `RequiredDocument` (см. `parseCourtCases`,
+ * который так же читает `summary` с фолбэком на `summary_line`).
+ */
 function parseDocuments(json: Json): RequiredDocument[] {
   if (!Array.isArray(json)) return []
   return json.flatMap((item): RequiredDocument[] => {
@@ -107,7 +130,13 @@ function parseDocuments(json: Json): RequiredDocument[] {
       const o = item as Record<string, Json | undefined>
       const name = typeof o.name === 'string' ? o.name : typeof o.doc === 'string' ? o.doc : ''
       if (!name.trim()) return []
-      return [{ name, where: typeof o.where === 'string' ? o.where : undefined }]
+      const where =
+        typeof o.where_to_get === 'string'
+          ? o.where_to_get
+          : typeof o.where === 'string'
+            ? o.where
+            : undefined
+      return [{ name, where }]
     }
     return []
   })
@@ -131,6 +160,67 @@ function parseSanctions(json: Json): SanctionItem[] {
     }
     return []
   })
+}
+
+/**
+ * До 5 кейсов из снапшота SudX. Шаг 'cases' кладёт в ctx.data ключ
+ * `summary_line` (importer/build/steps_cases.py), но Assembler переименовывает
+ * его в `summary` перед записью в БД — так колонка документирована в
+ * `20260711120000_initial_schema.sql` (`{case_url, case_title, summary,
+ * outcome, amount}`), см. `_court_cases_for_details` в assembler.py.
+ * Читаем `summary` как основной ключ; `summary_line` — оборонительный
+ * фолбэк на случай прямой вставки в формате шага.
+ */
+function parseCourtCases(json: Json): CourtCase[] | null {
+  if (!Array.isArray(json)) return null
+  const out: CourtCase[] = []
+  for (const item of json) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const o = item as Record<string, Json | undefined>
+    const caseUrl = typeof o.case_url === 'string' ? o.case_url : ''
+    const summaryLine =
+      typeof o.summary === 'string'
+        ? o.summary
+        : typeof o.summary_line === 'string'
+          ? o.summary_line
+          : ''
+    if (!caseUrl || !summaryLine) continue
+    out.push({
+      caseUrl,
+      caseTitle: typeof o.case_title === 'string' && o.case_title ? o.case_title : summaryLine,
+      summaryLine,
+      outcome: typeof o.outcome === 'string' ? o.outcome : '',
+      amount: typeof o.amount === 'string' && o.amount ? o.amount : undefined,
+    })
+  }
+  return out.length > 0 ? out.slice(0, 5) : null
+}
+
+/** Шаблоны от Template hunter: [{name, source_url, note}] — []/null одинаково «Данных пока нет» */
+function parseTemplates(json: Json): DocumentTemplate[] | null {
+  if (!Array.isArray(json)) return null
+  const out: DocumentTemplate[] = []
+  for (const item of json) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const o = item as Record<string, Json | undefined>
+    const name = typeof o.name === 'string' ? o.name : ''
+    const sourceUrl = typeof o.source_url === 'string' ? o.source_url : ''
+    if (!name || !sourceUrl) continue
+    out.push({ name, sourceUrl, note: typeof o.note === 'string' && o.note ? o.note : undefined })
+  }
+  return out.length > 0 ? out : null
+}
+
+/** Рекомендация in-house юриста: {verdict, steps: [text]} — без содержимого null */
+function parseLawyerInstruction(json: Json): LawyerInstruction | null {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null
+  const o = json as Record<string, Json | undefined>
+  const verdict = typeof o.verdict === 'string' ? o.verdict.trim() : ''
+  const steps = Array.isArray(o.steps)
+    ? o.steps.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    : []
+  if (!verdict && steps.length === 0) return null
+  return { verdict, steps }
 }
 
 function parseContacts(json: Json): { phone?: string } {
@@ -245,16 +335,63 @@ export async function searchProductsReal(query: string): Promise<SearchHit[]> {
 
 // ── Паспорт товара ─────────────────────────────────────────────────
 
+/**
+ * Нац. коды товара для страны — catalog.country_codes по product_type_id
+ * (ADR-0004). Схема catalog экспонирована через PostgREST (supabase/config.toml
+ * api.schemas), anon имеет grant select (20260803100000_catalog_schema.sql);
+ * подтверждено вручную на локальном Supabase (см. task-30-report.md).
+ * Нет product_type_id или строк на страну — честно пустой список, не 500-ка.
+ *
+ * product_type_id группирует ПО HS6 (например, у «бордо» это вся товарная
+ * группа 220421 — 58 разных 10-значных кодов конкретных вин), а не по
+ * одному товару — без фильтра запрос отдаёт чипы ВСЕХ товаров группы
+ * (Важно из ревью Задачи 33). Оставляем строку только если её код совпадает
+ * с СОБСТВЕННЫМ кодом товара по этой же системе (`ownCodes[system]`);
+ * системы, для которых у товара нет собственного кода (сейчас — все, кроме
+ * ТН ВЭД: у public.products нет колонки под ИКПУ), из выдачи убираются
+ * целиком — лучше не показать чип, чем показать чужой. Дедуп по (system, code)
+ * — на случай задвоения строк каталога.
+ */
+async function fetchCountryCodes(
+  productTypeId: string | null,
+  country: CountryCode,
+  ownCodes: Partial<Record<string, string>>,
+): Promise<{ system: string; code: string }[]> {
+  if (!productTypeId) return []
+  const { data, error } = await supabase
+    .schema('catalog')
+    .from('country_codes')
+    .select('system, code')
+    .eq('product_type_id', productTypeId)
+    .eq('country', country)
+  if (error) return []
+  const seen = new Set<string>()
+  const out: { system: string; code: string }[] = []
+  for (const row of data ?? []) {
+    const own = ownCodes[row.system]
+    if (own === undefined || row.code !== own) continue
+    const key = `${row.system}:${row.code}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(row)
+  }
+  return out
+}
+
 export async function fetchPassportReal(
   productId: string,
+  country: CountryCode,
 ): Promise<ProductPassport | null> {
   const { data: p } = await supabase
     .from('products')
-    .select('id, name_ru, hs_code, complexity_index, hierarchy_path')
+    .select('id, name_ru, hs_code, complexity_index, hierarchy_path, product_type_id')
     .eq('id', productId)
     .maybeSingle()
   if (!p) return null
-  const aliases = await defaultAliases([p.id])
+  const [aliases, codes] = await Promise.all([
+    defaultAliases([p.id]),
+    fetchCountryCodes(p.product_type_id, country, { tnved: p.hs_code }),
+  ])
   const h = parseHierarchy(p.hierarchy_path)
   const official = officialFromRaw(p.name_ru)
   return {
@@ -265,6 +402,9 @@ export async function fetchPassportReal(
     categoryName: categoryShort(h),
     hierarchyLevels: h.levels ?? [],
     complexity: p.complexity_index ?? undefined,
+    // countries — сводка по всем странам считается в index.ts (там же живут KZ/AE-фикстуры)
+    countries: [],
+    codes,
   }
 }
 
@@ -366,6 +506,97 @@ export async function fetchServiceDocumentsCountReal(
   return count
 }
 
+// ── Матрица сравнения стран (Задача 32) ─────────────────────────────
+
+/**
+ * Порядок «худшести» lifecycle для агрегата матрицы сравнения: индекс —
+ * приоритет тревожности (меньше — тревожнее). При нескольких требованиях
+ * категории показываем самый тревожный статус: repealed (отменено) и
+ * expiring (истекает) важнее показать пользователю, чем transitional
+ * (переходный период) и upcoming (вступит в силу); in_force («действует»
+ * без оговорок) — наименее тревожный, бейджем не отмечается (см. CCompareMatrix).
+ */
+const LIFECYCLE_SEVERITY: LifecycleStatus[] = [
+  'repealed',
+  'expiring',
+  'transitional',
+  'upcoming',
+  'in_force',
+]
+
+export function worseLifecycle(a: LifecycleStatus, b: LifecycleStatus): LifecycleStatus {
+  return LIFECYCLE_SEVERITY.indexOf(a) <= LIFECYCLE_SEVERITY.indexOf(b) ? a : b
+}
+
+export interface ComparisonAggregate {
+  count: number
+  worstLifecycle: LifecycleStatus
+}
+
+/**
+ * Категории требований (requirement_categories, публичное чтение) + агрегат
+ * по УЗ для товара: сколько опубликованных требований в каждой категории и
+ * самый тревожный lifecycle среди них. Требования резолвятся по HS-коду
+ * товара — тот же паттерн applicability, что и в fetchRequirementsReal.
+ * У мок-товаров (молоко/парацетамол) продукта с таким id в products нет
+ * (или для него в базе ещё нет published-требований) — агрегат вернётся
+ * пустым; index.ts в этом случае считает его сам из фикстурных rows.
+ */
+export async function fetchComparisonReal(productId: string): Promise<{
+  categories: { slug: string; name: string; sortOrder: number }[]
+  uz: Record<string, ComparisonAggregate>
+}> {
+  // Мок-id (парацетамол) — не UUID, products.id его 400-нёт; index.ts всё
+  // равно считает УЗ-агрегат сам из фикстур для таких товаров (см. вызов ниже).
+  const productQuery = productId.startsWith('mock-')
+    ? Promise.resolve({ data: null, error: null })
+    : supabase.from('products').select('hs_code').eq('id', productId).maybeSingle()
+  const [categoriesRes, productRes] = await Promise.all([
+    supabase
+      .from('requirement_categories')
+      .select('slug, name_ru, sort_order')
+      .eq('is_active', true)
+      .order('sort_order'),
+    productQuery,
+  ])
+  // Без этой проверки сбой запроса справочника молча схлопывал бы всю
+  // матрицу в «нигде ничего нет» вместо явной ошибки на экране.
+  if (categoriesRes.error) throw categoriesRes.error
+  if (productRes.error) throw productRes.error
+  const categories = (categoriesRes.data ?? []).map((c) => ({
+    slug: c.slug,
+    name: c.name_ru,
+    sortOrder: c.sort_order,
+  }))
+
+  const hsCode = productRes.data?.hs_code
+  if (!hsCode) return { categories, uz: {} }
+
+  const { data, error } = await supabase
+    .from('requirements_with_status')
+    .select('category_slug, lifecycle, requirement_applicability!inner(code, scope)')
+    .eq('status', 'published')
+    .eq('jurisdiction', 'UZ' satisfies CountryCode)
+    .or(`code.eq.${hsCode},scope.eq.all_products`, {
+      referencedTable: 'requirement_applicability',
+    })
+  if (error) throw error
+
+  const uz: Record<string, ComparisonAggregate> = {}
+  for (const row of data ?? []) {
+    if (!row.category_slug) continue
+    const lc = toLifecycle(row.lifecycle)
+    const existing = uz[row.category_slug]
+    if (existing) {
+      existing.count += 1
+      existing.worstLifecycle = worseLifecycle(existing.worstLifecycle, lc)
+    } else {
+      uz[row.category_slug] = { count: 1, worstLifecycle: lc }
+    }
+  }
+  return { categories, uz }
+}
+
 // ── Список требований (уровень 0) ──────────────────────────────────
 
 export interface RequirementListReal {
@@ -374,20 +605,31 @@ export interface RequirementListReal {
   verifiedAt?: string
 }
 
-const REQUIREMENT_LIST_SELECT = `id, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at, requirement_category, nature,
+const REQUIREMENT_LIST_SELECT = `id, jurisdiction, lifecycle, effective_from, transition_until, valid_to, deontic, operation, transport_type, addressee_roles, trust_label, review_flag, reviewed_at, published_at, requirement_category, nature,
        lifecycle_stages(id, name_ru, sort_order),
        authorities(name_ru),
        requirement_contents(lang, title, sanction_summary),
        requirement_applicability!inner(code, scope)`
 
+/**
+ * Источник — view requirements_with_status (не таблица): генератор типов
+ * Supabase честно помечает nullable ВСЕ колонки представления, даже те,
+ * что NOT NULL на requirements. Практически они пустыми не приходят
+ * (фильтр status=published), но типы это отражают — обрабатываем ?? ниже.
+ */
 interface RawListRow {
-  id: string
-  deontic: RequirementRow['deontic']
-  operation: RequirementRow['operation']
+  id: string | null
+  jurisdiction: string | null
+  lifecycle: string | null
+  effective_from: string | null
+  transition_until: string | null
+  valid_to: string | null
+  deontic: RequirementRow['deontic'] | null
+  operation: RequirementRow['operation'] | null
   transport_type: RequirementRow['transport'] | null
-  addressee_roles: RequirementRow['roles']
-  trust_label: DbTrustLabel
-  review_flag: 'none' | 'flagged_by_change'
+  addressee_roles: RequirementRow['roles'] | null
+  trust_label: DbTrustLabel | null
+  review_flag: 'none' | 'flagged_by_change' | null
   reviewed_at: string | null
   published_at: string | null
   requirement_category: NonNullable<RequirementRow['category']> | null
@@ -397,13 +639,20 @@ interface RawListRow {
   requirement_contents: { lang: string; title: string; sanction_summary: string | null }[]
 }
 
+/**
+ * Список требований товара: чтение из view requirements_with_status
+ * (security_invoker — та же RLS-видимость, что и у таблицы requirements,
+ * плюс вычисленный lifecycle). Фильтр по стране — .eq('jurisdiction', …).
+ */
 export async function fetchRequirementsReal(
   hsCode: string,
+  country: CountryCode,
 ): Promise<RequirementListReal> {
   const { data, error } = await supabase
-    .from('requirements')
+    .from('requirements_with_status')
     .select(REQUIREMENT_LIST_SELECT)
     .eq('status', 'published')
+    .eq('jurisdiction', country)
     .or(`code.eq.${hsCode},scope.eq.all_products`, {
       referencedTable: 'requirement_applicability',
     })
@@ -411,7 +660,10 @@ export async function fetchRequirementsReal(
   return listFromData(data ?? [])
 }
 
-/** Требования услуги: точный код ОКЭД + классы-префиксы + общие для всех услуг */
+/**
+ * Требования услуги: точный код ОКЭД + классы-префиксы + общие для всех услуг.
+ * Услуги пока UZ-only (Блок 4 — только товарный каталог многострановый).
+ */
 export async function fetchServiceRequirementsReal(
   okedCode: string | null,
 ): Promise<RequirementListReal> {
@@ -423,9 +675,10 @@ export async function fetchServiceRequirementsReal(
       filters.push(`and(scope.eq.oked_prefix,code.in.(${prefixes.join(',')}))`)
   }
   const { data, error } = await supabase
-    .from('requirements')
+    .from('requirements_with_status')
     .select(REQUIREMENT_LIST_SELECT)
     .eq('status', 'published')
+    .eq('jurisdiction', 'UZ' satisfies CountryCode)
     .or(filters.join(','), { referencedTable: 'requirement_applicability' })
   if (error) throw error
   return listFromData(data ?? [])
@@ -445,6 +698,8 @@ function listFromData(data: RawListRow[]): RequirementListReal {
   const rows: RequirementRow[] = []
   const seen = new Set<string>()
   for (const r of data) {
+    // Защитные поля view, реально не бывают null у published-строки (см. коммент RawListRow)
+    if (!r.id || !r.deontic || !r.operation || !r.addressee_roles || !r.trust_label) continue
     const content =
       r.requirement_contents.find((c) => c.lang === 'ru') ??
       r.requirement_contents[0]
@@ -467,6 +722,11 @@ function listFromData(data: RawListRow[]): RequirementListReal {
     rows.push({
       id: r.id,
       title,
+      jurisdiction: toCountryCode(r.jurisdiction),
+      lifecycle: toLifecycle(r.lifecycle),
+      effectiveFrom: r.effective_from ?? undefined,
+      transitionUntil: r.transition_until ?? undefined,
+      validTo: r.valid_to ?? undefined,
       deontic: r.deontic,
       roles: r.addressee_roles,
       operation: r.operation,
@@ -523,13 +783,15 @@ export async function fetchCardReal(
 ): Promise<RequirementCard> {
   const [req, details, cits, faqs, revs] = await Promise.all([
     supabase
-      .from('requirements')
-      .select('authorities(name_ru, contacts, website)')
+      .from('requirements_with_status')
+      .select('jurisdiction, lifecycle, authorities(name_ru, contacts, website)')
       .eq('id', requirementId)
       .maybeSingle(),
     supabase
       .from('requirement_details')
-      .select('lang, description, how_to_comply, documents, sanctions')
+      .select(
+        'lang, description, how_to_comply, documents, sanctions, status_note, court_cases, templates, lawyer_instruction',
+      )
       .eq('requirement_id', requirementId),
     supabase
       .from('requirement_citations')
@@ -569,9 +831,21 @@ export async function fetchCardReal(
       steps: parseSteps(d.how_to_comply),
       documents: parseDocuments(d.documents),
       sanctions: parseSanctions(d.sanctions),
+      statusNote: d.status_note ?? undefined,
+      courtCases: parseCourtCases(d.court_cases),
+      templates: parseTemplates(d.templates),
+      lawyerInstruction: parseLawyerInstruction(d.lawyer_instruction),
     })
   } else if (isSubscriber) {
-    detail = ok({ description: undefined, steps: [], documents: [], sanctions: [] })
+    detail = ok({
+      description: undefined,
+      steps: [],
+      documents: [],
+      sanctions: [],
+      courtCases: null,
+      templates: null,
+      lawyerInstruction: null,
+    })
   }
 
   let citations: Gated<Citation[]> = locked
@@ -627,7 +901,16 @@ export async function fetchCardReal(
     history = ok([])
   }
 
-  return { requirementId, authority, detail, citations, faqs: faqList, history }
+  return {
+    requirementId,
+    jurisdiction: toCountryCode(req.data?.jurisdiction),
+    lifecycle: toLifecycle(req.data?.lifecycle),
+    authority,
+    detail,
+    citations,
+    faqs: faqList,
+    history,
+  }
 }
 
 // ── Проверка юристом ───────────────────────────────────────────────
@@ -1160,6 +1443,43 @@ export async function markLawyerNotificationReadReal(id: string): Promise<void> 
   if (error) throw error
 }
 
+// ── Lifecycle-уведомления (user_notifications, kind='lifecycle', Задача 38) ─
+
+export async function fetchLifecycleNotificationsReal(): Promise<LifecycleNotification[]> {
+  const { data, error } = await supabase
+    .from('user_notifications')
+    .select('id, requirement_id, payload, is_read, created_at')
+    .eq('kind', 'lifecycle')
+    .order('created_at', { ascending: false })
+    .limit(30)
+  if (error) throw error
+  const rows = data ?? []
+  const reqIds = [...new Set(rows.map((r) => r.requirement_id))]
+  const links = await resolveRequirementLinks(reqIds)
+  return rows.map((r) => {
+    const payload = (r.payload ?? {}) as { event?: string; date?: string; title?: string }
+    const info = links.get(r.requirement_id)
+    return {
+      id: r.id,
+      event: (payload.event as LifecycleNotification['event']) ?? 'effective_from',
+      date: payload.date ?? r.created_at,
+      requirementId: r.requirement_id,
+      requirementTitle: payload.title ?? info?.title ?? 'Требование',
+      link: info?.link,
+      isRead: r.is_read,
+      createdAt: r.created_at,
+    }
+  })
+}
+
+export async function markLifecycleNotificationReadReal(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
 // ── Мои вопросы (user_questions, RLS: own read) ────────────────────
 
 export async function fetchMyQuestionsReal(): Promise<UserQuestion[]> {
@@ -1312,5 +1632,42 @@ export async function addChosenReal(userId: string, productId: string): Promise<
 
 export async function removeChosenReal(chosenId: string): Promise<void> {
   const { error } = await supabase.from('chosen_products').delete().eq('id', chosenId)
+  if (error) throw error
+}
+
+// ── Календарь дедлайнов (calendar_tokens, Блок 5) ───────────────────
+// RLS: владелец select/insert/delete своей строки (PK — user_id, см.
+// 20260803180000_calendar_notifications.sql). Гейт по подписке — не здесь:
+// insert доступен любому залогиненному, а собственно .ics-фид (Задача 36,
+// api/calendar/[token].ts) отдаёт 403 не-подписчику. UI прячет блок
+// подключения от не-подписчика сам (см. CSettingsPage) — иначе токен
+// создаётся, но реально никогда не наполнится событиями.
+
+export interface CalendarTokenRow {
+  token: string
+  createdAt: string
+}
+
+export async function fetchCalendarTokenReal(): Promise<CalendarTokenRow | null> {
+  const { data, error } = await supabase
+    .from('calendar_tokens')
+    .select('token, created_at')
+    .maybeSingle()
+  if (error) throw error
+  return data ? { token: data.token, createdAt: data.created_at } : null
+}
+
+export async function createCalendarTokenReal(userId: string): Promise<CalendarTokenRow> {
+  const { data, error } = await supabase
+    .from('calendar_tokens')
+    .insert({ user_id: userId })
+    .select('token, created_at')
+    .single()
+  if (error) throw error
+  return { token: data.token, createdAt: data.created_at }
+}
+
+export async function deleteCalendarTokenReal(userId: string): Promise<void> {
+  const { error } = await supabase.from('calendar_tokens').delete().eq('user_id', userId)
   if (error) throw error
 }

@@ -56,8 +56,9 @@
   наполнены лупом, у всех 4 витринных товаров 0 пустых секций.
 - `н/п` Раскрытие дерева категорий (рассинхрон `category_id`) — баг v1; в v2 каталог другой.
 - ✅ Поиск: товар без контента → «раздел в работе» + заявка (`CSearch` → `content_requests`).
-- ❌ Колокольчик: в кабинете есть, но `user_notifications` — **0 строк**. Пункт «наполнить
-  или скрыть» так и открыт.
+- ◐ Колокольчик: `change` по-прежнему мок-лента (`fetchChangeFeed`, без строк в
+  `user_notifications`). `lifecycle` (Задача 38, cron `process_lifecycle_transitions`,
+  требует включённого в проде `pg_cron` — см. блок E) и `lawyer`/`question` — реальные.
 - ✅ Лендинг «Один маршрут» (`LandingB`) + SEO/GEO (PR #2).
 - ◐ Бренд: опечатки `InspektorX` нет; используются `ИнспекторX` (26) и `InspectorX` (9).
   Правила «где кириллица, где латиница» не записано — мелочь, но лучше зафиксировать.
@@ -93,7 +94,37 @@
 
 - ✅ Vercel-прод, домен `inspectorx.uz` (HTTP 200, редиректы с www и дефисных версий),
   SPA-rewrites.
-- `?` Бэкапы Supabase — настройка панели, из кода не проверить.
+- `?` Бэкапы Supabase — настройка панели, из кода не проверить. План Pro даёт суточные копии
+  с хранением 7 дней; PITR в Pro не входит (отдельные $100/мес).
+- ◐ **Переезд аккаунта (02.08.2026):** оба проекта Supabase перенесены на основной аккаунт
+  владельца — адрес БД и ключи проекта не изменились, прод не пострадал (проверено: отвечает,
+  345 требований на месте). Побочный эффект: протухли `SUPABASE_ACCESS_TOKEN` и `JB_SUPABASE_KEY`
+  в `.env.importer` — их надо перевыпустить (`docs/INFRA_ACCOUNTS.md`). Плюс включена
+  GitHub-интеграция: мёрж в `main` теперь сам применяет миграции к проду.
+- `?` **Порядок обязателен — включить ДО мёржа: Cron lifecycle-уведомлений (Задача 38,
+  `20260804100000_lifecycle_cron.sql`):** расширение `pg_cron` включить в проде вручную —
+  Dashboard → Database → Extensions — **до** мёржа этой миграции в `main`. Миграция требует
+  расширение; автонакат GitHub-интеграции идёт по всем новым файлам `supabase/migrations/`
+  подряд, и `create extension if not exists pg_cron` в ней упадёт, если расширение не
+  разрешено организации заранее (одной миграции недостаточно) — а значит упадут и остановятся
+  все миграции после неё в том же пуше, оставив прод в частичном состоянии (часть накатана,
+  часть нет).
+- `?` **Секрет вебхука LegalX (Задача 39, `20260804110000_ingest_change_event.sql`):**
+  перед или сразу после мёржа этой миграции завести в Vault прода (Dashboard →
+  Database → Vault, НЕ через SQL) секрет `legalx_webhook_secret` — тот же общий
+  секрет, что заведён в Vault LegalX (ADR-0005, Контракт 3). Без него
+  `ingest_change_event` отвечает `webhook secret not configured` на любой вызов —
+  функция в проде есть, но webhook не принимает события до этого шага.
+- `?` **Exposed schemas для Build-конвейера и каталога:** Dashboard → API → Exposed schemas —
+  добавить `pipeline` (`importer/build/orchestrator.py:663`, `client.schema("pipeline")`) и
+  `catalog` (`orchestrator.py:721`, `client.schema("catalog").table("product_types")`). Без
+  этого PostgREST отвечает `PGRST106` (schema must be one of the exposed schemas) на запросы
+  Build-конвейера и каталожные запросы.
+- `?` **Vercel env для .ics-фида (`api/calendar/[token].ts`):** Project Settings → Environment
+  Variables — `SUPABASE_SERVICE_ROLE_KEY` обязателен (функция читает `calendar_tokens` и
+  `profiles.is_subscribed` мимо RLS сервис-ролью); плюс `SUPABASE_URL`, если в проекте не
+  задан клиентский `VITE_SUPABASE_URL` (используется как фолбэк, см. сам файл). Без
+  service-ключа фид отвечает 500 «Ошибка конфигурации сервера».
 - ❌ **Sentry — нет** (ни в зависимостях, ни в проде).
 - ❌ **Аналитика — нет.** В HTML прода 0 совпадений по gtag/Plausible/Метрике.
   Продукт в проде две недели вслепую: неизвестно даже, заходит ли кто-нибудь.
@@ -110,7 +141,46 @@
   Оговорка: полное покрытие у 4 товаров, остальные ~261 — пустые карточки каталога
   (для них и работает «раздел в работе» + заявка).
 - ✅ Тексты лендинга и страницы тарифа.
-- ❌ 2–3 уведомления для колокольчика — 0 строк (см. блок B).
+- ◐ Уведомления для колокольчика — `lifecycle` теперь льётся из cron-а (см. блок B),
+  `change` по товарам всё ещё мок-лента.
+
+## Гейт первого живого прогона (до подключения LLM-ключа)
+
+Build-конвейер (`importer/build/`) сейчас гоняется только с `HeuristicBaselineLLM`/
+`_default_llm_runner`-заглушками (живого LLM-ключа в контуре нет, см. `docs/HANDOFF_CODEX.md`
+и докстринги `_default_llm_runner` во всех `importer/build/steps_*.py`) — ниже риски, которые
+эта заглушка сейчас маскирует и которые нужно закрыть/перепроверить ДО первого прогона с
+реальным ключом:
+
+1. ❌ **Транзакционность `save_requirement_draft`** (`importer/build/orchestrator.py:862`) —
+   delete+insert по каждой из `requirement_contents`/`requirement_details`/
+   `requirement_applicability`/`requirement_rules` четырьмя отдельными вызовами, без общей
+   транзакции. Сбой между `delete` и последующим `insert` для уже `published` требования
+   оставляет строку `requirements` в статусе `published`, но без контента — карточка исчезает
+   с витрины (RLS-таблицы отдают пусто), хотя формально существует. Нужна транзакция/RPC или
+   insert-before-delete.
+2. ❌ **Заглушки `group_ref`/`jurisdiction` в глобальном реестре ре-ревью**
+   (`importer/cli.py` monitor-путь, `importer/build/steps_load.py:_STUB_GROUP_REF=""`) —
+   `monitor process-changes` строит `Orchestrator` без per-run реестра шагов (докстринг в
+   `cli.py`, ветка `monitor process-changes`), поэтому `LoadStep` считает `external_key` как
+   `f"{_STUB_GROUP_REF}:{jurisdiction}:{slug}"` = `":UZ:hash"` вместо реального `group_ref`,
+   с которым требование было опубликовано через `build run`. `save_requirement_draft` ищет
+   существующую строку по `external_key`, не находит совпадения — создаёт НОВОЕ
+   `published`-требование дублем старого. Нужна привязка per-item реестра к исходной карте
+   айтема (тот же долг, что уже зафиксирован в `registry.py`).
+3. ❌ **`TranslateStep._translate` зовёт LLM в обход `agents.py`**
+   (`importer/build/steps_translate.py`, метод `_translate`) — `self._llm.complete(prompt,
+   model)` напрямую, без `_trace_llm_call` (тот пишет `pipeline.llm_calls`, на нём стоит
+   cost-отчёт — см. `agents.py` и его вызовы в `Retriever`/`Verifier`/`Classifier`/
+   `Generator`). У `TranslateStep` уже есть `self._tracer` в конструкторе (используется только
+   для внутреннего `Verifier`), но сам перевод в трейсинг не попадает — дыра в cost-отчёте
+   ровно на переводах.
+4. ✅ **Дедуп при partial-rerun мимо шага 'summary'** (`importer/build/steps_dedup.py:
+   DedupStep._run`) — исправлено этим фикс-вейвом: `text = ctx.data.get("summary") or
+   ctx.item.summary_text or ctx.item.expected_item` (было без `ctx.item.summary_text` —
+   partial `rerun_item`, начатый после шага 'summary', падал сразу на `expected_item`, срывая
+   симметричное сравнение с `list_run_item_texts`, который уже фолбэкается на
+   `summary_text`). Пин-тесты — `importer/tests/build/test_steps_dedup.py`.
 
 ---
 

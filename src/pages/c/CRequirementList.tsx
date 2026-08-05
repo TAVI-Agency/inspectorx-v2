@@ -7,7 +7,7 @@ import { categoryChipOf } from '@/data/taxonomy'
 import { formatDate, pluralize } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
-import { CCard, CCategoryChip, CDeonticChip } from './ui'
+import { CCard, CCategoryChip, CDeonticChip, CLifecycleBadge } from './ui'
 import { CRequirementCard } from './CRequirementCard'
 
 /**
@@ -164,7 +164,12 @@ function CRow({
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:px-5"
+        className={cn(
+          'group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:px-5',
+          // Отменённое требование — история для юзера, не скрываем строку, а приглушаем;
+          // раскрытая карточка ниже остаётся в полную силу — читать историю должно быть удобно
+          row.lifecycle === 'repealed' && 'opacity-60',
+        )}
       >
         <span className="relative mt-0.5 shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
           {String(number).padStart(2, '0')}
@@ -187,6 +192,12 @@ function CRow({
                 {ru.requirement.underReview}
               </span>
             )}
+            <CLifecycleBadge
+              lifecycle={row.lifecycle}
+              effectiveFrom={row.effectiveFrom}
+              transitionUntil={row.transitionUntil}
+              validTo={row.validTo}
+            />
             {reviewStats && <CReviewBadge stats={reviewStats} />}
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

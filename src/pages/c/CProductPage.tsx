@@ -10,6 +10,7 @@ import {
   useProductBundle,
 } from '@/data/hooks'
 import type { Operation, TransportType } from '@/data/types'
+import { parseCountryParam, type CountryCode } from '@/data/countries'
 import {
   buildOperationNodes,
   filterRows,
@@ -18,11 +19,14 @@ import {
 } from '@/data/taxonomy'
 import { serviceLinkForProduct } from '@/data/cross-links'
 import { formatDate, formatHsCode } from '@/lib/format'
+import { codeSystemLabel, sortCodesForDisplay } from '@/i18n/format'
 import { ru } from '@/i18n/ru'
 import { cn } from '@/lib/utils'
 import { CCard, CEyebrow, CLockedValue, CStatTile, CountUp } from './ui'
 import { CRouteNav, CRouteNavMobile } from './CRouteNav'
 import { CRequirementList } from './CRequirementList'
+import { CCountryNoneState, CCountryPreviewBanner, CCountryTabs } from './product/CCountryTabs'
+import { CCompareMatrixButton } from './product/CCompareMatrix'
 
 /**
  * Досье товара в дизайне C: паспорт → приборные метрики → маршрут
@@ -30,8 +34,15 @@ import { CRequirementList } from './CRequirementList'
  */
 export function CProductPage() {
   const { productId } = useParams<{ productId: string }>()
-  const [searchParams] = useSearchParams()
-  const { data, isLoading, isError } = useProductBundle(productId)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const country = parseCountryParam(searchParams.get('country'))
+  const { data, isLoading, isError, isFetching, isPlaceholderData } = useProductBundle(
+    productId,
+    country,
+  )
+  // placeholderData (Задача 31) держит на экране данные ПРЕЖНЕЙ страны, пока грузится
+  // новая — без этого флага список/плашка preview молча врут под уже переключённым табом
+  const switchingCountry = isFetching && isPlaceholderData
 
   const rows = useMemo(() => data?.rows ?? [], [data])
   const nodes = useMemo(() => buildOperationNodes(rows), [rows])
@@ -43,6 +54,19 @@ export function CProductPage() {
   const [opState, setOpState] = useState<Operation | null>(null)
   const [transport, setTransport] = useState<TransportType | null>(null)
   const activeOp = opState ?? defaultOp
+
+  /** Смена страны: сбрасывает выбор операции (у неё другой набор строк) и deep-link req */
+  function selectCountry(next: CountryCode) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (next === 'UZ') params.delete('country')
+      else params.set('country', next)
+      params.delete('req')
+      return params
+    })
+    setOpState(null)
+    setTransport(null)
+  }
 
   const filteredRows = useMemo(
     () => filterRows(rows, activeOp, transport),
@@ -79,6 +103,7 @@ export function CProductPage() {
   }
 
   const { passport, metrics } = data
+  const countryState = passport.countries.find((c) => c.country === country)?.state ?? 'live'
   const deeplinkInView = reqParam && filteredRows.some((r) => r.id === reqParam)
   const initialRequirementId = deeplinkInView ? reqParam : filteredRows[0]?.id
 
@@ -112,13 +137,19 @@ export function CProductPage() {
             {passport.officialName}
           </p>
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
-              {ru.product.hsLabel} {formatHsCode(passport.hsCode)}
-            </span>
-            {passport.ikpuCode && (
-              <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
-                {ru.product.ikpuLabel} {passport.ikpuCode}
-              </span>
+            {/* Чипы кодов — из passport.codes (страно-независимо, Задача 33):
+                лейбл по системе кода, а не по хардкоду «ТН ВЭД»/«ИКПУ» на конкретную страну.
+                Пустой codes[] (товар ещё не заведён строкой в catalog.country_codes) —
+                фолбэк на скалярные hsCode/ikpuCode паспорта, как было раньше. */}
+            {passport.codes.length > 0 ? (
+              sortCodesForDisplay(passport.codes).map((c) => (
+                <CCodeChip key={`${c.system}-${c.code}`} system={c.system} code={c.code} />
+              ))
+            ) : (
+              <>
+                <CCodeChip system="tnved" code={passport.hsCode} />
+                {passport.ikpuCode && <CCodeChip system="ikpu" code={passport.ikpuCode} />}
+              </>
             )}
             {passport.complexity != null && <ComplexityMeter value={passport.complexity} />}
             {passport.verifiedAt && (
@@ -188,60 +219,110 @@ export function CProductPage() {
         )
       })()}
 
-      {rows.length === 0 ? (
-        <CCard className="mt-9 p-8 text-center">
-          <h2 className="text-lg font-semibold tracking-tight">
-            {ru.product.noRequirementsTitle}
-          </h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-            {ru.product.noRequirementsText}
-          </p>
-        </CCard>
-      ) : (
-        <div className="mt-9 grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="hidden lg:sticky lg:top-8 lg:block lg:self-start">
-            <CRouteNav
-              nodes={nodes}
-              activeOp={activeOp}
-              transport={transport}
-              onSelectOp={selectOp}
-              onSelectTransport={setTransport}
+      <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <CCountryTabs
+          coverage={passport.countries}
+          country={country}
+          onChange={selectCountry}
+        />
+        <CCompareMatrixButton productId={passport.id} />
+      </div>
+
+      <div className="mt-5">
+        {switchingCountry && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground"
+          >
+            <span
+              aria-hidden
+              className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary"
             />
-          </aside>
-
-          <div className="min-w-0">
-            <div className="lg:hidden">
-              <CRouteNavMobile
-                nodes={nodes}
-                activeOp={activeOp}
-                transport={transport}
-                onSelectOp={selectOp}
-                onSelectTransport={setTransport}
-              />
-            </div>
-
-            <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 lg:mt-0">
-              <h2 className="text-lg font-semibold tracking-tight">
-                {operationMeta(activeOp).full}
-                <span className="ml-2 font-mono text-sm font-normal text-muted-foreground tabular-nums">
-                  {filteredRows.length}
-                </span>
-              </h2>
-            </div>
-
-            <div className="mt-4">
-              <CRequirementList
-                key={`${activeOp}-${transport ?? 'all'}`}
-                rows={filteredRows}
-                stages={stages}
-                productId={passport.id}
-                initialRequirementId={initialRequirementId}
-              />
-            </div>
+            {ru.product.countrySwitching}
           </div>
+        )}
+
+        {/* Пока грузится новая страна, данные ниже — ещё от прежней (placeholderData):
+            приглушаем и блокируем клики, чтобы список требований не выглядел как
+            уже актуальный под переключённым табом. Плашка preview — по той же причине
+            только когда данные действительно её страны, не чужие. */}
+        <div className={cn(switchingCountry && 'pointer-events-none opacity-40 transition-opacity')}>
+          {countryState === 'none' ? (
+            <CCountryNoneState productId={passport.id} country={country} />
+          ) : (
+            <>
+              {!switchingCountry && countryState === 'preview' && (
+                <CCountryPreviewBanner className="mb-5" />
+              )}
+
+              {rows.length === 0 ? (
+                <CCard className="p-8 text-center">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    {ru.product.noRequirementsTitle}
+                  </h2>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                    {ru.product.noRequirementsText}
+                  </p>
+                </CCard>
+              ) : (
+                <div className="grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
+                  <aside className="hidden lg:sticky lg:top-8 lg:block lg:self-start">
+                    <CRouteNav
+                      nodes={nodes}
+                      activeOp={activeOp}
+                      transport={transport}
+                      onSelectOp={selectOp}
+                      onSelectTransport={setTransport}
+                    />
+                  </aside>
+
+                  <div className="min-w-0">
+                    <div className="lg:hidden">
+                      <CRouteNavMobile
+                        nodes={nodes}
+                        activeOp={activeOp}
+                        transport={transport}
+                        onSelectOp={selectOp}
+                        onSelectTransport={setTransport}
+                      />
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 lg:mt-0">
+                      <h2 className="text-lg font-semibold tracking-tight">
+                        {operationMeta(activeOp).full}
+                        <span className="ml-2 font-mono text-sm font-normal text-muted-foreground tabular-nums">
+                          {filteredRows.length}
+                        </span>
+                      </h2>
+                    </div>
+
+                    <div className="mt-4">
+                      <CRequirementList
+                        key={`${activeOp}-${transport ?? 'all'}`}
+                        rows={filteredRows}
+                        stages={stages}
+                        productId={passport.id}
+                        initialRequirementId={initialRequirementId}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
+  )
+}
+
+/** Чип кода в паспорте: лейбл системы + сам код (ТН ВЭД форматируется группами цифр). */
+function CCodeChip({ system, code }: { system: string; code: string }) {
+  return (
+    <span className="rounded-md bg-secondary px-2.5 py-1 font-mono text-xs text-secondary-foreground">
+      {codeSystemLabel(system)} {system === 'tnved' ? formatHsCode(code) : code}
+    </span>
   )
 }
 

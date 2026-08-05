@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>InspectorX — финальный wireframe (логика)</title>
+<style>
+  :root{--bg:#f5f7f6;--card:#fff;--border:#e0e6e3;--text:#1c2b26;--muted:#82918b;
+    --accent:#1e6b57;--accent-soft:#e6f0ec;--danger:#c0392b;--r:10px}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Inter,system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
+
+  /* сайдбар */
+  aside{width:240px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:width .2s;flex-shrink:0}
+  aside.collapsed{width:60px}
+  aside.collapsed .lbl,aside.collapsed .sec,aside.collapsed .pinfo,aside.collapsed .ltext{display:none}
+  .logo{display:flex;align-items:center;gap:10px;padding:16px 14px}
+  .lmark{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+  .ltext b{font-size:14px}
+  #clps{margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer}
+  nav{flex:1;padding:6px 8px;overflow-y:auto}
+  .sec{font-size:10px;letter-spacing:.09em;color:var(--muted);text-transform:uppercase;padding:16px 10px 6px}
+  .ni{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;font-size:13.5px;cursor:pointer}
+  .ni:hover{background:var(--bg)}
+  .ni.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .ni .ico{width:18px;text-align:center;flex-shrink:0}
+  .cnt{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:1px 6px}
+  .soon{margin-left:auto;font-size:10px;color:var(--muted)}
+  .lawyer{display:none}
+  body.rl .lawyer{display:flex}
+  body.rl .sec.lawyer{display:block}
+
+  /* низ сайдбара: только профиль */
+  .sbot{border-top:1px solid var(--border);padding:8px;position:relative}
+  .prof{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .prof:hover{background:var(--bg)}
+  .ava{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+  .pinfo{font-size:12px;line-height:1.3;min-width:0}
+  .pinfo span{color:var(--muted);font-size:10.5px}
+
+  /* меню профиля (вверх, как Wispr/Claude) */
+  .pmenu{position:absolute;bottom:56px;left:8px;width:250px;background:var(--card);border:1px solid var(--border);
+    border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.1);display:none;z-index:60;overflow:hidden}
+  .pmenu.open{display:block}
+  .pm-head{padding:12px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)}
+  .pm-plan{margin:8px;padding:10px 12px;border-radius:8px;background:var(--accent-soft);font-size:12px;cursor:pointer}
+  .pm-plan b{color:var(--accent);display:block;font-size:12.5px}
+  .mi{padding:9px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px}
+  .mi:hover{background:var(--bg)}
+  .mi .r{margin-left:auto;color:var(--muted);font-size:12px}
+  .sep{border-top:1px solid var(--border);margin:5px 0}
+
+  /* шапка: минимум */
+  main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  header{height:50px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;flex-shrink:0}
+  .crumb{font-size:13px;color:var(--muted)}
+  .hr{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .rsw{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:11.5px}
+  .rsw button{border:none;background:var(--card);padding:5px 9px;cursor:pointer;color:var(--muted)}
+  .rsw button.on{background:var(--accent);color:#fff}
+  .bell{border:1px solid var(--border);background:var(--card);border-radius:8px;padding:6px 10px;cursor:pointer;position:relative;font-size:13px}
+  .bell .cnt{position:absolute;top:-5px;right:-5px;margin:0}
+  .bmenu{position:absolute;top:44px;right:0;width:330px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.1);display:none;z-index:60;text-align:left}
+  .bmenu.open{display:block}
+  .bi{padding:11px 14px;border-bottom:1px solid var(--border);font-size:12.5px;display:flex;gap:10px}
+  .bi:last-child{border-bottom:none}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--danger);margin-top:5px;flex-shrink:0}
+  .dot.ok{background:var(--accent)}
+  .bi small{color:var(--muted);display:block;margin-top:2px}
+
+  /* контент */
+  .content{flex:1;overflow-y:auto;padding:26px 30px}
+  h1{font-size:20px;margin-bottom:4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;cursor:pointer}
+  .card:hover{border-color:var(--accent)}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-weight:600}
+  .btn.g{background:var(--card);color:var(--text);border:1px solid var(--border);font-weight:500}
+  .ph{background:repeating-linear-gradient(45deg,#eef1f0,#eef1f0 8px,#f7f9f8 8px,#f7f9f8 16px);border:1px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+  .li{display:flex;gap:10px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .li:last-child{border-bottom:none}
+  .st{font-size:11px;font-weight:600;flex-shrink:0}
+  .st.ok{color:var(--accent)} .st.bad{color:var(--danger)} .st.mut{color:var(--muted)}
+  input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;width:100%;font-family:inherit}
+  .srow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+  .srow:last-child{border-bottom:none}
+  .srow small{display:block;color:var(--muted);margin-top:2px;font-size:11.5px}
+  .tgl{width:34px;height:19px;border-radius:99px;background:var(--accent);position:relative;flex-shrink:0;cursor:pointer}
+  .tgl.off{background:#c9d3cf}
+  .tgl::after{content:'';position:absolute;top:2px;left:17px;width:15px;height:15px;border-radius:50%;background:#fff}
+  .tgl.off::after{left:2px}
+  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)}
+  .tab{padding:8px 14px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+  .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .page{display:none}.page.on{display:block}
+  .emptybig{text-align:center;padding:80px 20px}
+  .emptybig .eico{font-size:40px;margin-bottom:14px}
+  .emptybig h2{font-size:17px;margin-bottom:8px}
+  .emptybig p{color:var(--muted);font-size:13.5px;max-width:420px;margin:0 auto 18px;line-height:1.5}
+</style>
+</head>
+<body class="rc">
+
+<aside id="sb">
+  <div class="logo"><div class="lmark">iX</div><div class="ltext"><b>InspectorX</b></div><button id="clps">◀</button></div>
+  <nav>
+    <div class="ni active" data-p="registry"><span class="ico">🔍</span><span class="lbl">Реестр</span></div>
+    <div class="ni" data-p="portfolio"><span class="ico">📦</span><span class="lbl">Мои товары</span><span class="cnt">3</span></div>
+    <div class="ni" data-p="changes"><span class="ico">📈</span><span class="lbl">Изменения</span><span class="cnt">5</span></div>
+    <div class="ni" data-p="questions"><span class="ico">💬</span><span class="lbl">Мои вопросы</span></div>
+
+    <div class="sec">Проверки</div>
+    <div class="ni" data-p="vision"><span class="ico">📷</span><span class="lbl">Упаковка</span><span class="soon">скоро</span></div>
+    <div class="ni" data-p="docs"><span class="ico">📄</span><span class="lbl">Документы</span><span class="soon">скоро</span></div>
+
+    <div class="sec lawyer">Кабинет юриста</div>
+    <div class="ni lawyer" data-p="lq"><span class="ico">⚖️</span><span class="lbl">Очередь проверки</span><span class="cnt">10</span></div>
+    <div class="ni lawyer" data-p="lmy"><span class="ico">📝</span><span class="lbl">Мои заключения</span></div>
+  </nav>
+
+  <div class="sbot">
+    <div class="prof" id="pbtn">
+      <div class="ava">АТ</div>
+      <div class="pinfo"><b>Абдурахмон Т.</b><br><span id="rlab">Бесплатный план</span></div>
+    </div>
+    <!-- всё редкое — здесь, внизу, как в Wispr/Claude -->
+    <div class="pmenu" id="pmenu">
+      <div class="pm-head">turdiev17.10@gmail.com · Клиент</div>
+      <div class="pm-plan"><b>Бесплатный план</b>Открыть подписку →</div>
+      <div class="mi" data-p="settings">⚙️ Настройки</div>
+      <div class="mi" data-p="help">🛟 Помощь</div>
+      <div class="mi">💬 Оставить фидбэк</div>
+      <div class="sep"></div>
+      <div class="mi">🌐 Язык <span class="r">Русский ›</span></div>
+      <div class="mi">🌓 Тема <span class="r">светлая ›</span></div>
+      <div class="mi">📣 Что нового</div>
+      <div class="sep"></div>
+      <div class="mi" style="color:var(--danger)">⏻ Выйти</div>
+    </div>
+  </div>
+</aside>
+
+<main>
+  <header>
+    <span class="crumb" id="crumb">Реестр</span>
+    <div class="hr">
+      <div class="rsw"><button class="on" onclick="role('rc',this)">Клиент</button><button onclick="role('rl',this)">Юрист</button></div>
+      <button class="bell" id="bbtn">🔔<span class="cnt">5</span>
+        <div class="bmenu" id="bmenu">
+          <div class="bi"><span class="dot"></span><div><b>Ужесточилась маркировка</b> — Стики IQOS, дедлайн через 32 дня<small>открыть требование</small></div></div>
+          <div class="bi"><span class="dot ok"></span><div><b>В вашу пользу</b> — снижена пошлина по молоку<small>вчера</small></div></div>
+          <div class="bi"><span class="dot"></span><div><b>Юрист ответил на ваш вопрос</b><small>2 дня назад</small></div></div>
+          <div class="bi" style="justify-content:center"><a href="#" onclick="go('changes')" style="color:var(--accent);font-size:12.5px">Все изменения →</a></div>
+        </div>
+      </button>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- РЕЕСТР -->
+    <div class="page on" id="p-registry">
+      <h1>Реестр</h1><p class="sub">Текущая страница поиска остаётся как есть.</p>
+      <div class="ph" style="height:340px">поиск · путь товара · примеры (без изменений)</div>
+    </div>
+
+    <!-- МОИ ТОВАРЫ -->
+    <div class="page" id="p-portfolio">
+      <h1>Мои товары</h1>
+      <p class="sub">За неделю: 3 изменения · 1 требует действий до 01.09 · <a href="#" onclick="go('changes')" style="color:var(--accent)">открыть изменения</a></p>
+      <div class="cards">
+        <div class="card"><b>Стики IQOS</b> <span style="color:var(--muted);font-size:12px">2404 11</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--danger)">2 изменения · дедлайн 01.09</div></div>
+        <div class="card"><b>Молоко</b> <span style="color:var(--muted);font-size:12px">0401 20</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--accent)">1 изменение в вашу пользу</div></div>
+        <div class="card"><b>Цемент</b> <span style="color:var(--muted);font-size:12px">2523 29</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--muted)">без изменений 30 дней</div></div>
+        <div class="card" style="border-style:dashed;text-align:center;color:var(--muted)">+ добавить товар</div>
+      </div>
+    </div>
+
+    <!-- ИЗМЕНЕНИЯ -->
+    <div class="page" id="p-changes">
+      <h1>Изменения</h1><p class="sub">По вашим товарам. Формулируем как изменение требования, не документа.</p>
+      <div class="panel">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Стики IQOS · вступает через 32 дня</div>
+        <b style="font-size:14.5px">Ужесточены требования к предупредительной надписи</b>
+        <div style="display:flex;gap:12px;margin-top:10px">
+          <div class="ph" style="height:64px;flex:1">было: 40% поверхности</div>
+          <div class="ph" style="height:64px;flex:1">стало: 65% + пиктограмма</div>
+        </div>
+        <div style="margin-top:10px;font-size:13px"><b>Что делать:</b> обновить макет упаковки до 01.09</div>
+        <div style="margin-top:10px;display:flex;gap:8px"><button class="btn g">К требованию</button><button class="btn g">Прочитано</button></div>
+      </div>
+      <div class="panel">
+        <div style="font-size:12px;color:var(--accent);margin-bottom:6px">Молоко · уже действует · в вашу пользу</div>
+        <b style="font-size:14px">Снижена ставка пошлины</b>
+        <div style="margin-top:6px;font-size:13px;color:var(--muted)">Делать ничего не нужно.</div>
+      </div>
+    </div>
+
+    <!-- МОИ ВОПРОСЫ -->
+    <div class="page" id="p-questions">
+      <h1>Мои вопросы</h1><p class="sub">AI отвечает сразу. Мало — эскалируйте юристу, дальше — официальный запрос.</p>
+      <div class="panel">
+        <textarea rows="2" placeholder="Вопрос по требованию или товару…"></textarea>
+        <div style="margin-top:8px"><button class="btn">Спросить</button></div>
+      </div>
+      <div class="panel">
+        <div class="li"><span class="st mut">у юриста</span><div><b>Нужна ли маркировка стиков при транзите?</b><div style="color:var(--muted);font-size:12px;margin-top:3px">AI ответил · вы эскалировали · ответ юриста до 01.08</div></div></div>
+        <div class="li"><span class="st ok">отвечен</span><div><b>Какой сертификат на молоко для экспорта в КЗ?</b><div style="color:var(--muted);font-size:12px;margin-top:3px">AI-ответ с 2 ссылками на пункты закона</div></div></div>
+      </div>
+    </div>
+
+    <!-- VISION: ПУСТАЯ -->
+    <div class="page" id="p-vision">
+      <div class="emptybig">
+        <div class="eico">📷</div>
+        <h2>Проверка упаковки</h2>
+        <p>Сфотографируете коробку — покажем прямо на фото, что не соответствует требованиям маркировки вашего товара, и что исправить.</p>
+        <button class="btn g">Уведомить меня, когда запустится</button>
+      </div>
+    </div>
+
+    <!-- DOCS: ПУСТАЯ -->
+    <div class="page" id="p-docs">
+      <div class="emptybig">
+        <div class="eico">📄</div>
+        <h2>Проверка документов</h2>
+        <p>Загрузите свои сертификаты и декларации — сверим с чек-листом вашего товара и покажем, чего не хватает для экспорта.</p>
+        <button class="btn g">Уведомить меня, когда запустится</button>
+      </div>
+    </div>
+
+    <!-- ЮРИСТ -->
+    <div class="page" id="p-lq">
+      <h1>Очередь проверки</h1><p class="sub">Требования, ждущие заключения.</p>
+      <div class="panel">
+        <div class="li"><div><b>Наносить номер партии на продукцию</b><div style="color:var(--muted);font-size:12px;margin-top:2px">все товары</div></div><button class="btn g" style="margin-left:auto">открыть</button></div>
+        <div class="li"><div><b>Обязательное подтверждение соответствия</b><div style="color:var(--danger);font-size:12px;margin-top:2px">изменилось 17.07 — приоритет</div></div><button class="btn g" style="margin-left:auto">открыть</button></div>
+      </div>
+    </div>
+    <div class="page" id="p-lmy">
+      <h1>Мои заключения</h1><p class="sub">Статистика вклада — здесь же, сверху.</p>
+      <div class="panel" style="display:flex;gap:26px;font-size:13px"><span><b style="font-size:18px">9</b> опубликовано</span><span><b style="font-size:18px">31</b> «помогло»</span><span><b style="font-size:18px">140</b> просмотров профиля</span></div>
+      <div class="panel">
+        <div class="li"><span class="st ok">опубликовано</span><b>Выбрать налоговый режим</b></div>
+        <div class="li"><span class="st mut">на модерации</span><b>Маркировка табачных стиков — неточность</b></div>
+      </div>
+    </div>
+
+    <!-- НАСТРОЙКИ -->
+    <div class="page" id="p-settings">
+      <h1>Настройки</h1><p class="sub"></p>
+      <div class="tabs"><span class="tab on">Профиль</span><span class="tab">Уведомления</span><span class="tab">Подписка</span></div>
+      <div class="panel" style="max-width:560px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Имя</div><input value="Абдурахмон Турдиев">
+        <div style="font-size:12px;color:var(--muted);margin:12px 0 4px">Телефон / Telegram</div><input value="+998 …">
+        <div style="font-size:12px;color:var(--muted);margin:12px 0 4px">Компания</div><input placeholder="необязательно">
+      </div>
+      <div class="panel" style="max-width:560px">
+        <div class="srow"><div>Email-дайджест<small>раз в неделю</small></div><span class="tgl"></span></div>
+        <div class="srow"><div>Telegram мгновенно<small>только важные изменения</small></div><span class="tgl"></span></div>
+      </div>
+    </div>
+
+    <!-- ПОМОЩЬ -->
+    <div class="page" id="p-help">
+      <h1>Помощь</h1><p class="sub"></p>
+      <div class="panel" style="max-width:560px">
+        <div class="li">Как добавить товар в портфель?</div>
+        <div class="li">Чем AI-ответ отличается от заключения юриста?</div>
+        <div class="li">Как включается подписка?</div>
+      </div>
+      <div class="panel" style="max-width:560px;font-size:13px">Не нашли ответ — <a href="#" style="color:var(--accent)">Telegram</a> · hello@inspectorx.uz</div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  const T={registry:'Реестр',portfolio:'Мои товары',changes:'Изменения',questions:'Мои вопросы',vision:'Проверки · Упаковка',docs:'Проверки · Документы',lq:'Юрист · Очередь',lmy:'Юрист · Заключения',settings:'Настройки',help:'Помощь'};
+  function go(p){document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+    document.getElementById('p-'+p).classList.add('on');
+    document.querySelectorAll('.ni').forEach(x=>x.classList.toggle('active',x.dataset.p===p));
+    document.getElementById('crumb').textContent=T[p]||p;
+    pm.classList.remove('open');}
+  document.querySelectorAll('[data-p]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();go(el.dataset.p);}));
+  const sb=document.getElementById('sb');
+  document.getElementById('clps').onclick=e=>{e.stopPropagation();sb.classList.toggle('collapsed');e.target.textContent=sb.classList.contains('collapsed')?'▶':'◀';};
+  const pm=document.getElementById('pmenu'),bm=document.getElementById('bmenu');
+  document.getElementById('pbtn').onclick=e=>{e.stopPropagation();bm.classList.remove('open');pm.classList.toggle('open');};
+  document.getElementById('bbtn').onclick=e=>{e.stopPropagation();pm.classList.remove('open');bm.classList.toggle('open');};
+  document.body.onclick=()=>{pm.classList.remove('open');bm.classList.remove('open');};
+  function role(r,btn){document.body.className=r;
+    document.querySelectorAll('.rsw button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+    go(r==='rl'?'lq':'registry');}
+</script>
+</body>
+</html>
