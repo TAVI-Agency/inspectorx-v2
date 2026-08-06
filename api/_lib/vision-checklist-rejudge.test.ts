@@ -144,8 +144,12 @@ describe('POST /api/vision/rejudge', () => {
     id: INSPECTION_ID, user_id: UID, product_key: 'tobacco',
     packaging_level: 'consumer', markets: ['UZ'], status: 'done', revision: 1,
   }
-  const FACTS = [{ slot_id: 'brand', payload: { text: 'X' }, source: 'ocr', confidence: 0.7 }]
-  const VERDICT = { overall: 'pass', decided: 14, checked: 14, findings: [], facts: FACTS }
+  const FACTS = [
+    { slot_id: 'brand', payload: { text: 'X' }, source: 'ocr', confidence: 0.7, asset_idx: 1, bbox: [1, 2, 3, 4] },
+    { slot_id: 'nicotine', payload: { mg: 0.5 }, source: 'ocr', confidence: 0.9, asset_idx: 0, bbox: null },
+  ]
+  // RejudgeResponse — только вердикт: паспорт фактов воркер не возвращает
+  const VERDICT = { overall: 'pass', decided: 14, checked: 14, findings: [], not_checkable: [] }
   const OVERRIDES = [{ slotId: 'brand', payload: { text: 'Y' }, note: 'на пачке читается Y' }]
 
   function routes(overrides: FakeRoutes = {}): FakeRoutes {
@@ -262,8 +266,56 @@ describe('POST /api/vision/rejudge', () => {
     expect(captured.statusCode).toBe(200)
     expect(captured.body).toEqual({ inspectionId: 'ins-2' })
     const [rpc] = state.db.callsFor('rpc.create_photo_revision')
-    expect(rpc.args).toEqual({ p_parent_id: INSPECTION_ID, p_payload: VERDICT })
+    expect(rpc.args).toMatchObject({ p_parent_id: INSPECTION_ID })
+    expect((rpc.args as { p_payload: Record<string, unknown> }).p_payload)
+      .toMatchObject({ overall: 'pass', decided: 14, checked: 14 })
     expect(state.db.calls.filter((c) => c.table === 'photo_model_calls')).toHaveLength(0)
+  })
+
+  it('новая ревизия уносит паспорт фактов с применёнными правками', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, VERDICT)))
+    const captured = makeFakeResponse()
+    await rejudge(authed(), captured.res)
+
+    // create_photo_revision заполняет photo_facts из p_payload->'facts';
+    // воркер facts не возвращает — их собирает функция
+    const [rpc] = state.db.callsFor('rpc.create_photo_revision')
+    const { facts } = (rpc.args as { p_payload: { facts: Array<Record<string, unknown>> } }).p_payload
+    expect(facts).toEqual([
+      // правленый слот: значение человека, источник 'human', привязка к кадру цела
+      { slot_id: 'brand', payload: { text: 'Y' }, source: 'human', confidence: 1, asset_idx: 1, bbox: [1, 2, 3, 4] },
+      // нетронутый слот доезжает как был
+      { slot_id: 'nicotine', payload: { mg: 0.5 }, source: 'ocr', confidence: 0.9, asset_idx: 0, bbox: null },
+    ])
+  })
+
+  it('правка нового слота добавляется, а не теряется', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, VERDICT)))
+    const captured = makeFakeResponse()
+    await rejudge(authed({
+      inspectionId: INSPECTION_ID,
+      overrides: [{ slotId: 'expiry', payload: { date: '2027-01-01' } }],
+    }), captured.res)
+
+    const [rpc] = state.db.callsFor('rpc.create_photo_revision')
+    const { facts } = (rpc.args as { p_payload: { facts: Array<Record<string, unknown>> } }).p_payload
+    expect(facts).toHaveLength(3)
+    expect(facts[2]).toEqual({
+      slot_id: 'expiry', payload: { date: '2027-01-01' }, source: 'human',
+      confidence: 1, asset_idx: null, bbox: null,
+    })
+  })
+
+  it('пустой паспорт родителя — в ревизию уезжают только правки', async () => {
+    state.db = makeFakeDb(routes({ 'photo_facts.select': { data: [], error: null } }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, VERDICT)))
+    const captured = makeFakeResponse()
+    await rejudge(authed(), captured.res)
+    const [rpc] = state.db.callsFor('rpc.create_photo_revision')
+    const { facts } = (rpc.args as { p_payload: { facts: Array<Record<string, unknown>> } }).p_payload
+    expect(facts).toEqual([
+      { slot_id: 'brand', payload: { text: 'Y' }, source: 'human', confidence: 1, asset_idx: null, bbox: null },
+    ])
   })
 
   it('потолок ревизий — 409, а не пятисотка', async () => {
