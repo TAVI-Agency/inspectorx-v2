@@ -30,14 +30,23 @@ import {
   fetchCard,
   fetchChangeFeed,
   fetchComparisonMatrix,
+  fetchInspectionBundle,
+  fetchInspectionEvents,
   fetchLawyerReviews,
+  fetchPackagingChecklist,
   fetchProductBundle,
   fetchReviewStats,
   fetchServiceBundle,
   fetchTelemetry,
+  requestRetake,
   search,
   setReviewVote,
+  startInspection,
+  submitFactOverride,
+  submitFindingAction,
+  uploadAndRequestInspection,
   type DataCtx,
+  type PackagingLevel,
 } from './index'
 import {
   addChosenReal,
@@ -656,5 +665,92 @@ export function useContentRequest() {
       productId?: string
       comment?: string
     }) => submitContentRequest({ ...input, userId: session?.user.id }),
+  })
+}
+
+// ── Фотоконтроль упаковки (Волна 1, Задача 11) ──────────────────────
+
+/** Публичный тизер — без авторизации, кэшируется 5 минут (см. api/vision/checklist.ts). */
+export function usePackagingChecklist(productId: string | undefined, level: PackagingLevel) {
+  return useQuery({
+    queryKey: ['packaging-checklist', productId, level],
+    queryFn: () => fetchPackagingChecklist(productId!, level),
+    enabled: Boolean(productId),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useRequestPackagingInspection() {
+  return useMutation({
+    mutationFn: (input: {
+      productId: string
+      level: PackagingLevel
+      sourceKind: 'photo' | 'master_pdf'
+      files: File[]
+      faces?: string[]
+    }) => uploadAndRequestInspection(input),
+  })
+}
+
+/** Поллинг раз в 1.5с, пока прогон в очереди/идёт — синхронный /api/vision/check живёт дольше одного тика. */
+export function useInspectionBundle(inspectionId: string | undefined) {
+  return useQuery({
+    queryKey: ['photo-inspection', inspectionId],
+    queryFn: () => fetchInspectionBundle(inspectionId!),
+    enabled: Boolean(inspectionId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.inspection.status
+      return status === 'queued' || status === 'running' ? 1500 : false
+    },
+  })
+}
+
+export function useInspectionEvents(inspectionId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-inspection-events', inspectionId],
+    queryFn: () => fetchInspectionEvents(inspectionId!),
+    enabled: enabled && Boolean(inspectionId),
+    refetchInterval: 1500,
+  })
+}
+
+export function useStartInspection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inspectionId: string) => startInspection(inspectionId),
+    onSuccess: (_data, inspectionId) =>
+      void qc.invalidateQueries({ queryKey: ['photo-inspection', inspectionId] }),
+  })
+}
+
+export function useFactOverride() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      inspectionId: string
+      overrides: { slotId: string; payload: unknown; note?: string }[]
+    }) => submitFactOverride(input.inspectionId, input.overrides),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
+  })
+}
+
+export function useRetake() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { inspectionId: string; files: File[]; faces: string[] }) =>
+      requestRetake(input.inspectionId, input.files, input.faces),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
+  })
+}
+
+export function useFindingAction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      findingId: string
+      action: 'fixed' | 'accepted_with_reason' | 'escalated'
+      reason?: string
+    }) => submitFindingAction(input.findingId, input.action, input.reason),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
   })
 }

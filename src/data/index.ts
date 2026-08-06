@@ -701,3 +701,34 @@ export async function createCalendarToken(userId: string): Promise<CalendarToken
 export async function deleteCalendarToken(userId: string): Promise<void> {
   return deleteCalendarTokenReal(userId)
 }
+
+// ── Фотоконтроль упаковки (Волна 1, Задача 11) ──────────────────────
+// Полностью реальные данные — мок-оверлея нет, единственный источник —
+// src/data/vision.ts (RLS own-read + api/vision/* из Задачи 10).
+export type {
+  ChecklistCounters,
+  ChecklistGroup,
+  ChecklistItem,
+  InspectionBundle,
+  PackagingChecklist,
+  PackagingLevel,
+  PhotoAssetRow,
+  PhotoFindingRow,
+  PhotoInspectionEventRow,
+  PhotoInspectionRow,
+  PhotoNotCheckableRow,
+} from './vision'
+export {
+  buildIdempotencyKey,
+  fetchInspectionBundle,
+  fetchInspectionEvents,
+  fetchPackagingChecklist,
+  groupRetakeBySurface,
+  isPreliminary,
+  reportCounters,
+  requestRetake,
+  startInspection,
+  submitFactOverride,
+  submitFindingAction,
+  uploadAndRequestInspection,
+} from './vision'
