@@ -470,6 +470,13 @@ as $$
 declare
   v public.photo_inspections%rowtype;
   v_period date;
+  -- Держит ли эта строка резерв квоты. Резервирует ТОЛЬКО
+  -- request_photo_inspection, и только он создаёт revision = 1;
+  -- request_photo_retake (досъёмка) и create_photo_revision (пересуд) квоту не
+  -- трогают вовсе — по плану они бесплатны. Значит revision > 1 однозначно
+  -- означает «резерва под этой строкой нет»: списывать с неё used, гасить
+  -- reserved или жечь слот возврата нельзя.
+  v_holds_reserve boolean;
   refundable constant text[] := array[
     'worker_unreachable', 'worker_timeout', 'dispatch_lost',
     'ruleset_drift', 'ocr_unavailable', 'vlm_unavailable'];
@@ -479,6 +486,7 @@ begin
   if not found then raise exception 'inspection_not_found'; end if;
   if v.status not in ('queued', 'running') then return; end if;  -- идемпотентно
   v_period := date_trunc('month', v.created_at)::date;
+  v_holds_reserve := v.revision = 1;
 
   if p_outcome = 'done' then
     update public.photo_inspections set
@@ -542,15 +550,25 @@ begin
           from jsonb_array_elements(coalesce(p_payload -> 'assets', '[]'::jsonb)) e) x
     where a.inspection_id = p_inspection_id and a.idx = x.idx;
 
-    update public.photo_quota set reserved = greatest(reserved - 1, 0), used = used + 1,
-      spent_usd = spent_usd + coalesce((p_payload ->> 'cost_usd')::numeric, 0)
-    where user_id = v.user_id and period_start = v_period;
+    if v_holds_reserve then
+      update public.photo_quota set reserved = greatest(reserved - 1, 0), used = used + 1,
+        spent_usd = spent_usd + coalesce((p_payload ->> 'cost_usd')::numeric, 0)
+      where user_id = v.user_id and period_start = v_period;
+    else
+      -- Досъёмка/пересуд единицы квоты не стоят, но деньги за прогон реальные —
+      -- учитываем только расход.
+      update public.photo_quota
+        set spent_usd = spent_usd + coalesce((p_payload ->> 'cost_usd')::numeric, 0)
+      where user_id = v.user_id and period_start = v_period;
+    end if;
 
   elsif p_outcome = 'failed' then
     update public.photo_inspections
       set status = 'failed', checked_at = now(), last_error = p_reason
       where id = p_inspection_id;
-    if p_reason = any (refundable) then
+    if not v_holds_reserve then
+      null;   -- нечего возвращать и нечего списывать
+    elsif p_reason = any (refundable) then
       -- возврат — только по закрытому списку причин и не больше 3 за период
       update public.photo_quota
         set reserved = greatest(reserved - 1, 0),
@@ -705,8 +723,13 @@ declare
   r record;
   n int := 0;
 begin
+  -- coalesce, а не голый heartbeat_at: воркер, взявший строку в работу и
+  -- умерший ДО первого пульса, оставляет heartbeat_at = null, а `null < …`
+  -- даёт null — такая строка не отбиралась бы и висела в running вечно вместе
+  -- с живым резервом квоты. Порог для неё считаем от created_at.
   for r in select id from public.photo_inspections
-            where status = 'running' and heartbeat_at < now() - interval '3 minutes'
+            where status = 'running'
+              and coalesce(heartbeat_at, created_at) < now() - interval '3 minutes'
   loop
     perform public.finalize_photo_inspection(r.id, 'failed', 'worker_timeout');
     n := n + 1;
