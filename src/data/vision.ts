@@ -72,6 +72,34 @@ async function sha256Hex(data: ArrayBuffer): Promise<string> {
 }
 
 /**
+ * Заливка без `upsert` (Storage-политика "photo owners upload" не выдаёт
+ * update) на уже занятый путь отвечает 409 `Duplicate`. Путь у нас
+ * sha256-детерминирован (см. `objectPath`), поэтому «уже есть» означает
+ * «тот же файл уже долетел раньше» — легитимный успех повторной попытки,
+ * а не конфликт. Проверяем и по `status`/`statusCode` (устойчиво к точной
+ * формулировке `message`), и по тексту — на случай будущей смены API Storage.
+ */
+export function isDuplicateUploadError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { message?: string; statusCode?: string; status?: number }
+  if (e.status === 409 || e.statusCode === '409') return true
+  return typeof e.message === 'string' && /already exists|duplicate/i.test(e.message)
+}
+
+/**
+ * Детерминированный путь объекта: `<uid>/<sha256-содержимого>.<ext>`. Тот же
+ * файл (то же изображение после сжатия, тот же PDF) у того же пользователя
+ * всегда ложится в один и тот же объект бакета — повторная попытка после
+ * сетевого сбоя переливает поверх себя (см. `isDuplicateUploadError`), а не
+ * плодит новый файл-сироту при каждом ретрае. Полностью сирот это не убирает
+ * (см. комментарий у `uploadAndRequestInspection`), но ограничивает их число
+ * количеством различных загруженных файлов, а не количеством попыток.
+ */
+export function objectPath(uid: string, sha256: string, ext: string): string {
+  return `${uid}/${sha256}.${ext}`
+}
+
+/**
  * Ключ идемпотентности заявки: sha256 отсортированных sha256 файлов + уровень
  * упаковки + отсортированные рынки (план §4). Порядок файлов и рынков на
  * входе не важен — сортируем перед склейкой, чтобы одна и та же заявка,
@@ -117,10 +145,33 @@ export async function fetchPackagingChecklist(
  * (RPC `request_photo_inspection`, платит квоту). Путь ОБЯЗАН начинаться с
  * `<uid>/` — этого требуют и Storage-политики, и сама RPC (план §4).
  *
+ * **Файлы-сироты возможны и это осознанный компромисс, не баг.** Между
+ * успешной заливкой в Storage (шаг 1) и успешной RPC (шаг 2, единственное
+ * место, где путь попадает в `photo_assets`) есть окно: сеть может упасть,
+ * вкладку могут закрыть, `not_subscriber`/`quota_exhausted`/`no_checklist`
+ * может прервать RPC уже ПОСЛЕ заливки. Объект в бакете при этом остаётся
+ * навсегда никем не удалённым: `authenticated` у Storage-политик
+ * (`20260810110000_photo_storage.sql`) есть только `select`/`insert` под
+ * своим префиксом — ни `delete`, ни `update` не выданы (кадры immutable по
+ * дизайну, чистит только ретеншн-джоба), поэтому клиент физически не может
+ * подчистить за собой даже в `catch`. `purge_expired_photo_assets`
+ * (`20260810100000_photo_runtime.sql`) тоже не поможет: она уходит от строк
+ * `photo_assets`, а у сироты такой строки нет и не будет.
+ * Владельцу нужен отдельный процесс для реальной уборки — кандидат: в
+ * Волне 3 расширить `purge_expired_photo_assets` (или завести соседнюю
+ * джобу) орфан-сканом `storage.objects` по бакетам `packaging-artwork` /
+ * `packaging-photos`: объект старше ~24ч без единой ссылающейся строки
+ * `photo_assets.storage_path` — можно удалять `service_role`.
+ * Здесь сделано то, что можно сделать без серверного гранта: путь
+ * детерминирован от содержимого (`objectPath`, sha256), а не от случайного
+ * `crypto.randomUUID()`/индекса — повторная попытка после сбоя (тот же
+ * пользователь пересобирает те же файлы) переливает поверх уже залитого
+ * объекта вместо того, чтобы плодить новую копию на каждый ретрай.
+ *
  * `input.faces` пока не долетает до `photo_assets.face_name`: у клиента нет
- * UPDATE-гранта на photo_assets (снят явно в 20260810100000_photo_runtime.sql),
- * а сама RPC такого аргумента не принимает — имя грани воркер проставляет
- * позже сам, в `finalize_photo_inspection` из тела своего ответа. Поле в
+ * UPDATE-гранта на photo_assets (тем же ограничением, что и выше), а сама
+ * RPC такого аргумента не принимает — имя грани воркер проставляет позже
+ * сам, в `finalize_photo_inspection` из тела своего ответа. Поле в
  * сигнатуре сохранено дословно по брифу для будущего экрана (Волна 3, когда
  * воркер подключится и сможет подтверждать/поправлять грань на превью).
  */
@@ -134,8 +185,8 @@ export async function uploadAndRequestInspection(input: {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) throw new Error('not_authenticated')
   const uid = auth.user.id
-  const folder = crypto.randomUUID()
   const bucket = input.sourceKind === 'master_pdf' ? 'packaging-artwork' : 'packaging-photos'
+  const ext = input.sourceKind === 'master_pdf' ? 'pdf' : 'jpg'
   const paths: string[] = []
   const buffers: ArrayBuffer[] = []
   for (let i = 0; i < input.files.length; i += 1) {
@@ -143,12 +194,12 @@ export async function uploadAndRequestInspection(input: {
       input.sourceKind === 'photo'
         ? await prepareImageForUpload(input.files[i])
         : input.files[i]
-    const ext = input.sourceKind === 'master_pdf' ? 'pdf' : 'jpg'
-    const path = `${uid}/${folder}/${i}.${ext}`
+    const buffer = await blob.arrayBuffer()
+    const path = objectPath(uid, await sha256Hex(buffer), ext)
     const { error } = await supabase.storage.from(bucket).upload(path, blob)
-    if (error) throw error
+    if (error && !isDuplicateUploadError(error)) throw error
     paths.push(path)
-    buffers.push(await blob.arrayBuffer())
+    buffers.push(buffer)
   }
   const key = await buildIdempotencyKey(buffers, input.level, ['UZ'])
   const { data, error } = await supabase.rpc('request_photo_inspection', {
@@ -257,12 +308,16 @@ export async function submitFactOverride(
 
 /**
  * Досъёмка: новые кадры того же макета + RPC `request_photo_retake` (без
- * повторного резерва квоты — план §6, механизм 5). `faces` (грань каждого
- * нового кадра) в `photo_assets.face_name` не попадает — тем же ограничением,
- * что и у `uploadAndRequestInspection` (нет UPDATE-гранта у клиента, RPC
- * такого параметра не принимает); участвует только в ключе идемпотентности,
- * чтобы повторная досъёмка того же набора граней не расходовала лишний
- * прогон при повторном сабмите формы.
+ * повторного резерва квоты — план §6, механизм 5). Тот же риск сирот в
+ * Storage и то же смягчение детерминированным путём, что и у
+ * `uploadAndRequestInspection` — см. развёрнутый комментарий там, здесь не
+ * дублируется.
+ *
+ * `faces` (грань каждого нового кадра) в `photo_assets.face_name` не
+ * попадает — тем же ограничением, что и у `uploadAndRequestInspection`
+ * (нет UPDATE-гранта у клиента, RPC такого параметра не принимает);
+ * участвует только в ключе идемпотентности, чтобы повторная досъёмка того
+ * же набора граней не расходовала лишний прогон при повторном сабмите формы.
  */
 export async function requestRetake(
   inspectionId: string,
@@ -272,16 +327,16 @@ export async function requestRetake(
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) throw new Error('not_authenticated')
   const uid = auth.user.id
-  const folder = crypto.randomUUID()
   const paths: string[] = []
   const buffers: ArrayBuffer[] = []
   for (let i = 0; i < files.length; i += 1) {
     const blob = await prepareImageForUpload(files[i])
-    const path = `${uid}/${folder}/${i}.jpg`
+    const buffer = await blob.arrayBuffer()
+    const path = objectPath(uid, await sha256Hex(buffer), 'jpg')
     const { error } = await supabase.storage.from('packaging-photos').upload(path, blob)
-    if (error) throw error
+    if (error && !isDuplicateUploadError(error)) throw error
     paths.push(path)
-    buffers.push(await blob.arrayBuffer())
+    buffers.push(buffer)
   }
   const key = await buildIdempotencyKey(buffers, 'retake', faces)
   const { data, error } = await supabase.rpc('request_photo_retake', {

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildIdempotencyKey,
   groupRetakeBySurface,
+  isDuplicateUploadError,
   isPreliminary,
+  objectPath,
   reportCounters,
   type InspectionBundle,
   type PhotoFindingRow,
@@ -24,6 +26,39 @@ describe('buildIdempotencyKey', () => {
     const k2 = await buildIdempotencyKey([a], 'transport', ['UZ'])
     const k3 = await buildIdempotencyKey([a], 'consumer', ['UZ', 'EAEU'])
     expect(new Set([k1, k2, k3]).size).toBe(3)
+  })
+})
+
+describe('objectPath', () => {
+  it('детерминирован: одни и те же uid/sha256/ext — один и тот же путь', () => {
+    const p1 = objectPath('user-1', 'abc123', 'jpg')
+    const p2 = objectPath('user-1', 'abc123', 'jpg')
+    expect(p1).toBe(p2)
+    expect(p1).toBe('user-1/abc123.jpg')
+  })
+
+  it('лежит под собственным префиксом uid — этого требуют Storage-политики', () => {
+    expect(objectPath('user-1', 'abc123', 'pdf').startsWith('user-1/')).toBe(true)
+  })
+})
+
+describe('isDuplicateUploadError', () => {
+  it('409 по status или statusCode — дубликат (тот же sha256-путь уже залит)', () => {
+    expect(isDuplicateUploadError({ status: 409 })).toBe(true)
+    expect(isDuplicateUploadError({ statusCode: '409' })).toBe(true)
+  })
+
+  it('текст "already exists"/"duplicate" без явного статуса — тоже дубликат', () => {
+    expect(isDuplicateUploadError({ message: 'The resource already exists' })).toBe(true)
+    expect(isDuplicateUploadError({ message: 'Duplicate' })).toBe(true)
+  })
+
+  it('прочие ошибки (сеть, размер файла, чужой бакет) — не дубликат', () => {
+    expect(isDuplicateUploadError({ status: 500, message: 'Internal error' })).toBe(false)
+    expect(isDuplicateUploadError({ status: 413, message: 'Payload too large' })).toBe(false)
+    expect(isDuplicateUploadError(null)).toBe(false)
+    expect(isDuplicateUploadError(undefined)).toBe(false)
+    expect(isDuplicateUploadError('boom')).toBe(false)
   })
 })
 
