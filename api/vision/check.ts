@@ -7,7 +7,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import {
   adminClient, assertOwnPrefix, bucketFor, EVIDENCE_BUCKET, getUserFromRequest,
-  withVisionGuards, workerSecret, workerUrl,
+  REFUNDABLE_REASONS, withVisionGuards, workerSecret, workerUrl,
 } from '../_lib/vision.js'
 
 // Ниже потолка функции (120 с в vercel.json): у нас должно остаться время
@@ -159,9 +159,21 @@ export default withVisionGuards(async function handler(
   }
   if (!workerResponse.ok) {
     const body = await workerResponse.json().catch(() => null) as { reason?: unknown } | null
-    const reason = typeof body?.reason === 'string' ? body.reason : 'worker_error'
-    // отказ по данным (no_text_layer, asset_fetch_failed…) квоту НЕ возвращает —
-    // закрытый список возвратных причин живёт в finalize_photo_inspection
+    const reported = typeof body?.reason === 'string' ? body.reason : null
+    // 401/403 (секрет разъехался при ротации) и 5xx (воркер лёг) — отказ НАШЕЙ
+    // инфраструктуры, единицу квоты за него брать нельзя: причина обязана быть
+    // из возвратного списка. Названная воркером причина побеждает нашу догадку
+    // только если она сама возвратная (503 + ocr_unavailable точнее, чем
+    // worker_unreachable).
+    // Осмысленный отказ по данным (no_text_layer, asset_fetch_failed…) квоту
+    // НЕ возвращает — так и задумано, закрытый список живёт в
+    // finalize_photo_inspection.
+    const ourFault = workerResponse.status >= 500
+      || workerResponse.status === 401 || workerResponse.status === 403
+    const reason = reported && (!ourFault || REFUNDABLE_REASONS.has(reported))
+      ? reported
+      : 'worker_unreachable'
+    if (ourFault) console.error('vision/check: воркер отказал по своей вине', workerResponse.status, reported)
     await failWith(reason)
     return
   }

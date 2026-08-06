@@ -15,6 +15,45 @@ interface Override {
   note?: string
 }
 
+interface FactRow {
+  slot_id: string
+  payload: unknown
+  source: string
+  confidence: number | null
+  asset_idx: number | null
+  bbox: unknown
+}
+
+/**
+ * Паспорт фактов для новой ревизии: прежние факты плюс правки человека.
+ *
+ * Собирается здесь, а не берётся из ответа воркера: в контракте
+ * RejudgeResponse поля facts нет, а create_photo_revision заполняет
+ * photo_facts из p_payload->'facts'. Без этой сборки новая ревизия
+ * получила бы ноль фактов, и следующая досъёмка/пересуд увидели бы пустой
+ * паспорт — «всё нечитаемо».
+ */
+export function mergeFacts(prior: FactRow[], overrides: Override[]): FactRow[] {
+  const merged = new Map<string, FactRow>()
+  for (const fact of prior) merged.set(fact.slot_id, fact)
+  for (const o of overrides) {
+    const before = merged.get(o.slotId)
+    merged.set(o.slotId, {
+      slot_id: o.slotId,
+      payload: o.payload,
+      // человек — высший приоритет источника; машинная уверенность по этому
+      // слоту больше не имеет значения
+      source: 'human',
+      confidence: 1,
+      // привязка к кадру остаётся от прежнего факта: правится прочитанное
+      // значение, а не место, где оно найдено
+      asset_idx: before?.asset_idx ?? null,
+      bbox: before?.bbox ?? null,
+    })
+  }
+  return [...merged.values()]
+}
+
 function isOverride(value: unknown): value is Override {
   if (typeof value !== 'object' || value === null) return false
   const o = value as Partial<Override>
@@ -107,10 +146,12 @@ export default withVisionGuards(async function handler(
     return
   }
 
-  // 4. Новая ревизия одной транзакцией.
+  // 4. Новая ревизия одной транзакцией. Вердикт приходит от воркера, паспорт
+  //    фактов собираем сами — воркер его не возвращает.
+  const mergedFacts = mergeFacts((facts ?? []) as FactRow[], overrides)
   const { data: newId, error } = await db.rpc('create_photo_revision', {
     p_parent_id: inspectionId,
-    p_payload: verdict as never,
+    p_payload: { ...(verdict as Record<string, unknown>), facts: mergedFacts } as never,
   })
   if (error) {
     console.error('vision/rejudge: ревизия не создана', error)

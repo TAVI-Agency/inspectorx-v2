@@ -231,11 +231,46 @@ describe('отказы воркера', () => {
     expect(captured.body).toEqual({ status: 'failed', reason: 'asset_fetch_failed' })
   })
 
-  it('401 от воркера (секрет разъехался) — машинный код без тела', async () => {
+  it('401 от воркера (ротация секрета) — наша вина, квота возвращается', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('unauthorized', { status: 401 })))
     const captured = makeFakeResponse()
     await check(authedRequest(), captured.res)
-    expect(captured.body).toEqual({ status: 'failed', reason: 'worker_error' })
+    expect(captured.body).toEqual({ status: 'failed', reason: 'worker_unreachable' })
+    expect(REFUNDABLE_REASONS.has('worker_unreachable')).toBe(true)
+  })
+
+  it('403 от воркера — тоже возвратная причина', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 })))
+    const captured = makeFakeResponse()
+    await check(authedRequest(), captured.res)
+    expect(captured.body).toEqual({ status: 'failed', reason: 'worker_unreachable' })
+  })
+
+  it('500 воркера — квоту не съедает, что бы он ни написал в теле', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(500, { reason: 'boom' })))
+    const captured = makeFakeResponse()
+    await check(authedRequest(), captured.res)
+    const { reason } = captured.body as { reason: string }
+    expect(reason).toBe('worker_unreachable')
+    expect(REFUNDABLE_REASONS.has(reason)).toBe(true)
+    const [fin] = state.db.callsFor('rpc.finalize_photo_inspection')
+    expect(fin.args).toMatchObject({ p_outcome: 'failed', p_reason: 'worker_unreachable' })
+  })
+
+  it('503 с точной возвратной причиной — она и сохраняется', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(503, { reason: 'ocr_unavailable' })))
+    const captured = makeFakeResponse()
+    await check(authedRequest(), captured.res)
+    const { reason } = captured.body as { reason: string }
+    expect(reason).toBe('ocr_unavailable')
+    expect(REFUNDABLE_REASONS.has(reason)).toBe(true)
+  })
+
+  it('отказ без объяснения — возвратная причина, а не молчаливое списание', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 400 })))
+    const captured = makeFakeResponse()
+    await check(authedRequest(), captured.res)
+    expect(captured.body).toEqual({ status: 'failed', reason: 'worker_unreachable' })
   })
 })
 
