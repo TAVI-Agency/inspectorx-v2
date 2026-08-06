@@ -51,12 +51,24 @@ export interface ChecklistGroup {
  * его отдаёт (`{ profile, ...body }`, где `body.title` — из воркера).
  * Отбрасывать доехавшее поле было бы немотивированной потерей данных —
  * решение зафиксировано в отчёте Задачи 11 как расхождение брифа с фактом.
+ *
+ * `hints` — добавлено в Задаче 12 (экран загрузки, сценарий съёмки).
+ * Contract воркера (`compiler/checklist.py`, вне этого репозитория) на
+ * момент задачи не задокументирован; план (`docs/PHOTOCONTROL_INTEGRATION_PLAN.md:123`)
+ * называет поле профиля `photo_hints_ru` и отмечает известный баг дня 1
+ * (подсказка объявлена на верхнем уровне профиля, а лежит внутри
+ * `levels.<level>`, из-за чего сценарий съёмки сейчас всегда пуст). Раз имя
+ * и форма поля не подтверждены тестом/фикстурой (в отличие от `title`),
+ * поле необязательно и типизировано широко — строка или список строк;
+ * отсутствие или неожиданная форма просто не рендерит блок подсказки,
+ * не роняет экран.
  */
 export interface PackagingChecklist {
   profile: string
   title: string
   counters: ChecklistCounters
   groups: ChecklistGroup[]
+  hints?: string | string[]
 }
 
 export interface InspectionBundle {
@@ -136,8 +148,17 @@ export async function fetchPackagingChecklist(
     title: string
     groups: ChecklistGroup[]
     counters: ChecklistCounters
+    hints?: unknown
   }
-  return { profile: body.profile, title: body.title, counters: body.counters, groups: body.groups }
+  const hints =
+    typeof body.hints === 'string' || Array.isArray(body.hints) ? body.hints : undefined
+  return {
+    profile: body.profile,
+    title: body.title,
+    counters: body.counters,
+    groups: body.groups,
+    hints: hints as string | string[] | undefined,
+  }
 }
 
 /**

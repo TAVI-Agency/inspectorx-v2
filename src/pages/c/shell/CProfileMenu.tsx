@@ -86,7 +86,7 @@ export function CProfileMenu({
 
           {includeNavSections && (
             <div className="border-b border-border p-1.5">
-              <MenuNavLink to="/checks/packaging" icon={Camera} onGo={close} soon>
+              <MenuNavLink to="/checks/packaging" icon={Camera} onGo={close}>
                 {ru.nav.packaging}
               </MenuNavLink>
               <MenuNavLink to="/checks/documents" icon={FileCheck} onGo={close} soon>

@@ -6,6 +6,7 @@ import { CProductsPage } from './pages/c/CProductsPage'
 import { CChangesPage } from './pages/c/CChangesPage'
 import { CQuestionsPage } from './pages/c/CQuestionsPage'
 import { CCheckAnnouncePage } from './pages/c/CCheckAnnouncePage'
+import { CPackagingCheckPage, CPackagingReportPage } from './pages/c/checks/CPackagingCheckPage'
 import { CSettingsPage } from './pages/c/CSettingsPage'
 import { CHelpPage } from './pages/c/CHelpPage'
 import { CProductPage } from './pages/c/CProductPage'
@@ -30,7 +31,8 @@ const router = createBrowserRouter([
       { path: '/products', element: <CProductsPage /> },
       { path: '/changes', element: <CChangesPage /> },
       { path: '/questions', element: <CQuestionsPage /> },
-      { path: '/checks/packaging', element: <CCheckAnnouncePage check="packaging" /> },
+      { path: '/checks/packaging', element: <CPackagingCheckPage /> },
+      { path: '/checks/packaging/:inspectionId', element: <CPackagingReportPage /> },
       { path: '/checks/documents', element: <CCheckAnnouncePage check="documents" /> },
       { path: '/settings', element: <CSettingsPage /> },
       { path: '/help', element: <CHelpPage /> },

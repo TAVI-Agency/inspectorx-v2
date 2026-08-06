@@ -45,7 +45,7 @@ export function useNavSections(): NavSection[] {
     {
       label: ru.nav.checksSection,
       items: [
-        { to: '/checks/packaging', label: ru.nav.packaging, icon: Camera, soon: true },
+        { to: '/checks/packaging', label: ru.nav.packaging, icon: Camera },
         { to: '/checks/documents', label: ru.nav.documents, icon: FileCheck, soon: true },
       ],
     },
