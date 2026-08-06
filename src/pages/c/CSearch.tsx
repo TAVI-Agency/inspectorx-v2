@@ -13,7 +13,14 @@ import { cn } from '@/lib/utils'
  * названием кода, полная клавиатурная навигация. Пустой результат — заявка
  * на наполнение (missing_product).
  */
-export function CSearch({ autoFocus }: { autoFocus?: boolean }) {
+export function CSearch({
+  autoFocus,
+  onPick,
+}: {
+  autoFocus?: boolean
+  /** Перехват выбора подсказки: true — выбор остаётся на странице (без навигации). */
+  onPick?: (hit: SearchHit) => boolean
+}) {
   const navigate = useNavigate()
   const listboxId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -49,6 +56,7 @@ export function CSearch({ autoFocus }: { autoFocus?: boolean }) {
 
   function go(hit: SearchHit) {
     setOpen(false)
+    if (onPick?.(hit)) return
     navigate(hit.kind === 'service' ? `/service/${hit.id}` : `/product/${hit.id}`)
   }
 
