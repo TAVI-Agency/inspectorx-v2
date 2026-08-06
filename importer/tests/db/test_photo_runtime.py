@@ -2,6 +2,8 @@
 репер и RLS — на живой локальной Supabase."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from .conftest import requires_db
@@ -18,6 +20,37 @@ def _request(client, uid, product_id, key="k1"):
         "p_asset_paths": [p.format(uid=uid) for p in PATHS],
         "p_idempotency_key": key,
     }).execute().data
+
+
+def _request_photo(client, uid, product_id, key):
+    """Фотопуть: досъёмка возможна только у source_kind='photo' (минимум 4 кадра)."""
+    return client.rpc("request_photo_inspection", {
+        "p_product_id": product_id, "p_level": "consumer", "p_markets": ["UZ"],
+        "p_source_kind": "photo",
+        "p_asset_paths": [f"{uid}/shoot/{i}.jpg" for i in range(4)],
+        "p_idempotency_key": key,
+    }).execute().data
+
+
+def _retake(client, uid, inspection_id, key):
+    return client.rpc("request_photo_retake", {
+        "p_inspection_id": inspection_id,
+        "p_new_asset_paths": [f"{uid}/shoot/{key}.jpg"],
+        "p_idempotency_key": key,
+    }).execute().data
+
+
+def _finalize_done(service, inspection_id):
+    service.rpc("finalize_photo_inspection", {
+        "p_inspection_id": inspection_id, "p_outcome": "done",
+        "p_payload": {"overall": "ok", "decided": 1, "checked": 1,
+                      "findings": [], "not_checkable": [], "facts": [],
+                      "model_calls": [], "assets": []}}).execute()
+
+
+def _quota(service, uid):
+    row = service.table("photo_quota").select("*").eq("user_id", uid).execute().data[0]
+    return row["reserved"], row["used"], row["refunds_used"]
 
 
 def test_request_reserves_quota_and_is_idempotent(subscriber, service,
@@ -72,10 +105,34 @@ def test_refund_only_for_closed_reason_list_and_capped(subscriber, service,
     assert (quota["reserved"], quota["used"], quota["refunds_used"]) == (0, 1, 1)
 
 
+def test_retake_and_rejudge_do_not_touch_quota(subscriber, service,
+                                               current_ruleset, tobacco_product_id):
+    """Досъёмка резерва не делает — значит и списывать с неё нечего.
+    До фикса finalize бил её `used + 1` (done) и жёг слот возврата (failed)."""
+    client, uid = subscriber
+    parent = _request_photo(client, uid, tobacco_product_id, key="free-1")
+    _finalize_done(service, parent)
+    assert _quota(service, uid) == (0, 1, 0)
+
+    # ревизия 2: успешный прогон досъёмки квоту не двигает
+    r2 = _retake(client, uid, parent, key="free-1-r2")
+    assert _quota(service, uid) == (0, 1, 0)
+    _finalize_done(service, r2)
+    assert _quota(service, uid) == (0, 1, 0)
+
+    # ревизия 3: падение по возвратной причине не съедает слот возврата
+    r3 = _retake(client, uid, r2, key="free-1-r3")
+    service.rpc("finalize_photo_inspection",
+                {"p_inspection_id": r3, "p_outcome": "failed",
+                 "p_reason": "worker_timeout"}).execute()
+    assert _quota(service, uid) == (0, 1, 0)
+
+
 def test_reaper_kills_stale_running_with_refund(subscriber, service,
                                                 current_ruleset, tobacco_product_id):
     client, uid = subscriber
     ins_id = _request(client, uid, tobacco_product_id, key="stale-1")
+    assert _quota(service, uid) == (1, 0, 0)
     service.table("photo_inspections").update(
         {"status": "running",
          "heartbeat_at": "2020-01-01T00:00:00Z"}).eq("id", ins_id).execute()
@@ -83,6 +140,28 @@ def test_reaper_kills_stale_running_with_refund(subscriber, service,
     row = service.table("photo_inspections").select("status,last_error").eq(
         "id", ins_id).execute().data[0]
     assert row == {"status": "failed", "last_error": "worker_timeout"}
+    # имя теста обещает возврат — проверяем его: резерв снят, used не вырос
+    assert _quota(service, uid) == (0, 0, 1)
+
+
+def test_reaper_kills_running_without_heartbeat(subscriber, service,
+                                                current_ruleset, tobacco_product_id):
+    """`heartbeat_at is null` (воркер умер до первого пульса): без coalesce
+    условие давало null и строка висела в running вечно с живым резервом."""
+    client, uid = subscriber
+    ins_id = _request(client, uid, tobacco_product_id, key="stale-nohb")
+    # created_at старим на 10 минут (порог running — 3), НЕ выходя за границу
+    # календарного месяца: период квоты считается от created_at
+    aged = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    service.table("photo_inspections").update(
+        {"status": "running", "heartbeat_at": None, "created_at": aged}
+    ).eq("id", ins_id).execute()
+
+    assert service.rpc("reap_stale_inspections", {}).execute().data >= 1
+    row = service.table("photo_inspections").select("status,last_error").eq(
+        "id", ins_id).execute().data[0]
+    assert row == {"status": "failed", "last_error": "worker_timeout"}
+    assert _quota(service, uid) == (0, 0, 1)
 
 
 def test_rls_hides_foreign_inspections_and_blocks_writes(subscriber, service,
