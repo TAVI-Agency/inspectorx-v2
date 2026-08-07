@@ -10,6 +10,7 @@ import {
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
 import { supabase } from '@/lib/supabase'
+import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import type {
   AppNotification,
@@ -52,6 +53,7 @@ import {
 } from './index'
 import {
   addChosenReal,
+  fetchChecklistVersionNotificationsReal,
   fetchChosenReal,
   fetchContentRequests,
   fetchLawyerNotificationsReal,
@@ -63,6 +65,7 @@ import {
   fetchMyReviewsReal,
   fetchReviewQueueReal,
   fetchSubscriptionRequests,
+  markChecklistVersionNotificationReadReal,
   markLawyerNotificationReadReal,
   markLifecycleNotificationReadReal,
   removeChosenReal,
@@ -317,9 +320,11 @@ export function useNotificationCenter() {
   const verified = lawyerProfile?.status === 'verified'
   const { data: lawyerNotifs } = useLawyerNotifications(verified)
   const { data: lifecycleNotifs } = useLifecycleNotifications()
+  const { data: checklistVersionNotifs } = useChecklistVersionNotifications()
   const markChange = useMarkChangeRead()
   const markLawyer = useMarkNotificationRead()
   const markLifecycle = useMarkLifecycleNotificationRead()
+  const markChecklistVersion = useMarkChecklistVersionNotificationRead()
 
   const items: AppNotification[] = []
 
@@ -381,6 +386,18 @@ export function useNotificationCenter() {
     })
   }
 
+  for (const n of checklistVersionNotifs ?? []) {
+    items.push({
+      id: `checklist-version-${n.id}`,
+      kind: 'checklist_version',
+      sourceId: n.id,
+      title: ru.packagingCheck.staleNotification(formatDate(n.effectiveDate)),
+      link: n.link,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+    })
+  }
+
   items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   const markRead = (n: AppNotification) => {
@@ -388,6 +405,7 @@ export function useNotificationCenter() {
     if (n.kind === 'change') markChange.mutate(n.sourceId)
     else if (n.kind === 'lawyer') markLawyer.mutate(n.sourceId)
     else if (n.kind === 'lifecycle') markLifecycle.mutate(n.sourceId)
+    else if (n.kind === 'checklist_version') markChecklistVersion.mutate(n.sourceId)
     else {
       markQuestionAnswerRead(n.sourceId)
       void qc.invalidateQueries({ queryKey: ['my-questions'] })
@@ -637,6 +655,27 @@ export function useMarkLifecycleNotificationRead() {
     mutationFn: (id: string) => markLifecycleNotificationReadReal(id),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ['lifecycle-notifications'] }),
+  })
+}
+
+/** Checklist_version-уведомления (user_notifications, kind='checklist_version') — заводит Задача 16 */
+export function useChecklistVersionNotifications() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['checklist-version-notifications', session?.user.id ?? 'anon'],
+    queryFn: fetchChecklistVersionNotificationsReal,
+    enabled: Boolean(session),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+}
+
+export function useMarkChecklistVersionNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => markChecklistVersionNotificationReadReal(id),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['checklist-version-notifications'] }),
   })
 }
 

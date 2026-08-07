@@ -80,3 +80,30 @@ def tobacco_product_id(service) -> str:
     ins = service.table("products").insert(
         {"hs_code": "2402209000", "hierarchy_path": ["test"], "name_ru": "test tobacco"}).execute()
     return ins.data[0]["id"]
+
+
+def _finished_inspection_with_finding(client, uid, service, product_id,
+                                      requirement_id=None, key="rev-1"):
+    """Заявка -> finalize с одной находкой (severity=critical, status=fail).
+    Общий хелпер Задачи 14 (очередь юриста) и Задачи 16 (устаревание
+    вердиктов) — живёт здесь, чтобы оба модуля тестов его переиспользовали."""
+    ins_id = client.rpc("request_photo_inspection", {
+        "p_product_id": product_id, "p_level": "consumer", "p_markets": ["UZ"],
+        "p_source_kind": "master_pdf",
+        "p_asset_paths": [f"{uid}/{key}/0.pdf"], "p_idempotency_key": key}).execute().data
+    service.rpc("finalize_photo_inspection", {
+        "p_inspection_id": ins_id, "p_outcome": "done",
+        "p_payload": {"overall": "fail", "decided": 1, "checked": 10,
+                      "findings": [{"checkpoint_id": "uz.warning.text",
+                                    "rule_ref": "tobacco.uz.warning",
+                                    "requirement_id": requirement_id,
+                                    "group_key": "warnings", "kind": "text_semantic",
+                                    "severity": "critical", "status": "fail",
+                                    "decided_by": "pdf_text",
+                                    "confidence_class": "machine_read",
+                                    "message": "нет предупреждения"}],
+                      "not_checkable": [], "facts": [], "model_calls": [], "assets": []}}
+    ).execute()
+    fid = service.table("photo_findings").select("id").eq(
+        "inspection_id", ins_id).execute().data[0]["id"]
+    return ins_id, fid
