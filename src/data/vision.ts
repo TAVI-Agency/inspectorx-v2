@@ -8,6 +8,7 @@
  */
 import { supabase } from '@/lib/supabase'
 import { prepareImageForUpload } from '@/lib/image'
+import { ru } from '@/i18n/ru'
 import type { Database } from '@/lib/database.types'
 import type { ReviewVerdict } from './types'
 
@@ -596,7 +597,7 @@ export async function fetchFindingReviews(
     findingId: r.finding_id,
     verdict: r.verdict,
     commentText: r.comment_text,
-    lawyerName: r.lawyer_profiles?.display_name ?? 'Юрист',
+    lawyerName: r.lawyer_profiles?.display_name ?? ru.packagingCheck.signedUnknownLawyer,
     credentials: r.lawyer_profiles?.credentials ?? undefined,
     createdAt: r.created_at,
   }))
