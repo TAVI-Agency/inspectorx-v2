@@ -339,6 +339,7 @@ declare
   v_profile text;
   v_sha     text;
   v_version text;
+  v_key     text;
   v_period  date := date_trunc('month', now())::date;
   v_id      uuid;
   v_path    text;
@@ -367,9 +368,18 @@ begin
     from public.ruleset_versions where is_current;
   if v_sha is null then raise exception 'no_ruleset'; end if;
 
+  -- Соль набора правил. Клиент отпечаток правил не знает и знать не должен
+  -- (он публичен, но версия действующего набора — состояние сервера), поэтому
+  -- в ключ его подмешивает СЕРВЕР, здесь. Без соли идемпотентность работала бы
+  -- против пользователя: после передеплоя правил тот же макет невозможно было
+  -- бы перепроверить — RPC возвращала бы старую строку с вердиктом по
+  -- отменённому набору. С солью тот же комплект файлов после смены is_current
+  -- даёт новый ключ, то есть новую проверку по новым правилам.
+  v_key := p_idempotency_key || ':' || v_sha;
+
   -- идемпотентность: тот же ключ → та же проверка, без второго резерва
   select id into v_id from public.photo_inspections
-   where user_id = v_uid and idempotency_key = p_idempotency_key;
+   where user_id = v_uid and idempotency_key = v_key;
   if v_id is not null then return v_id; end if;
 
   -- атомарный резерв квоты (не count(*): гонка на границе лимита)
@@ -384,7 +394,7 @@ begin
     (user_id, product_id, product_key, packaging_level, markets, source_kind,
      idempotency_key, ruleset_sha256, ruleset_version)
   values (v_uid, p_product_id, v_profile, p_level, p_markets, p_source_kind,
-          p_idempotency_key, v_sha, v_version)
+          v_key, v_sha, v_version)
   returning id into v_id;
 
   foreach v_path in array p_asset_paths loop
@@ -410,17 +420,49 @@ returns uuid
 language plpgsql security definer set search_path = public
 as $$
 declare
-  v_uid  uuid := (select auth.uid());
-  parent public.photo_inspections%rowtype;
-  v_id   uuid;
-  v_path text;
-  v_i    int;
+  v_uid     uuid := (select auth.uid());
+  parent    public.photo_inspections%rowtype;
+  v_sha     text;
+  v_version text;
+  v_key     text;
+  v_id      uuid;
+  v_path    text;
+  v_i       int;
 begin
+  -- for update: гвард `superseded_by is null` ниже — проверка состояния строки,
+  -- а без блокировки два параллельных сабмита прошли бы её оба и развилили
+  -- цепочку ревизий (две ревизии от одного родителя, вторая невидима).
   select * into parent from public.photo_inspections
-   where id = p_inspection_id and user_id = v_uid;
+   where id = p_inspection_id and user_id = v_uid for update;
   if not found then raise exception 'inspection_not_found'; end if;
+
+  select sha256, version into v_sha, v_version
+    from public.ruleset_versions where is_current;
+  if v_sha is null then raise exception 'no_ruleset'; end if;
+  -- Та же серверная соль набора правил, что и у request_photo_inspection, плюс
+  -- сама проверка: ключ досъёмки обязан жить в пределах СВОЕЙ проверки. Клиент
+  -- кладёт inspection_id в материал ключа и сам (`buildIdempotencyKey`,
+  -- src/data/vision.ts), но там это соглашение, а здесь — инвариант: один и тот
+  -- же доснятый кадр в двух разных проверках не должен попадать в
+  -- unique (user_id, idempotency_key) первой из них.
+  v_key := p_idempotency_key || ':' || p_inspection_id::text || ':' || v_sha;
+
+  -- Идемпотентность досъёмки: повтор того же сабмита (двойной клик, ретрай
+  -- после сетевого сбоя) возвращает уже созданную ревизию, а не голый 23505 по
+  -- unique (user_id, idempotency_key). ВАЖЕН ПОРЯДОК: этот возврат стоит ДО
+  -- гварда `superseded_by`, потому что первая же успешная досъёмка сама
+  -- проставила родителю superseded_by — иначе честный ретрай отбивался бы
+  -- 'already_superseded'.
+  select id into v_id from public.photo_inspections
+   where user_id = v_uid and idempotency_key = v_key;
+  if v_id is not null then return v_id; end if;
+
   if parent.source_kind <> 'photo' then raise exception 'retake_is_for_photos'; end if;
   if parent.status <> 'done' then raise exception 'parent_not_done'; end if;
+  -- у ревизии ровно один потомок: append-only цепочка, а не дерево. Вторая
+  -- досъёмка от того же родителя (другой набор кадров) перезаписала бы
+  -- superseded_by и «потеряла» первую ревизию для витрины.
+  if parent.superseded_by is not null then raise exception 'already_superseded'; end if;
   if parent.revision >= 3 then
     raise exception 'revision_limit';     -- четвёртая досъёмка = новая единица квоты
   end if;
@@ -431,10 +473,9 @@ begin
   insert into public.photo_inspections
     (user_id, product_id, product_key, packaging_level, markets, source_kind,
      idempotency_key, ruleset_sha256, ruleset_version, revision)
-  select p.user_id, p.product_id, p.product_key, p.packaging_level, p.markets, p.source_kind,
-         p_idempotency_key, r.sha256, r.version, parent.revision + 1
-  from public.photo_inspections p, public.ruleset_versions r
-  where p.id = p_inspection_id and r.is_current
+  values (parent.user_id, parent.product_id, parent.product_key, parent.packaging_level,
+          parent.markets, parent.source_kind,
+          v_key, v_sha, v_version, parent.revision + 1)
   returning id into v_id;
 
   -- старые кадры переезжают в новую ревизию (переиспользуются, не переизвлекаются)
@@ -611,6 +652,13 @@ declare
 begin
   select * into parent from public.photo_inspections where id = p_parent_id for update;
   if not found then raise exception 'inspection_not_found'; end if;
+  -- Цепочка ревизий — линия, не дерево (тот же инвариант, что в
+  -- request_photo_retake). Пересуд уже пересуженной строки перезаписал бы её
+  -- superseded_by и оставил первую ревизию сиротой: витрина ходит по
+  -- superseded_by, поэтому «потерянную» ветку никто бы больше не увидел.
+  -- Отдельной идемпотентности здесь не нужно: ключ ревизии производный
+  -- (`<родитель>:r<N>`), повтор того же пересуда — это ровно этот случай.
+  if parent.superseded_by is not null then raise exception 'already_superseded'; end if;
   if parent.revision >= 3 then raise exception 'revision_limit'; end if;
 
   insert into public.photo_inspections

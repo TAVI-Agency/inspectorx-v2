@@ -128,6 +128,80 @@ def test_retake_and_rejudge_do_not_touch_quota(subscriber, service,
     assert _quota(service, uid) == (0, 1, 0)
 
 
+def test_ruleset_change_makes_the_same_files_a_new_run(subscriber, service,
+                                                       current_ruleset, tobacco_product_id):
+    """Соль набора правил в ключе (её добавляет сервер, клиент отпечатка не
+    знает): после передеплоя правил тот же комплект файлов проверяется заново,
+    а не отдаёт вердикт по отменённому набору."""
+    client, uid = subscriber
+    first = _request(client, uid, tobacco_product_id, key="ruleset-salt")
+    assert _request(client, uid, tobacco_product_id, key="ruleset-salt") == first
+
+    other = "b" * 64
+    try:
+        service.table("ruleset_versions").update({"is_current": False}).eq(
+            "sha256", current_ruleset).execute()
+        service.table("ruleset_versions").upsert(
+            {"sha256": other, "version": "test-b", "packs": {}, "checks_count": 1,
+             "is_current": True}).execute()
+        second = _request(client, uid, tobacco_product_id, key="ruleset-salt")
+        assert second != first          # тот же клиентский ключ — но новый прогон
+        row = service.table("photo_inspections").select("ruleset_sha256").eq(
+            "id", second).execute().data[0]
+        assert row["ruleset_sha256"] == other
+    finally:
+        # current_ruleset — session-скоуп: возвращаем текущей прежнюю версию
+        service.table("ruleset_versions").update({"is_current": False}).eq(
+            "sha256", other).execute()
+        service.table("ruleset_versions").update({"is_current": True}).eq(
+            "sha256", current_ruleset).execute()
+
+
+def test_retake_is_idempotent_and_scoped_to_its_inspection(subscriber, service,
+                                                           current_ruleset, tobacco_product_id):
+    """Повтор сабмита досъёмки возвращает ту же ревизию (до фикса — голый 23505
+    по unique (user_id, idempotency_key)); тот же кадр в ДРУГОЙ проверке —
+    самостоятельная ревизия, а не чужая."""
+    client, uid = subscriber
+    a = _request_photo(client, uid, tobacco_product_id, key="scope-a")
+    _finalize_done(service, a)
+    r1 = _retake(client, uid, a, key="shot-1")
+    assert _retake(client, uid, a, key="shot-1") == r1
+
+    b = _request_photo(client, uid, tobacco_product_id, key="scope-b")
+    _finalize_done(service, b)
+    r2 = _retake(client, uid, b, key="shot-1")      # тот же ключ, другая проверка
+    assert r2 and r2 != r1
+
+
+def test_second_retake_from_the_same_parent_is_rejected(subscriber, service,
+                                                        current_ruleset, tobacco_product_id):
+    """Цепочка ревизий — линия, не дерево: вторая досъёмка от того же родителя
+    перезаписала бы superseded_by и потеряла первую ревизию для витрины."""
+    client, uid = subscriber
+    parent = _request_photo(client, uid, tobacco_product_id, key="fork-1")
+    _finalize_done(service, parent)
+    assert _retake(client, uid, parent, key="fork-r1")
+    with pytest.raises(Exception, match="already_superseded"):
+        _retake(client, uid, parent, key="fork-r2")
+
+
+def test_rejudge_of_superseded_parent_is_rejected(subscriber, service,
+                                                  current_ruleset, tobacco_product_id):
+    """Тот же гвард в create_photo_revision (пересуд правленого факта)."""
+    client, uid = subscriber
+    parent = _request_photo(client, uid, tobacco_product_id, key="fork-rev")
+    _finalize_done(service, parent)
+    payload = {"overall": "ok", "decided": 1, "checked": 1,
+               "findings": [], "not_checkable": [], "facts": []}
+    first = service.rpc("create_photo_revision", {
+        "p_parent_id": parent, "p_payload": payload}).execute().data
+    assert first
+    with pytest.raises(Exception, match="already_superseded"):
+        service.rpc("create_photo_revision", {
+            "p_parent_id": parent, "p_payload": payload}).execute()
+
+
 def test_reaper_kills_stale_running_with_refund(subscriber, service,
                                                 current_ruleset, tobacco_product_id):
     client, uid = subscriber
