@@ -1,10 +1,15 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, FileText, ImagePlus, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@/components/ui/tabs'
 import { useAuth } from '@/app/auth'
-import { useRequestPackagingInspection, useStartInspection } from '@/data/hooks'
+import {
+  useProductDimensions,
+  useRequestPackagingInspection,
+  useStartInspection,
+  useUpsertDimensions,
+} from '@/data/hooks'
 import type { PackagingLevel } from '@/data'
 import { ru } from '@/i18n/ru'
 import { CCard, CEyebrow } from '../ui'
@@ -38,11 +43,23 @@ export function CPackagingUpload({
   const { session } = useAuth()
   const request = useRequestPackagingInspection()
   const start = useStartInspection()
+  const dimensions = useProductDimensions(productId, level)
+  const upsertDimensions = useUpsertDimensions()
 
   const [tab, setTab] = useState<SourceKind>('photo')
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [photos, setPhotos] = useState<{ file: File; face: Face }[]>([])
   const [errorReason, setErrorReason] = useState<string | null>(null)
+  const [widthMm, setWidthMm] = useState('')
+  const [heightMm, setHeightMm] = useState('')
+
+  // Прежде введённые габариты — подставляем, чтобы не переспрашивать на
+  // каждую проверку одного и того же товара (own-all RLS, Задача 15 шаг 6).
+  useEffect(() => {
+    if (!dimensions.data) return
+    setWidthMm(String(dimensions.data.width_mm))
+    setHeightMm(String(dimensions.data.height_mm))
+  }, [dimensions.data])
 
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -69,6 +86,14 @@ export function CPackagingUpload({
     if (!canStart) return
     setErrorReason(null)
     try {
+      // Габариты — только для фотопути (`min_size_mm` на макете уже считает
+      // мм из текстового слоя, эталон не нужен) и только если введены оба
+      // поля целиком: половинчатая пара (только ширина) движку не поможет.
+      const width = Number(widthMm)
+      const height = Number(heightMm)
+      if (tab === 'photo' && width > 0 && height > 0) {
+        await upsertDimensions.mutateAsync({ productId, level, widthMm: width, heightMm: height })
+      }
       const inspectionId = await request.mutateAsync({
         productId,
         level,
@@ -181,6 +206,37 @@ export function CPackagingUpload({
               ))}
             </ul>
           )}
+
+          <div className="space-y-2 rounded-lg border border-border p-3">
+            <p className="text-sm font-medium">{t.dimensionsTitle}</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">{t.dimensionsHint}</p>
+            <div className="flex flex-wrap gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                {t.dimensionsWidthLabel}
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.1"
+                  value={widthMm}
+                  onChange={(e) => setWidthMm(e.target.value)}
+                  className="h-8 w-24 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                {t.dimensionsHeightLabel}
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.1"
+                  value={heightMm}
+                  onChange={(e) => setHeightMm(e.target.value)}
+                  className="h-8 w-24 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                />
+              </label>
+            </div>
+          </div>
         </TabsPanel>
 
         <TabsPanel value="master_pdf" className="mt-4 space-y-4">

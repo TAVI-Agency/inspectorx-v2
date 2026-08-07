@@ -718,6 +718,7 @@ export type {
   PhotoInspectionEventRow,
   PhotoInspectionRow,
   PhotoNotCheckableRow,
+  PhotoProductDimensionsRow,
 } from './vision'
 export {
   buildIdempotencyKey,
@@ -726,6 +727,7 @@ export {
   fetchInspectionEvents,
   fetchPackagingChecklist,
   fetchPhotoFacts,
+  fetchProductDimensions,
   groupRetakeBySurface,
   isPreliminary,
   reportCounters,
@@ -734,4 +736,5 @@ export {
   submitFactOverride,
   submitFindingAction,
   uploadAndRequestInspection,
+  upsertProductDimensions,
 } from './vision'

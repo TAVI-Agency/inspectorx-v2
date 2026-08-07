@@ -165,6 +165,226 @@ export type Database = {
       [_ in never]: never
     }
   }
+  pipeline: {
+    Tables: {
+      items: {
+        Row: {
+          category_slug: string | null
+          expected_item: string
+          id: string
+          last_error: string | null
+          requirement_id: string | null
+          retry_count: number
+          run_id: string
+          status: string
+          summary_text: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_slug?: string | null
+          expected_item: string
+          id?: string
+          last_error?: string | null
+          requirement_id?: string | null
+          retry_count?: number
+          run_id: string
+          status?: string
+          summary_text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_slug?: string | null
+          expected_item?: string
+          id?: string
+          last_error?: string | null
+          requirement_id?: string | null
+          retry_count?: number
+          run_id?: string
+          status?: string
+          summary_text?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      llm_calls: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          id: string
+          input_tokens: number | null
+          item_id: string | null
+          model: string
+          output_tokens: number | null
+          role: string
+          run_id: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          item_id?: string | null
+          model: string
+          output_tokens?: number | null
+          role: string
+          run_id?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          item_id?: string | null
+          model?: string
+          output_tokens?: number | null
+          role?: string
+          run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "llm_calls_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "llm_calls_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maps: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          group_ref: string
+          id: string
+          jurisdiction: string
+          payload: Json
+          status: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          group_ref: string
+          id?: string
+          jurisdiction: string
+          payload: Json
+          status?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          group_ref?: string
+          id?: string
+          jurisdiction?: string
+          payload?: Json
+          status?: string
+        }
+        Relationships: []
+      }
+      runs: {
+        Row: {
+          coverage_report: string | null
+          finished_at: string | null
+          id: string
+          map_id: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          coverage_report?: string | null
+          finished_at?: string | null
+          id?: string
+          map_id: string
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          coverage_report?: string | null
+          finished_at?: string | null
+          id?: string
+          map_id?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "runs_map_id_fkey"
+            columns: ["map_id"]
+            isOneToOne: false
+            referencedRelation: "maps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verdicts: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          model: string | null
+          reason: string | null
+          step: string
+          verdict: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          model?: string | null
+          reason?: string | null
+          step: string
+          verdict: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          model?: string | null
+          reason?: string | null
+          step?: string
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verdicts_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       act_paragraphs: {
@@ -1274,6 +1494,44 @@ export type Database = {
           },
         ]
       }
+      photo_product_dimensions: {
+        Row: {
+          depth_mm: number | null
+          height_mm: number
+          packaging_level: string
+          product_id: string
+          updated_at: string
+          user_id: string
+          width_mm: number
+        }
+        Insert: {
+          depth_mm?: number | null
+          height_mm: number
+          packaging_level: string
+          product_id: string
+          updated_at?: string
+          user_id: string
+          width_mm: number
+        }
+        Update: {
+          depth_mm?: number | null
+          height_mm?: number
+          packaging_level?: string
+          product_id?: string
+          updated_at?: string
+          user_id?: string
+          width_mm?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_product_dimensions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       photo_profiles: {
         Row: {
           hs_prefixes: string[]
@@ -1804,6 +2062,176 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_questions"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      requirement_photo: {
+        Row: {
+          checkability: Database["public"]["Enums"]["photo_checkability"]
+          created_at: string
+          hs_prefixes: string[]
+          markets: string[]
+          pack: string
+          packaging_level: Database["public"]["Enums"]["photo_packaging_level"]
+          requirement_id: string | null
+          rule_ref: string
+          ruleset_sha256: string | null
+          scope: string
+          source: Json
+          title_ru: string
+          updated_at: string
+          why: string
+        }
+        Insert: {
+          checkability: Database["public"]["Enums"]["photo_checkability"]
+          created_at?: string
+          hs_prefixes?: string[]
+          markets?: string[]
+          pack?: string
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          requirement_id?: string | null
+          rule_ref: string
+          ruleset_sha256?: string | null
+          scope?: string
+          source?: Json
+          title_ru?: string
+          updated_at?: string
+          why: string
+        }
+        Update: {
+          checkability?: Database["public"]["Enums"]["photo_checkability"]
+          created_at?: string
+          hs_prefixes?: string[]
+          markets?: string[]
+          pack?: string
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          requirement_id?: string | null
+          rule_ref?: string
+          ruleset_sha256?: string | null
+          scope?: string
+          source?: Json
+          title_ru?: string
+          updated_at?: string
+          why?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_photo_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_photo_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_photo_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
+        ]
+      }
+      requirement_photo_check_contents: {
+        Row: {
+          check_id: string
+          hint: string | null
+          lang: string
+          question: string | null
+          title: string | null
+        }
+        Insert: {
+          check_id: string
+          hint?: string | null
+          lang: string
+          question?: string | null
+          title?: string | null
+        }
+        Update: {
+          check_id?: string
+          hint?: string | null
+          lang?: string
+          question?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_photo_check_contents_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "requirement_photo_checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      requirement_photo_checks: {
+        Row: {
+          check_id: string
+          created_at: string
+          group_key: string
+          hint_ru: string | null
+          id: string
+          kind: Database["public"]["Enums"]["photo_check_kind"]
+          measure: string | null
+          ord: number
+          packaging_level: Database["public"]["Enums"]["photo_packaging_level"]
+          params: Json
+          question_ru: string | null
+          rule_ref: string
+          severity: Database["public"]["Enums"]["photo_severity"]
+          subject: string
+          target: string | null
+          title_ru: string | null
+        }
+        Insert: {
+          check_id: string
+          created_at?: string
+          group_key: string
+          hint_ru?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["photo_check_kind"]
+          measure?: string | null
+          ord?: number
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          params?: Json
+          question_ru?: string | null
+          rule_ref: string
+          severity?: Database["public"]["Enums"]["photo_severity"]
+          subject?: string
+          target?: string | null
+          title_ru?: string | null
+        }
+        Update: {
+          check_id?: string
+          created_at?: string
+          group_key?: string
+          hint_ru?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["photo_check_kind"]
+          measure?: string | null
+          ord?: number
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          params?: Json
+          question_ru?: string | null
+          rule_ref?: string
+          severity?: Database["public"]["Enums"]["photo_severity"]
+          subject?: string
+          target?: string | null
+          title_ru?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_photo_checks_rule_ref_fkey"
+            columns: ["rule_ref"]
+            isOneToOne: false
+            referencedRelation: "requirement_photo"
+            referencedColumns: ["rule_ref"]
           },
         ]
       }
@@ -2768,6 +3196,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      flag_stale_photo_inspections: { Args: never; Returns: number }
       ingest_change_event: {
         Args: { p_payload: Json; p_secret: string }
         Returns: string
@@ -2784,6 +3213,24 @@ export type Database = {
         Returns: string
       }
       notify_admin_telegram: { Args: { message: string }; Returns: undefined }
+      photo_checklist: {
+        Args: { p_level: string; p_markets?: string[]; p_product_id: string }
+        Returns: {
+          check_id: string
+          group_key: string
+          hint_ru: string
+          kind: Database["public"]["Enums"]["photo_check_kind"]
+          measure: string
+          params: Json
+          question_ru: string
+          requirement_id: string
+          rule_ref: string
+          severity: Database["public"]["Enums"]["photo_severity"]
+          subject: string
+          target: string
+          title_ru: string
+        }[]
+      }
       photo_profile_for_product: {
         Args: { p_product_id: string }
         Returns: string
@@ -2876,6 +3323,10 @@ export type Database = {
         | "carrier"
         | "all"
         | "service_provider"
+      photo_check_kind: "presence" | "text_semantic" | "absence" | "geometry"
+      photo_checkability: "checkable" | "partial" | "not_checkable"
+      photo_packaging_level: "consumer" | "transport" | "both"
+      photo_severity: "critical" | "major" | "minor" | "info"
       question_status:
         | "new"
         | "ai_answered"
@@ -3041,6 +3492,9 @@ export const Constants = {
   graphql_public: {
     Enums: {},
   },
+  pipeline: {
+    Enums: {},
+  },
   public: {
     Enums: {
       act_status: ["active", "repealed", "pending"],
@@ -3093,6 +3547,10 @@ export const Constants = {
         "all",
         "service_provider",
       ],
+      photo_check_kind: ["presence", "text_semantic", "absence", "geometry"],
+      photo_checkability: ["checkable", "partial", "not_checkable"],
+      photo_packaging_level: ["consumer", "transport", "both"],
+      photo_severity: ["critical", "major", "minor", "info"],
       question_status: [
         "new",
         "ai_answered",

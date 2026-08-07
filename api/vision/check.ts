@@ -105,6 +105,19 @@ export default withVisionGuards(async function handler(
     }
   }
 
+  // Габариты SKU (Задача 15, шаг 6, развилка 4 плана): own-all таблица,
+  // читаем service_role — без них воркер не знает физический масштаб и
+  // `min_size_mm` на фотопути честно не проверяется. Строки нет для
+  // большинства пользователей сегодня — reference_dimensions_mm просто null.
+  let referenceDimensionsMm: { width_mm: number; height_mm: number } | null = null
+  if (ins.product_id) {
+    const { data: dims } = await db.from('photo_product_dimensions')
+      .select('width_mm, height_mm')
+      .eq('user_id', user.id).eq('product_id', ins.product_id)
+      .eq('packaging_level', ins.packaging_level).maybeSingle()
+    if (dims) referenceDimensionsMm = { width_mm: dims.width_mm, height_mm: dims.height_mm }
+  }
+
   // p_reason у RPC — необязательный аргумент со значением по умолчанию null,
   // поэтому «причины нет» передаётся не null-ом, а отсутствием ключа
   // (JSON.stringify выкидывает undefined).
@@ -142,6 +155,7 @@ export default withVisionGuards(async function handler(
         faces: ins.source_kind === 'photo' ? assets.map((a) => a.face_name ?? 'unknown') : null,
         prior_facts: priorFacts.length ? priorFacts : null,
         reuse_facts: ins.revision > 1,
+        reference_dimensions_mm: referenceDimensionsMm,
       }),
       signal: AbortSignal.timeout(WORKER_TIMEOUT_MS),
     })

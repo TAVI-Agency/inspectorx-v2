@@ -38,6 +38,7 @@ import {
   fetchPackagingChecklist,
   fetchPhotoFacts,
   fetchProductBundle,
+  fetchProductDimensions,
   fetchReviewStats,
   fetchServiceBundle,
   fetchTelemetry,
@@ -48,6 +49,7 @@ import {
   submitFactOverride,
   submitFindingAction,
   uploadAndRequestInspection,
+  upsertProductDimensions,
   type DataCtx,
   type PackagingLevel,
 } from './index'
@@ -730,6 +732,33 @@ export function useRequestPackagingInspection() {
       files: File[]
       faces?: string[]
     }) => uploadAndRequestInspection(input),
+  })
+}
+
+/** Габариты SKU (Задача 15, шаг 6) — own-all RLS, читаются перед запуском фотопути. */
+export function useProductDimensions(productId: string | undefined, level: PackagingLevel) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['photo-product-dimensions', productId, level, session?.user.id],
+    queryFn: () => fetchProductDimensions(productId!, level),
+    enabled: Boolean(productId && session),
+  })
+}
+
+export function useUpsertDimensions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      productId: string
+      level: PackagingLevel
+      widthMm: number
+      heightMm: number
+      depthMm?: number
+    }) => upsertProductDimensions(input),
+    onSuccess: (_data, input) =>
+      void qc.invalidateQueries({
+        queryKey: ['photo-product-dimensions', input.productId, input.level],
+      }),
   })
 }
 
