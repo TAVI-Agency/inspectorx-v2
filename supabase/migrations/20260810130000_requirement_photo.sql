@@ -147,7 +147,7 @@ create table public.requirement_photo_check_contents (
 --    обзавестись проверкой ДО конца транзакции, а не до конца своего insert.
 -- ----------------------------------------------------------------------------
 create or replace function public.requirement_photo_checkable_guard()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if new.checkability = 'checkable' and not exists (
       select 1 from public.requirement_photo_checks c where c.rule_ref = new.rule_ref) then
@@ -182,12 +182,37 @@ revoke insert, update, delete on public.requirement_photo,
 --    применимости, уровню упаковки и рынку — ни одного упоминания табака,
 --    молока и электроники в теле функции.
 --
---    Рынок: rp.markets && p_markets ИЛИ rp.markets = {'ANY'} — 'ANY' в
+--    Пакет (правка ревью Задачи 15, «паритет — свойство данных, а не схемы»):
+--    Python-эталон (compile_checklist/bench_sql_parity.py:85-87) обходит
+--    ТОЛЬКО пакеты профиля товара (product.packs), а не requirement_photo
+--    целиком, — иначе первое же all_products-требование ЧУЖОГО вертикального
+--    пакета (dairy.yaml для табака и т.п.) протекло бы на все товары. В базе
+--    нет отдельной таблицы product -> packs; горизонтальные пакеты
+--    (gs1, horizontal, uzbekistan) сегодня входят в profile.packs КАЖДОГО
+--    известного профиля (tobacco/dairy/electronics — config/products/*.yaml
+--    vision) и потому включены безусловно; вертикальный пакет — тот же,
+--    что публикует public.photo_profile_for_product() по hs_prefix
+--    (photo_profiles, 20260810100000_photo_runtime.sql, тот же словарь
+--    вертикалей, что и tobacco.yaml/dairy.yaml/electronics.yaml). Появится
+--    седьмой вертикальный пакет без своей строки в photo_profiles — эту
+--    функцию и её данные придётся расширять вместе.
+--
+--    Рынок: rp.markets && p_markets ИЛИ 'ANY' = any(rp.markets) — 'ANY' в
 --    выгрузке (Requirement.markets по умолчанию, models.py) означает
 --    «горизонтальная норма, рынок не сужает» и НЕ является реальным кодом
---    рынка, с которым массив можно пересечь оператором && (см.
---    _applies_to_requirement_market в vision/src/ixvision/compiler/checklist.py —
---    тот же особый случай там читается явно, не через &&).
+--    рынка: массив может нести 'ANY' вместе с настоящими кодами
+--    (['ANY','UZ']), поэтому проверка — членство (`= any(...)`), а не
+--    равенство массива целиком (см. _applies_to_requirement_market в
+--    vision/src/ixvision/compiler/checklist.py — тот же особый случай там
+--    читается явно, не через &&).
+--
+--    checkability: not_checkable исключён явно. Экспорт/генератор
+--    (scripts/export_checks.py, generate_photo_checks_migration.mjs)
+--    гарантируют, что у not_checkable requirement_photo сегодня нет ни
+--    одной строки requirement_photo_checks, но это соглашение ЗА пределами
+--    схемы (в отличие от checkable ⇒ есть проверка — тот держит
+--    constraint-триггер выше). Фильтр в самой функции не полагается на
+--    внешнюю гарантию.
 --
 --    Уровень упаковки: два НЕЗАВИСИМЫХ фильтра — у требования (rp) и у
 --    отдельной проверки (c), как в compile_checklist (там же две проверки:
@@ -201,7 +226,7 @@ returns table (rule_ref text, check_id text, kind public.photo_check_kind,
                severity public.photo_severity, group_key text, subject text,
                target text, question_ru text, measure text, params jsonb,
                hint_ru text, title_ru text, requirement_id uuid)
-language sql stable
+language sql stable set search_path = public
 as $$
   select c.rule_ref, c.check_id, c.kind, c.severity, c.group_key, c.subject,
          c.target, c.question_ru, c.measure, c.params, c.hint_ru,
@@ -209,7 +234,10 @@ as $$
   from public.requirement_photo_checks c
   join public.requirement_photo rp on rp.rule_ref = c.rule_ref
   join public.products p on p.id = p_product_id
-  where (rp.markets && p_markets or rp.markets = array['ANY'])
+  where rp.checkability <> 'not_checkable'
+    and (rp.pack in ('horizontal', 'gs1', 'uzbekistan')
+         or rp.pack = public.photo_profile_for_product(p_product_id))
+    and (rp.markets && p_markets or 'ANY' = any(rp.markets))
     and (c.packaging_level = 'both' or c.packaging_level::text = p_level)
     and (rp.packaging_level = 'both' or rp.packaging_level::text = p_level)
     and (rp.scope = 'all_products'
