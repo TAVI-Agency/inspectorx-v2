@@ -42,7 +42,9 @@ it('незнакомая стадия — сырой код, не пустая �
 
 it('severityLabel — словами, незнакомый код — как есть', () => {
   expect(severityLabel('critical')).toBe('критично')
+  expect(severityLabel('major')).toBe('существенно')
   expect(severityLabel('minor')).toBe('незначительно')
+  expect(severityLabel('info')).toBe('к сведению')
   expect(severityLabel('mystery')).toBe('mystery')
 })
 

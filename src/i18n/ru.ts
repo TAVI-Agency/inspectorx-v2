@@ -773,11 +773,12 @@ export const ru = {
       human: 'подтверждено человеком',
     } as Record<string, string>,
 
-    // Тяжесть находки (photo_findings.severity) — коды critical/minor/info подтверждены
-    // фикстурами src/data/vision.test.ts; significant по аналогии, воркер не задокументирован
+    // Тяжесть находки (photo_findings.severity) — enum движка (models.py, inspectorx-vision):
+    // critical | major | minor | info; critical/minor/info дополнительно подтверждены
+    // фикстурами src/data/vision.test.ts
     severity: {
       critical: 'критично',
-      significant: 'существенно',
+      major: 'существенно',
       minor: 'незначительно',
       info: 'к сведению',
     } as Record<string, string>,
