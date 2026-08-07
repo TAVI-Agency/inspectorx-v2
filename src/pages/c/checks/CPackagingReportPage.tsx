@@ -391,24 +391,26 @@ function FindingCard({
         <p className="mt-1 text-xs text-muted-foreground">{t.noRequirementLink}</p>
       )}
 
-      {evidenceList.map(
-        (e, i) =>
-          typeof e.text === 'string' &&
-          e.text.length > 0 && (
-            <blockquote
-              key={i}
-              className="mt-2 border-l-2 border-border pl-2.5 text-xs leading-relaxed text-muted-foreground italic"
-            >
-              «{e.text}»
-              {(e.page !== undefined || e.frame_idx !== undefined) && (
-                <span className="not-italic">
-                  {' '}
-                  — {e.page !== undefined ? `стр. ${e.page}` : `кадр ${e.frame_idx}`}
-                </span>
-              )}
-            </blockquote>
-          ),
-      )}
+      {evidenceList.map((e, i) => {
+        if (typeof e.text !== 'string' || e.text.length === 0) return null
+        // Откуда цитата: страница макета либо номер кадра. Ни того, ни другого —
+        // приписки нет вовсе, выдумывать «стр. 0» нельзя.
+        const origin =
+          e.page !== undefined
+            ? t.evidencePage(e.page)
+            : e.frame_idx !== undefined
+              ? t.evidenceFrame(e.frame_idx)
+              : null
+        return (
+          <blockquote
+            key={i}
+            className="mt-2 border-l-2 border-border pl-2.5 text-xs leading-relaxed text-muted-foreground italic"
+          >
+            «{e.text}»
+            {origin && <span className="not-italic"> — {origin}</span>}
+          </blockquote>
+        )
+      })}
 
       {cropUrl && (
         // eslint-disable-next-line @next/next/no-img-element -- нет next в проекте, обычный img
@@ -550,7 +552,7 @@ function RetakeGroup({
     <CCard className="p-4">
       <p className="text-sm font-semibold">{faceLabel(surface)}</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        {t.missingFace(faceLabel(surface), pluralize(findings.length, 'пункт', 'пункта', 'пунктов'))}
+        {t.missingFace(faceLabel(surface), pluralize(findings.length, ...t.unitItem))}
       </p>
       <ul className="mt-2 space-y-1">
         {findings.map((f) => (

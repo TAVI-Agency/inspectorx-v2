@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { reportCounters } from '@/data'
 import {
   decidedByLabel,
   faceLabel,
@@ -11,8 +12,8 @@ import {
 } from './report-utils'
 
 describe('splitFindings', () => {
-  const f = (status: string, decided_by = 'pdf_text', suspected = false) =>
-    ({ status, decided_by, suspected }) as never
+  const f = (status: string, confidence_class = 'machine_read', decided_by = 'pdf_text') =>
+    ({ status, confidence_class, decided_by }) as never
   it('четыре списка §7: нарушения / досъёмка-человек / граница метода / без эталона', () => {
     const lists = splitFindings([f('fail'), f('pass'), f('unreadable')],
       [{ class: 'метод' }, { class: 'нет эталона' }] as never)
@@ -20,6 +21,27 @@ describe('splitFindings', () => {
     expect(lists.needsHuman).toHaveLength(1)
     expect(lists.notCheckable).toHaveLength(1)
     expect(lists.noGold).toHaveLength(1)
+  })
+
+  it('список 2 — объединение unreadable и needs_human, а не только нечитаемых', () => {
+    // прочитано машиной, но без уверенности — тоже «нужен человек»
+    const lists = splitFindings(
+      [f('unreadable'), f('pass', 'needs_human'), f('pass'), f('fail', 'needs_human')],
+      [] as never,
+    )
+    expect(lists.needsHuman).toHaveLength(3)
+  })
+
+  it('плитка «Требует человека» и список 2 дают одно число', () => {
+    const findings = [f('unreadable'), f('pass', 'needs_human'), f('pass'), f('fail')]
+    const lists = splitFindings(findings, [] as never)
+    const counters = reportCounters({
+      inspection: { decided: 4, checked: 4 },
+      findings,
+      notCheckable: [],
+      assets: [],
+    } as never)
+    expect(counters.needsHuman).toBe(lists.needsHuman.length)
   })
 })
 

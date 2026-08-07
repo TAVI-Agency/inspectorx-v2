@@ -222,8 +222,11 @@ export default withVisionGuards(async function handler(
 
   const { error: finErr } = await finalize('done', null, { ...result, findings })
   if (finErr) {
+    // Наружу — только код: текст ошибки PostgREST несёт имена таблиц/колонок и
+    // текст констрейнтов, а эндпоинт публичный с первого дня. Полная ошибка
+    // остаётся в логе функции (тот же приём во всех api/vision/*).
     console.error('vision/check: финал done не записан', finErr)
-    res.status(500).json({ reason: finErr.message })
+    res.status(500).json({ reason: 'internal' })
     return
   }
   res.status(200).json({ status: 'done', inspectionId })

@@ -750,6 +750,8 @@ export const ru = {
     sourcePhoto: 'фотографии',
     /** nUnit — уже склонённое «2 пункта» из pluralize (src/lib/format.ts) */
     missingFace: (face: string, nUnit: string) => `не хватает: ${face} — ${nUnit}`,
+    /** Формы для pluralize (src/lib/format.ts): «1 пункт / 2 пункта / 5 пунктов» */
+    unitItem: ['пункт', 'пункта', 'пунктов'] as [string, string, string],
 
     // Числа наверху отчёта — короткие подписи плиток (CStatTile: label + value)
     violationsLabel: 'Нарушений',
@@ -836,6 +838,9 @@ export const ru = {
     noRequirementLink: 'Ссылка на карточку требования не установлена.',
     evidenceQuote: 'Цитата',
     evidenceCrop: 'Фрагмент',
+    /** Откуда цитата-доказательство: страница макета или номер кадра */
+    evidencePage: (page: number) => `стр. ${page}`,
+    evidenceFrame: (frame: number) => `кадр ${frame}`,
     ruleset: 'Набор правил',
     readerCoverage: 'Покрытие чтецами',
     modelVersions: 'Версии моделей',
