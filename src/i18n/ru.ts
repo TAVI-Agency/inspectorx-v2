@@ -708,6 +708,13 @@ export const ru = {
     },
     frameLabel: (i: number) => `Кадр ${i + 1}`,
 
+    // ── Габариты упаковки (Задача 15, шаг 6): без них min_size_mm не проверяется ──
+    dimensionsTitle: 'Габариты упаковки (необязательно)',
+    dimensionsHint:
+      'Без габаритов пункты про минимальный размер шрифта или знака уходят в «не проверяется: не знаем размер вашей упаковки».',
+    dimensionsWidthLabel: 'Ширина, мм',
+    dimensionsHeightLabel: 'Высота, мм',
+
     // ── Отчёт /checks/packaging/:inspectionId (Задача 13, план §7) ──
     reportViolations: 'Нарушения',
     reportNeedsHuman: 'Требует досъёмки или человека',

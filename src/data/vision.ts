@@ -17,6 +17,8 @@ export type PhotoAssetRow = Database['public']['Tables']['photo_assets']['Row']
 export type PhotoInspectionEventRow =
   Database['public']['Tables']['photo_inspection_events']['Row']
 export type PhotoFactRow = Database['public']['Tables']['photo_facts']['Row']
+export type PhotoProductDimensionsRow =
+  Database['public']['Tables']['photo_product_dimensions']['Row']
 
 /** packaging_inspections.packaging_level — CHECK-констрейнт в 20260810100000_photo_runtime.sql */
 export type PackagingLevel = 'consumer' | 'transport'
@@ -414,6 +416,52 @@ export async function requestRetake(
   })
   if (error) throw error
   return data
+}
+
+/**
+ * Габариты упаковки SKU (Задача 15, шаг 6, развилка 4 плана): пользователь
+ * вводит один раз на товар+уровень, own-all RLS (photo_product_dimensions —
+ * 20260810130000_requirement_photo.sql). Без них `min_size_mm` на фотопути
+ * не проверяется — движку не от чего считать миллиметры.
+ */
+export async function fetchProductDimensions(
+  productId: string,
+  level: PackagingLevel,
+): Promise<PhotoProductDimensionsRow | null> {
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) return null
+  const { data, error } = await supabase
+    .from('photo_product_dimensions')
+    .select('*')
+    .eq('user_id', auth.user.id)
+    .eq('product_id', productId)
+    .eq('packaging_level', level)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function upsertProductDimensions(input: {
+  productId: string
+  level: PackagingLevel
+  widthMm: number
+  heightMm: number
+  depthMm?: number
+}): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) throw new Error('not_authenticated')
+  const { error } = await supabase.from('photo_product_dimensions').upsert(
+    {
+      user_id: auth.user.id,
+      product_id: input.productId,
+      packaging_level: input.level,
+      width_mm: input.widthMm,
+      height_mm: input.heightMm,
+      depth_mm: input.depthMm ?? null,
+    },
+    { onConflict: 'user_id,product_id,packaging_level' },
+  )
+  if (error) throw error
 }
 
 /** Действие юзера по находке (RPC `record_finding_action`, SECURITY DEFINER, own-only). */
