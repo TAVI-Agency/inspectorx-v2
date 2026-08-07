@@ -735,6 +735,7 @@ export {
   fetchProductDimensions,
   groupRetakeBySurface,
   isPreliminary,
+  needsHumanFinding,
   reportCounters,
   requestRetake,
   signInspection,

@@ -4,23 +4,24 @@
  * стадий ожидания, тяжести и граней упаковки. Без сети и без React — легко
  * покрыть тестами, не поднимая ни компонент, ни Supabase.
  */
+import { needsHumanFinding } from '@/data'
 import { ru } from '@/i18n/ru'
 
 const t = ru.packagingCheck
 
 /**
- * Минимум, который нужен для разбора находки на список. `suspected` —
- * подкласс `unreadable` от VLM («модель отметила возможный запрещённый
- * образ», план §7 п.2 и `docs/PHOTOCONTROL_PLAN_FIXLOG.md:20`); в текущей
- * схеме `photo_findings` такого столбца ещё нет (только `status`/`decided_by`
- * из `20260810100000_photo_runtime.sql`), поле опционально и структурно
- * совместимо с `PhotoFindingRow` — когда воркер начнёт присылать признак,
- * компонент подхватит его без правки этой функции.
+ * Минимум, который нужен для разбора находки на список. Раньше здесь было
+ * ещё поле `suspected` (подкласс `unreadable` от VLM, план §7 п.2 и
+ * `docs/PHOTOCONTROL_PLAN_FIXLOG.md:20`) — но в схеме `photo_findings`
+ * (`20260810100000_photo_runtime.sql`) такой колонки нет и не появилось, а
+ * значит предикат по ней никогда ничего не отбирал. Его роль — «машина не
+ * ручается за прочтение» — уже несёт реальная колонка `confidence_class`,
+ * по ней и считаем (`needsHumanFinding`, `src/data/vision.ts`).
  */
 export interface FindingLike {
   status: string
   decided_by?: string
-  suspected?: boolean
+  confidence_class?: string | null
 }
 
 export interface NotCheckableLike {
@@ -30,7 +31,7 @@ export interface NotCheckableLike {
 export interface FindingLists<F extends FindingLike, N extends NotCheckableLike> {
   /** Список 1 — нарушения (`status === 'fail'`). */
   violations: F[]
-  /** Список 2 — досъёмка или человек (`status === 'unreadable'` либо `suspected`). */
+  /** Список 2 — досъёмка или человек (`needsHumanFinding`: `unreadable` либо `needs_human`). */
   needsHuman: F[]
   /** Список 3 — граница метода (`photo_not_checkable`, класс не «нет эталона»). */
   notCheckable: N[]
@@ -38,14 +39,19 @@ export interface FindingLists<F extends FindingLike, N extends NotCheckableLike>
   noGold: N[]
 }
 
-/** Разбор находок и строк `photo_not_checkable` на четыре списка §7, именно в этом порядке. */
+/**
+ * Разбор находок и строк `photo_not_checkable` на четыре списка §7, именно в
+ * этом порядке. Список 2 считается тем же предикатом, что и плитка «Требует
+ * человека» наверху отчёта (`needsHumanFinding` в слое данных) — числа под
+ * одной подписью на одном экране обязаны совпадать.
+ */
 export function splitFindings<F extends FindingLike, N extends NotCheckableLike>(
   findings: F[],
   notCheckable: N[],
 ): FindingLists<F, N> {
   return {
     violations: findings.filter((f) => f.status === 'fail'),
-    needsHuman: findings.filter((f) => f.status === 'unreadable' || f.suspected === true),
+    needsHuman: findings.filter(needsHumanFinding),
     notCheckable: notCheckable.filter((n) => n.class !== 'нет эталона'),
     noGold: notCheckable.filter((n) => n.class === 'нет эталона'),
   }

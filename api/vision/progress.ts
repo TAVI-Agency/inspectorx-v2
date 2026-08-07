@@ -40,8 +40,9 @@ export default withVisionGuards(async function handler(
     detail: (detail ?? {}) as never,
   })
   if (error) {
+    // наружу — только код: текст PostgREST выдал бы имена таблиц/колонок
     console.error('vision/progress: событие не записано', error)
-    res.status(500).json({ reason: error.message })
+    res.status(500).json({ reason: 'internal' })
     return
   }
   // Пульс — на каждой стадии: репер добивает прогон, молчащий 3 минуты.

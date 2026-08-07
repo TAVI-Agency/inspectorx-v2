@@ -40,8 +40,9 @@ export default withVisionGuards(async function handler(
     .eq('is_current', true)
     .neq('sha256', sha256)
   if (clearError) {
+    // наружу — только код: текст PostgREST выдал бы имена таблиц/колонок
     console.error('vision/ruleset: не снят is_current', clearError)
-    res.status(500).json({ reason: clearError.message })
+    res.status(500).json({ reason: 'internal' })
     return
   }
 
@@ -55,7 +56,7 @@ export default withVisionGuards(async function handler(
   })
   if (error) {
     console.error('vision/ruleset: версия не записана', error)
-    res.status(500).json({ reason: error.message })
+    res.status(500).json({ reason: 'internal' })
     return
   }
   res.status(200).json({ ok: true })
