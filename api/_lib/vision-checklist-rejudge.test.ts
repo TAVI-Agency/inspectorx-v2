@@ -143,6 +143,7 @@ describe('POST /api/vision/rejudge', () => {
   const DONE = {
     id: INSPECTION_ID, user_id: UID, product_key: 'tobacco',
     packaging_level: 'consumer', markets: ['UZ'], status: 'done', revision: 1,
+    source_kind: 'photo',
   }
   const FACTS = [
     { slot_id: 'brand', payload: { text: 'X' }, source: 'ocr', confidence: 0.7, asset_idx: 1, bbox: [1, 2, 3, 4] },
@@ -245,9 +246,28 @@ describe('POST /api/vision/rejudge', () => {
     expect(url).toBe('https://worker.example/internal/rejudge')
     expect((init.headers as Record<string, string>)['X-Worker-Secret']).toBe('worker-secret')
     expect(JSON.parse(init.body as string)).toEqual({
-      checklist_key: { product: 'tobacco', level: 'consumer', markets: ['UZ'] },
+      checklist_key: {
+        product: 'tobacco', level: 'consumer', markets: ['UZ'], source_kind: 'photo',
+      },
       facts: FACTS,
       overrides: [{ slot_id: 'brand', payload: { text: 'Y' }, note: 'на пачке читается Y' }],
+    })
+  })
+
+  it('пересуд макета судится политикой макета, а не фото', async () => {
+    // без source_kind воркер судил бы pdf фото-политикой: у макета 3 страницы
+    // против 4 обязательных кадров — правка человека деградировала бы вердикт
+    state.db = makeFakeDb(routes({
+      'photo_inspections.select': { data: { ...DONE, source_kind: 'master_pdf' }, error: null },
+    }))
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, VERDICT))
+    vi.stubGlobal('fetch', fetchMock)
+    const captured = makeFakeResponse()
+    await rejudge(authed(), captured.res)
+    expect(captured.statusCode).toBe(200)
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.checklist_key).toEqual({
+      product: 'tobacco', level: 'consumer', markets: ['UZ'], source_kind: 'master_pdf',
     })
   })
 
