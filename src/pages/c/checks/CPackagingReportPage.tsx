@@ -49,16 +49,21 @@ const t = ru.packagingCheck
  * Отчёт по постоянной ссылке `/checks/packaging/:inspectionId` (Задача 13,
  * план §7). Пока `status in (queued, running, failed)` — `CPackagingWaiting`
  * (живые стадии/причина отказа); на `done` — четыре списка находок в
- * порядке §7 + аудиторский след. `useInspectionEvents` гасится, когда
- * ожидание закончилось (`enabled = waiting`) — обязанность потребителя,
- * иначе поллинг событий не остановится после терминального статуса.
+ * порядке §7 + аудиторский след. `useInspectionEvents` гасится сразу, как
+ * только прогон перестал идти (`enabled = polling`, только `queued`/
+ * `running`) — обязанность потребителя (докстрока хука в `hooks.ts`).
+ * `failed` — тоже терминальный статус: `CPackagingWaiting` в этой ветке
+ * читает только `bundle.inspection.last_error`, события ей не нужны, а
+ * держать поллинг живым после отказа означало бы бить `photo_inspection_events`
+ * каждые 1.5с вечно без единой новой строки.
  */
 export function CPackagingReportPage() {
   const { inspectionId } = useParams<{ inspectionId: string }>()
   const bundle = useInspectionBundle(inspectionId)
   const status = bundle.data?.inspection.status
-  const waiting = status === 'queued' || status === 'running' || status === 'failed'
-  const events = useInspectionEvents(inspectionId, waiting)
+  const showWaiting = status === 'queued' || status === 'running' || status === 'failed'
+  const polling = status === 'queued' || status === 'running'
+  const events = useInspectionEvents(inspectionId, polling)
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-7 sm:px-8">
@@ -104,7 +109,7 @@ export function CPackagingReportPage() {
           </CCard>
         )}
 
-        {bundle.data && waiting && <CPackagingWaiting bundle={bundle.data} events={events.data} />}
+        {bundle.data && showWaiting && <CPackagingWaiting bundle={bundle.data} events={events.data} />}
 
         {bundle.data && status === 'done' && <ReportBody bundle={bundle.data} />}
       </div>
@@ -112,9 +117,10 @@ export function CPackagingReportPage() {
   )
 }
 
+// Enum движка (models.py, inspectorx-vision): critical | major | minor | info
 const SEVERITY_TONE: Record<string, string> = {
   critical: 'bg-sanction/10 text-sanction ring-1 ring-sanction/25 ring-inset',
-  significant: 'bg-brass/10 text-brass ring-1 ring-brass/25 ring-inset',
+  major: 'bg-brass/10 text-brass ring-1 ring-brass/25 ring-inset',
   minor: 'bg-secondary text-secondary-foreground',
   info: 'bg-secondary text-muted-foreground',
 }
