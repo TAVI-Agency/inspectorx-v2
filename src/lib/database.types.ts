@@ -1108,6 +1108,13 @@ export type Database = {
             foreignKeyName: "photo_finding_actions_finding_id_fkey"
             columns: ["finding_id"]
             isOneToOne: false
+            referencedRelation: "photo_finding_queue"
+            referencedColumns: ["finding_id"]
+          },
+          {
+            foreignKeyName: "photo_finding_actions_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
             referencedRelation: "photo_findings"
             referencedColumns: ["id"]
           },
@@ -1151,6 +1158,13 @@ export type Database = {
           verdict?: Database["public"]["Enums"]["review_verdict"]
         }
         Relationships: [
+          {
+            foreignKeyName: "photo_finding_reviews_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_finding_queue"
+            referencedColumns: ["finding_id"]
+          },
           {
             foreignKeyName: "photo_finding_reviews_finding_id_fkey"
             columns: ["finding_id"]
@@ -2982,6 +2996,29 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "lawyer_profiles"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      photo_finding_queue: {
+        Row: {
+          checkpoint_id: string | null
+          escalated_at: string | null
+          finding_id: string | null
+          inspection_id: string | null
+          message: string | null
+          packaging_level: string | null
+          product_key: string | null
+          rule_ref: string | null
+          severity: string | null
+          status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_findings_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
           },
         ]
       }

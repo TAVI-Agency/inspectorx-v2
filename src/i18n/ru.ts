@@ -418,6 +418,18 @@ export const ru = {
       queueAllProducts: 'Все товары',
       queueAllServices: 'Все услуги',
 
+      // ── Очередь по находкам фотоконтроля (Задача 14) ──────────────
+      photoQueueTitle: 'Находки фотоконтроля',
+      photoQueueHint: 'Находки, эскалированные подписчиками — оставьте заключение',
+      photoQueueEmpty: 'Пока нет эскалированных находок.',
+      photoQueueError: 'Не получилось загрузить очередь.',
+      photoFinding: {
+        dialogTitle: 'Заключение по находке',
+        submitCta: 'Оставить заключение',
+        submitted: 'Заключение отправлено на модерацию.',
+        submitError: 'Не получилось отправить. Попробуйте ещё раз.',
+      },
+
       myReviewsTitle: 'Мои заключения',
       myReviewsEmpty: 'Вы ещё не оставили ни одного заключения — начните с очереди слева.',
       reviewStatus: {
@@ -834,6 +846,16 @@ export const ru = {
     evaluatedAtLabel: 'Съёмка/макет от',
     policyApplied: 'Применённая политика',
     normEditionMissing: 'Редакция акта на эту дату в реестре InspectorX не зафиксирована.',
+
+    // ── Подпись вердикта юристом (Задача 14, план §8) ──
+    signCta: 'Подписать вердикт',
+    signPending: 'Подписываем…',
+    signError: 'Не получилось подписать. Попробуйте ещё раз.',
+    /** Бейдж после подписи: имя юриста (lawyer_profiles.display_name) + дата */
+    signedByLawyer: (name: string, date: string) => `Подписано: ${name}, ${date}`,
+    /** Заглушка на время загрузки имени подписавшего юриста */
+    signedUnknownLawyer: 'Юрист',
+    findingReviewsTitle: 'Заключения юристов',
   },
 
   settings: {
