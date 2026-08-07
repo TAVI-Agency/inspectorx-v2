@@ -376,6 +376,23 @@ export interface LifecycleNotification {
   createdAt: string
 }
 
+/**
+ * Уведомление «чек-лист товара устарел» из user_notifications
+ * (kind='checklist_version'), заводит public.flag_stale_photo_inspections()
+ * (Задача 16, cron 'photo-stale-flag'): норма, на которую опирался вердикт
+ * проверки упаковки, изменилась.
+ */
+export interface ChecklistVersionNotification {
+  id: string
+  inspectionId: string
+  effectiveDate: string
+  requirementId: string
+  /** Страница отчёта проверки — /checks/packaging/:inspectionId */
+  link: string
+  isRead: boolean
+  createdAt: string
+}
+
 /** Строка очереди «Ждут проверки» */
 export interface ReviewQueueItem {
   requirementId: string
@@ -425,7 +442,12 @@ export interface UserQuestion {
 
 // ── Центр уведомлений (колокольчик) ────────────────────────────────
 
-export type AppNotificationKind = 'change' | 'question' | 'lawyer' | 'lifecycle'
+export type AppNotificationKind =
+  | 'change'
+  | 'question'
+  | 'lawyer'
+  | 'lifecycle'
+  | 'checklist_version'
 
 /**
  * Строка центра уведомлений. Источники:
@@ -434,6 +456,9 @@ export type AppNotificationKind = 'change' | 'question' | 'lawyer' | 'lifecycle'
  * lawyer — реальные уведомления юриста (lawyer_notifications),
  * lifecycle — переход даты ЖЦ требования, реальные user_notifications
  *   (kind='lifecycle'), заводит cron Задачи 38.
+ * checklist_version — вердикт проверки упаковки устарел (норма изменилась),
+ *   реальные user_notifications (kind='checklist_version'), заводит
+ *   flag_stale_photo_inspections() (Задача 16).
  */
 export interface AppNotification {
   id: string

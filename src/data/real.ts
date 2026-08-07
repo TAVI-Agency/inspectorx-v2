@@ -13,6 +13,7 @@ import {
   locked,
   ok,
   type AuthorityInfo,
+  type ChecklistVersionNotification,
   type Citation,
   type CourtCase,
   type DocumentTemplate,
@@ -1473,6 +1474,41 @@ export async function fetchLifecycleNotificationsReal(): Promise<LifecycleNotifi
 }
 
 export async function markLifecycleNotificationReadReal(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
+// ── Checklist_version-уведомления (устаревание вердикта, Задача 16) ─
+
+export async function fetchChecklistVersionNotificationsReal(): Promise<
+  ChecklistVersionNotification[]
+> {
+  const { data, error } = await supabase
+    .from('user_notifications')
+    .select('id, requirement_id, payload, is_read, created_at')
+    .eq('kind', 'checklist_version')
+    .order('created_at', { ascending: false })
+    .limit(30)
+  if (error) throw error
+  return (data ?? []).map((r) => {
+    const payload = (r.payload ?? {}) as { inspection?: string; effective_date?: string }
+    const inspectionId = payload.inspection ?? ''
+    return {
+      id: r.id,
+      inspectionId,
+      effectiveDate: payload.effective_date ?? r.created_at,
+      requirementId: r.requirement_id,
+      link: `/checks/packaging/${inspectionId}`,
+      isRead: r.is_read,
+      createdAt: r.created_at,
+    }
+  })
+}
+
+export async function markChecklistVersionNotificationReadReal(id: string): Promise<void> {
   const { error } = await supabase
     .from('user_notifications')
     .update({ is_read: true, read_at: new Date().toISOString() })

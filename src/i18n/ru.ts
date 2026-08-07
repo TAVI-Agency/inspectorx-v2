@@ -720,6 +720,9 @@ export const ru = {
     fixedCta: 'Исправлю',
     preliminaryBadge: 'Предварительный — ждёт подписи юриста',
     staleBadge: (date: string) => `Проверка устарела: норма изменилась ${date}`,
+    /** Текст уведомления в колокольчике (user_notifications, kind='checklist_version', Задача 16) */
+    staleNotification: (date: string) =>
+      `Ваша проверка упаковки больше не актуальна: норма изменилась ${date}`,
     supersededBadge: 'Есть новая ревизия',
     auditTitle: 'Реквизиты проверки',
     sourcePdf: 'макет PDF',
