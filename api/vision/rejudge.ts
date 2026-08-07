@@ -128,6 +128,10 @@ export default withVisionGuards(async function handler(
     body: JSON.stringify({
       checklist_key: {
         product: ins.product_key, level: ins.packaging_level, markets: ins.markets,
+        // без source_kind пересуд МАКЕТА судился бы фото-политикой: правка
+        // человека деградировала бы вердикт (у pdf 3 страницы против
+        // 4 обязательных кадров у фото)
+        source_kind: ins.source_kind,
       },
       facts: facts ?? [],
       overrides: overrides.map((o) => ({

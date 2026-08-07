@@ -296,6 +296,8 @@ describe('успешный прогон', () => {
       faces: ['front', 'back'],
       prior_facts: null,
       reuse_facts: false,
+      // габариты SKU (Задача 15): строки в photo_product_dimensions нет — null
+      reference_dimensions_mm: null,
     })
   })
 
