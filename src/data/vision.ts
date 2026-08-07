@@ -16,6 +16,7 @@ export type PhotoNotCheckableRow = Database['public']['Tables']['photo_not_check
 export type PhotoAssetRow = Database['public']['Tables']['photo_assets']['Row']
 export type PhotoInspectionEventRow =
   Database['public']['Tables']['photo_inspection_events']['Row']
+export type PhotoFactRow = Database['public']['Tables']['photo_facts']['Row']
 
 /** packaging_inspections.packaging_level — CHECK-констрейнт в 20260810100000_photo_runtime.sql */
 export type PackagingLevel = 'consumer' | 'transport'
@@ -297,6 +298,52 @@ export async function fetchInspectionEvents(id: string): Promise<PhotoInspection
     .order('at')
   if (error) throw error
   return data ?? []
+}
+
+/**
+ * Слоты паспорта фактов текущей проверки (для модалки «Поправить факт»,
+ * план §7 список 2). `revision` у `photo_facts` — это ревизия ЗАПОЛНЕНИЯ
+ * факта внутри данного `inspection_id`, а не ревизия проверки (та уже
+ * зафиксирована конкретным `id`, каждая ревизия проверки — своя строка
+ * `photo_inspections`, см. `create_photo_revision` в
+ * `20260810100000_photo_runtime.sql`) — фильтр по `inspection_id` уже даёт
+ * факты именно этой ревизии, второй фильтр не нужен. Строки `source =
+ * 'system'` (`__scan__` и подобные служебные, комментарий в миграции) не
+ * редактируемые пользователем слоты — отбрасываются здесь, а не в
+ * компоненте, чтобы и будущие потребители не рисовали их по ошибке.
+ */
+export async function fetchPhotoFacts(inspectionId: string): Promise<PhotoFactRow[]> {
+  const { data, error } = await supabase
+    .from('photo_facts')
+    .select('*')
+    .eq('inspection_id', inspectionId)
+    .neq('source', 'system')
+    .order('slot_id')
+  if (error) throw error
+  // Второй, клиентский, фильтр по префиксу `__` — на случай будущей служебной
+  // строки с source, отличным от 'system' (защита от предположения, не от
+  // наблюдаемого факта: на сегодня единственный известный служебный slot_id
+  // — `__scan__` — и так приходит с source='system').
+  return (data ?? []).filter((f) => !f.slot_id.startsWith('__'))
+}
+
+/**
+ * Подписанные ссылки на кропы-доказательства (`evidence-crops`, приватный
+ * бакет). RLS на `storage.objects` для этого бакета читает по тому же
+ * own-read принципу, что и `photo_*` (владелец проверки), поэтому подпись
+ * запрашивается под сессией пользователя, не сервисной ролью. Один запрос
+ * на пачку путей — `createSignedUrls`, а не цикл `createSignedUrl`.
+ */
+export async function fetchEvidenceCropUrls(paths: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(paths)]
+  if (unique.length === 0) return {}
+  const { data, error } = await supabase.storage.from('evidence-crops').createSignedUrls(unique, 3600)
+  if (error) throw error
+  const map: Record<string, string> = {}
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl) map[item.path] = item.signedUrl
+  }
+  return map
 }
 
 /**

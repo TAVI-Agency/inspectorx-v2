@@ -713,6 +713,7 @@ export type {
   PackagingChecklist,
   PackagingLevel,
   PhotoAssetRow,
+  PhotoFactRow,
   PhotoFindingRow,
   PhotoInspectionEventRow,
   PhotoInspectionRow,
@@ -720,9 +721,11 @@ export type {
 } from './vision'
 export {
   buildIdempotencyKey,
+  fetchEvidenceCropUrls,
   fetchInspectionBundle,
   fetchInspectionEvents,
   fetchPackagingChecklist,
+  fetchPhotoFacts,
   groupRetakeBySurface,
   isPreliminary,
   reportCounters,
