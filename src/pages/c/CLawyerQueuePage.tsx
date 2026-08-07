@@ -174,6 +174,15 @@ function CPhotoFindingReviewDialog({
     if (!v) reset()
   }
 
+  // 23505 — partial unique index photo_finding_reviews_pending_uidx
+  // (lawyer_id, finding_id) where status='pending': строка в очереди не
+  // исчезает сразу после сабмита (вью фильтрует только published), локальный
+  // submittedIds теряется при перезагрузке — второй клик не должен пугать
+  // юриста generic-текстом «не получилось», это ожидаемый повтор.
+  const errorCode = (submit.error as { code?: string } | null)?.code
+  const errorText =
+    errorCode === '23505' ? t.photoFinding.duplicatePending : t.photoFinding.submitError
+
   return (
     <Dialog open={Boolean(item)} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -242,9 +251,7 @@ function CPhotoFindingReviewDialog({
               </p>
             </div>
 
-            {submit.isError && (
-              <p className="text-sm text-destructive">{t.photoFinding.submitError}</p>
-            )}
+            {submit.isError && <p className="text-sm text-destructive">{errorText}</p>}
 
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => handleOpenChange(false)}>
@@ -260,6 +267,13 @@ function CPhotoFindingReviewDialog({
                       onSuccess: () => {
                         onSubmitted(item.findingId)
                         handleOpenChange(false)
+                      },
+                      // Дубликат — не техническая ошибка: заключение уже стоит в
+                      // очереди на модерацию, прячем CTA так же, как при успехе.
+                      onError: (err) => {
+                        if ((err as { code?: string })?.code === '23505') {
+                          onSubmitted(item.findingId)
+                        }
                       },
                     },
                   )
