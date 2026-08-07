@@ -30,10 +30,12 @@ import {
   fetchCard,
   fetchChangeFeed,
   fetchComparisonMatrix,
+  fetchEvidenceCropUrls,
   fetchInspectionBundle,
   fetchInspectionEvents,
   fetchLawyerReviews,
   fetchPackagingChecklist,
+  fetchPhotoFacts,
   fetchProductBundle,
   fetchReviewStats,
   fetchServiceBundle,
@@ -740,6 +742,26 @@ export function useRetake() {
     mutationFn: (input: { inspectionId: string; files: File[]; faces: string[] }) =>
       requestRetake(input.inspectionId, input.files, input.faces),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
+  })
+}
+
+/** Слоты паспорта фактов — грузятся по требованию (модалка «Поправить факт»), не на каждый рендер отчёта. */
+export function usePhotoFacts(inspectionId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-facts', inspectionId],
+    queryFn: () => fetchPhotoFacts(inspectionId!),
+    enabled: enabled && Boolean(inspectionId),
+  })
+}
+
+/** Подписанные ссылки на кропы-доказательства, пачкой на все находки страницы; час жизни ссылки — запас на чтение отчёта. */
+export function useEvidenceCropUrls(paths: string[]) {
+  const key = [...paths].sort().join('|')
+  return useQuery({
+    queryKey: ['evidence-crop-urls', key],
+    queryFn: () => fetchEvidenceCropUrls(paths),
+    enabled: paths.length > 0,
+    staleTime: 30 * 60_000,
   })
 }
 

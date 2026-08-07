@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
 import { ArrowLeft, Bell, Camera, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -292,23 +291,6 @@ function ChecklistStep({
         <Camera />
         {t.uploadCta}
       </Button>
-    </div>
-  )
-}
-
-/**
- * Заглушка отчёта проверки — временный экспорт из этого же файла, чтобы
- * typecheck маршрута `/checks/packaging/:inspectionId` был зелёным в
- * пределах этой задачи. Полноценный экран ожидания/отчёта — Задача 13.
- */
-export function CPackagingReportPage() {
-  const { inspectionId } = useParams<{ inspectionId: string }>()
-  return (
-    <div className="mx-auto max-w-3xl px-4 py-24 text-center sm:px-8">
-      <p className="text-sm text-muted-foreground">{ru.common.loading}</p>
-      {inspectionId && (
-        <p className="mt-1 font-mono text-xs text-muted-foreground">{inspectionId}</p>
-      )}
     </div>
   )
 }
