@@ -1,14 +1,40 @@
 """Задача 14: очередь юриста по находкам фотоконтроля, заключения, подпись.
 Тот же паттерн скипа/фикстур, что у test_photo_runtime.py / test_photo_lifecycle.py
 (маркер integration, живой ЛОКАЛЬНЫЙ Supabase). Хелпер _finished_inspection_with_finding
-живёт в conftest.py — переиспользован Задачей 16."""
+живёт в conftest.py — переиспользован Задачей 16.
+
+Ниже также тесты на решение владельца поверх исходного брифа: verified-юрист
+получил select-доступ к ЧУЖОМУ отчёту (photo_inspections/photo_findings/…) —
+без него кнопка «Подписать вердикт» на /checks/packaging/:id была недостижима
+(RLS "own read" из 20260810100000_photo_runtime.sql отдавала лоеру пустой bundle)."""
 from __future__ import annotations
+
+import uuid
 
 import pytest
 
-from .conftest import _finished_inspection_with_finding, requires_db
+from .conftest import STACK, _finished_inspection_with_finding, requires_db
 
 pytestmark = [pytest.mark.integration, requires_db]
+
+
+@pytest.fixture()
+def verified_lawyer(service):
+    """Второй пользователь — верифицированный юрист, НЕ владелец никакой проверки.
+    Возвращает (client, user_id), как и `subscriber`."""
+    from supabase import create_client
+    email = f"ix.wave1.lawyer.{uuid.uuid4().hex[:10]}@test.local"
+    password = "wave1-Passw0rd"
+    created = service.auth.admin.create_user(
+        {"email": email, "password": password, "email_confirm": True})
+    uid = created.user.id
+    service.table("lawyer_profiles").insert(
+        {"user_id": uid, "display_name": "Тестовый юрист", "credentials": "тест",
+         "status": "verified"}).execute()
+    client = create_client(STACK["API_URL"], STACK["ANON_KEY"])
+    client.auth.sign_in_with_password({"email": email, "password": password})
+    yield client, uid
+    service.auth.admin.delete_user(uid)
 
 
 def test_escalation_puts_finding_into_lawyer_queue(subscriber, service,
@@ -34,3 +60,61 @@ def test_sign_requires_verified_lawyer(subscriber, service, current_ruleset, tob
     ins_id, _ = _finished_inspection_with_finding(client, uid, service, tobacco_product_id)
     with pytest.raises(Exception, match="not_a_verified_lawyer"):
         client.rpc("sign_photo_inspection", {"p_inspection_id": ins_id}).execute()
+
+
+def test_verified_lawyer_reads_foreign_inspection_and_findings(
+        subscriber, service, verified_lawyer, current_ruleset, tobacco_product_id):
+    """Без этого юрист не может открыть /checks/packaging/:id чужой проверки,
+    чтобы увидеть кнопку «Подписать вердикт» (решение владельца поверх брифа)."""
+    client, uid = subscriber
+    lawyer_client, _ = verified_lawyer
+    ins_id, fid = _finished_inspection_with_finding(client, uid, service, tobacco_product_id)
+
+    ins_rows = lawyer_client.table("photo_inspections").select("id").eq("id", ins_id).execute().data
+    assert any(r["id"] == ins_id for r in ins_rows)
+
+    f_rows = lawyer_client.table("photo_findings").select("id").eq("id", fid).execute().data
+    assert any(r["id"] == fid for r in f_rows)
+
+    # события/ассеты той же проверки — тоже должны читаться (полный bundle отчёта)
+    ev_rows = lawyer_client.table("photo_inspection_events").select("inspection_id") \
+        .eq("inspection_id", ins_id).execute().data
+    assert len(ev_rows) > 0
+    asset_rows = lawyer_client.table("photo_assets").select("inspection_id") \
+        .eq("inspection_id", ins_id).execute().data
+    assert len(asset_rows) > 0
+
+
+def test_non_lawyer_still_blocked_from_foreign_inspection(
+        subscriber, service, current_ruleset, tobacco_product_id):
+    """Негативный контроль: обычный (не-юрист) подписчик по-прежнему не видит чужую проверку."""
+    client, uid = subscriber
+    ins_id, _ = _finished_inspection_with_finding(client, uid, service, tobacco_product_id)
+
+    from supabase import create_client
+    other_email = f"ix.wave1.other.{uuid.uuid4().hex[:10]}@test.local"
+    other_password = "wave1-Passw0rd"
+    created = service.auth.admin.create_user(
+        {"email": other_email, "password": other_password, "email_confirm": True})
+    other_uid = created.user.id
+    try:
+        other_client = create_client(STACK["API_URL"], STACK["ANON_KEY"])
+        other_client.auth.sign_in_with_password(
+            {"email": other_email, "password": other_password})
+        rows = other_client.table("photo_inspections").select("id").eq("id", ins_id).execute().data
+        assert not any(r["id"] == ins_id for r in rows)
+    finally:
+        service.auth.admin.delete_user(other_uid)
+
+
+def test_lawyer_cannot_write_foreign_inspection(
+        subscriber, service, verified_lawyer, current_ruleset, tobacco_product_id):
+    """Новая select-политика не открывает insert/update — грант на них у
+    authenticated отозван ещё в 20260810100000_photo_runtime.sql, эта проверка
+    защищает именно от регрессии (что новая политика их случайно не вернула)."""
+    client, uid = subscriber
+    lawyer_client, _ = verified_lawyer
+    ins_id, _ = _finished_inspection_with_finding(client, uid, service, tobacco_product_id)
+    with pytest.raises(Exception):
+        lawyer_client.table("photo_inspections").update(
+            {"last_error": "hacked"}).eq("id", ins_id).execute()

@@ -23,3 +23,35 @@ where (public.is_verified_lawyer() or (select auth.uid()) is null)
     where r.finding_id = f.id and r.status = 'published');
 
 grant select on public.photo_finding_queue to anon, authenticated;
+
+-- ── Юрист читает ЧУЖОЙ отчёт для подписи (решение владельца поверх брифа) ───
+-- Кнопка «Подписать вердикт» на /checks/packaging/:id (Задача 14) нуждается в
+-- полном bundle (inspection + findings + notCheckable + assets + events +
+-- facts) чужой проверки — «own read» из 20260810100000_photo_runtime.sql даёт
+-- select только владельцу. Ниже — ДОПОЛНИТЕЛЬНЫЕ permissive-политики только
+-- на select (складываются с "own read" через OR, не заменяют её); insert/
+-- update/delete для authenticated по-прежнему отозваны на уровне грантов той
+-- миграции (`revoke insert, update, delete … from anon, authenticated`) —
+-- писать чужие данные юрист не может ни при каком предикате RLS. Файл Task 8
+-- не трогаем — политики живут здесь, в миграции очереди юриста.
+-- Storage (evidence-crops) сознательно не тронут: подписанные URL кропов для
+-- юриста — вне Волны 1; `useEvidenceCropUrls` на чужом инспекшне просто не
+-- получит ссылки (запрос уйдёт в error, `cropUrls.data` останется undefined),
+-- карточка находки рендерится без картинки — деградация без падения.
+create policy "lawyer reads for signing" on public.photo_inspections
+  for select to authenticated using (public.is_verified_lawyer());
+
+create policy "lawyer reads for signing" on public.photo_findings
+  for select to authenticated using (public.is_verified_lawyer());
+
+create policy "lawyer reads for signing" on public.photo_not_checkable
+  for select to authenticated using (public.is_verified_lawyer());
+
+create policy "lawyer reads for signing" on public.photo_assets
+  for select to authenticated using (public.is_verified_lawyer());
+
+create policy "lawyer reads for signing" on public.photo_inspection_events
+  for select to authenticated using (public.is_verified_lawyer());
+
+create policy "lawyer reads for signing" on public.photo_facts
+  for select to authenticated using (public.is_verified_lawyer());
