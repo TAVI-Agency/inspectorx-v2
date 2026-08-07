@@ -118,19 +118,35 @@ export function objectPath(uid: string, sha256: string, ext: string): string {
 
 /**
  * Ключ идемпотентности заявки: sha256 отсортированных sha256 файлов + уровень
- * упаковки + отсортированные рынки (план §4). Порядок файлов и рынков на
- * входе не важен — сортируем перед склейкой, чтобы одна и та же заявка,
- * собранная в другом порядке, не превратилась во вторую единицу квоты.
- * Набор действующих правил (`ruleset_versions.is_current`) в ключ не входит —
- * его добавляет сервер внутри RPC `request_photo_inspection`.
+ * упаковки + отсортированные рынки + `scope` (план §4). Порядок файлов и
+ * рынков на входе не важен — сортируем перед склейкой, чтобы одна и та же
+ * заявка, собранная в другом порядке, не превратилась во вторую единицу квоты.
+ *
+ * `scope` — то, к ЧЕМУ относится набор файлов, и без него ключ склеивал бы
+ * разные сущности в одну проверку:
+ * — новая заявка передаёт `productId`. Без товара в ключе один и тот же
+ *   комплект кадров (типовой короб, общий макет линейки), поданный на второй
+ *   товар, попадал бы в `unique (user_id, idempotency_key)` первого и
+ *   возвращал бы ЧУЖОЙ вердикт — по чек-листу другого товара;
+ * — досъёмка передаёт `inspectionId`. Без него повторная съёмка той же грани
+ *   в другой проверке отбивалась бы ключом первой.
+ *
+ * Набор действующих правил (`ruleset_versions.is_current`) в ключ здесь не
+ * входит — клиент его и не знает; соль по `sha256` текущего набора добавляет
+ * сервер внутри RPC (`request_photo_inspection` / `request_photo_retake`,
+ * `20260810100000_photo_runtime.sql`), поэтому после передеплоя правил тот же
+ * комплект файлов честно проверяется заново, а не отдаёт старый вердикт.
  */
 export async function buildIdempotencyKey(
   files: ArrayBuffer[],
   level: string,
   markets: string[],
+  scope: string,
 ): Promise<string> {
   const hashes = await Promise.all(files.map(sha256Hex))
-  const material = [...hashes].sort().join('|') + `|${level}|${[...markets].sort().join(',')}`
+  const material =
+    [...hashes].sort().join('|') +
+    `|${level}|${[...markets].sort().join(',')}|${scope}`
   return sha256Hex(new TextEncoder().encode(material).buffer as ArrayBuffer)
 }
 
@@ -227,7 +243,7 @@ export async function uploadAndRequestInspection(input: {
     paths.push(path)
     buffers.push(buffer)
   }
-  const key = await buildIdempotencyKey(buffers, input.level, ['UZ'])
+  const key = await buildIdempotencyKey(buffers, input.level, ['UZ'], input.productId)
   const { data, error } = await supabase.rpc('request_photo_inspection', {
     p_product_id: input.productId,
     p_level: input.level,
@@ -390,6 +406,11 @@ export async function submitFactOverride(
  * (нет UPDATE-гранта у клиента, RPC такого параметра не принимает);
  * участвует только в ключе идемпотентности, чтобы повторная досъёмка того
  * же набора граней не расходовала лишний прогон при повторном сабмите формы.
+ *
+ * `inspectionId` в ключе (`scope`) — обязателен: без него один и тот же
+ * доснятый кадр той же грани во ВТОРОЙ проверке попадал бы в ключ первой и
+ * возвращал бы её ревизию. Со стороны сервера повтор того же ключа теперь
+ * отвечает существующей ревизией, а не голым 23505 (`request_photo_retake`).
  */
 export async function requestRetake(
   inspectionId: string,
@@ -410,7 +431,7 @@ export async function requestRetake(
     paths.push(path)
     buffers.push(buffer)
   }
-  const key = await buildIdempotencyKey(buffers, 'retake', faces)
+  const key = await buildIdempotencyKey(buffers, 'retake', faces, inspectionId)
   const { data, error } = await supabase.rpc('request_photo_retake', {
     p_inspection_id: inspectionId,
     p_new_asset_paths: paths,
@@ -632,6 +653,26 @@ export function groupRetakeBySurface(
     .sort((a, b) => b.findings.length - a.findings.length)
 }
 
+/**
+ * «Нужен человек» — ЕДИНСТВЕННОЕ определение на весь отчёт: машина либо не
+ * смогла прочесть пункт (`status = 'unreadable'`), либо прочла, но не ручается
+ * за прочтение (`confidence_class = 'needs_human'` — колонка
+ * `photo_findings`, `20260810100000_photo_runtime.sql`).
+ *
+ * Живёт здесь, а не рядом со `splitFindings` в слое страницы, чтобы плитка
+ * «Требует человека» и список 2 отчёта считались по одному правилу: раньше
+ * плитка шла от `confidence_class`, а список — от `status`/несуществующего
+ * поля `suspected`, и на одном экране под одной подписью стояли два разных
+ * числа. Прежний `suspected` (подкласс `unreadable` от VLM) в схеме так и не
+ * появился — предикат по нему был мёртвым.
+ */
+export function needsHumanFinding(finding: {
+  status: string
+  confidence_class?: string | null
+}): boolean {
+  return finding.status === 'unreadable' || finding.confidence_class === 'needs_human'
+}
+
 export function reportCounters(bundle: InspectionBundle): {
   violations: number
   decided: number
@@ -642,7 +683,7 @@ export function reportCounters(bundle: InspectionBundle): {
     violations: bundle.findings.filter((f) => f.status === 'fail').length,
     decided: bundle.inspection.decided ?? 0,
     checked: bundle.inspection.checked ?? 0,
-    needsHuman: bundle.findings.filter((f) => f.confidence_class === 'needs_human').length,
+    needsHuman: bundle.findings.filter(needsHumanFinding).length,
   }
 }
 

@@ -349,14 +349,42 @@ describe('POST /api/vision/rejudge', () => {
     expect(captured.body).toEqual({ reason: 'revision_limit' })
   })
 
-  it('прочая ошибка ревизии — 500', async () => {
+  it('уже пересуженный родитель — 409, а не пятисотка', async () => {
     state.db = makeFakeDb(routes({
-      'rpc.create_photo_revision': { data: null, error: { message: 'что-то ещё' } },
+      'rpc.create_photo_revision': { data: null, error: { message: 'already_superseded' } },
+    }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, VERDICT)))
+    const captured = makeFakeResponse()
+    await rejudge(authed(), captured.res)
+    expect(captured.statusCode).toBe(409)
+    expect(captured.body).toEqual({ reason: 'already_superseded' })
+  })
+
+  it('прочая ошибка ревизии — 500 без текста PostgREST наружу', async () => {
+    state.db = makeFakeDb(routes({
+      'rpc.create_photo_revision': {
+        data: null,
+        error: { message: 'relation "photo_inspections" violates constraint x' },
+      },
     }))
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, VERDICT)))
     const captured = makeFakeResponse()
     await rejudge(authed(), captured.res)
     expect(captured.statusCode).toBe(500)
+    expect(captured.body).toEqual({ reason: 'internal' })
+  })
+
+  it('правки не записались — 500 без текста PostgREST наружу', async () => {
+    state.db = makeFakeDb(routes({
+      'photo_fact_overrides.insert': {
+        data: null,
+        error: { message: 'column "payload" of relation "photo_fact_overrides"' },
+      },
+    }))
+    const captured = makeFakeResponse()
+    await rejudge(authed(), captured.res)
+    expect(captured.statusCode).toBe(500)
+    expect(captured.body).toEqual({ reason: 'internal' })
   })
 
   it('воркер не подключён — 503, правки не пишутся', async () => {

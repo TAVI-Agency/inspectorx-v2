@@ -9,6 +9,9 @@ import {
 
 const UPSTREAM_TIMEOUT_MS = 15_000
 
+/** Имена исключений `create_photo_revision`, означающие конфликт состояния (409). */
+const REVISION_CONFLICTS = ['revision_limit', 'already_superseded'] as const
+
 interface Override {
   slotId: string
   payload: unknown
@@ -108,8 +111,9 @@ export default withVisionGuards(async function handler(
   }))
   const { error: ovErr } = await db.from('photo_fact_overrides').insert(overrideRows)
   if (ovErr) {
+    // наружу — только код (см. комментарий у конфликтов ревизии ниже)
     console.error('vision/rejudge: правки не записаны', ovErr)
-    res.status(500).json({ reason: ovErr.message })
+    res.status(500).json({ reason: 'internal' })
     return
   }
 
@@ -159,11 +163,14 @@ export default withVisionGuards(async function handler(
   })
   if (error) {
     console.error('vision/rejudge: ревизия не создана', error)
-    // потолок ревизий (3) — это конфликт состояния, а не сбой сервера
-    const status = error.message.includes('revision_limit') ? 409 : 500
-    res.status(status).json({
-      reason: status === 409 ? 'revision_limit' : error.message,
-    })
+    // Именованные исключения create_photo_revision — конфликт состояния, а не
+    // сбой сервера: потолок ревизий (3) и уже пересуженный родитель
+    // (`already_superseded` — цепочка ревизий линейна, ветвить её нельзя).
+    const conflict = REVISION_CONFLICTS.find((c) => error.message.includes(c))
+    // Всё остальное наружу уходит кодом `internal`: текст ошибки PostgREST
+    // несёт имена таблиц/колонок и тексты констрейнтов, а эндпоинт публичен с
+    // первого дня. Полная ошибка остаётся в логе функции выше.
+    res.status(conflict ? 409 : 500).json({ reason: conflict ?? 'internal' })
     return
   }
   res.status(200).json({ inspectionId: newId })
