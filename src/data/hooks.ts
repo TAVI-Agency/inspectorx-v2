@@ -32,11 +32,14 @@ import {
   fetchChangeFeed,
   fetchComparisonMatrix,
   fetchEvidenceCropUrls,
+  fetchFindingReviews,
   fetchInspectionBundle,
   fetchInspectionEvents,
+  fetchLawyerName,
   fetchLawyerReviews,
   fetchPackagingChecklist,
   fetchPhotoFacts,
+  fetchPhotoReviewQueue,
   fetchProductBundle,
   fetchProductDimensions,
   fetchReviewStats,
@@ -45,9 +48,11 @@ import {
   requestRetake,
   search,
   setReviewVote,
+  signInspection,
   startInspection,
   submitFactOverride,
   submitFindingAction,
+  submitPhotoFindingReview,
   uploadAndRequestInspection,
   upsertProductDimensions,
   type DataCtx,
@@ -842,5 +847,62 @@ export function useFindingAction() {
       reason?: string
     }) => submitFindingAction(input.findingId, input.action, input.reason),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
+  })
+}
+
+// ── Очередь юриста по находкам фотоконтроля (Задача 14) ──────────────
+
+/** `enabled` — вызывающая страница уже под `CLawyerGuard` (verified-юрист). */
+export function usePhotoReviewQueue(enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-review-queue'],
+    queryFn: fetchPhotoReviewQueue,
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useSubmitPhotoFindingReview() {
+  const qc = useQueryClient()
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: (input: { findingId: string; verdict: ReviewVerdict; commentText: string }) => {
+      if (!session) throw new Error('auth-required')
+      return submitPhotoFindingReview({ ...input, lawyerId: session.user.id })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['photo-review-queue'] })
+      void qc.invalidateQueries({ queryKey: ['photo-finding-reviews'] })
+    },
+  })
+}
+
+export function useSignInspection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inspectionId: string) => signInspection(inspectionId),
+    onSuccess: (_data, inspectionId) =>
+      void qc.invalidateQueries({ queryKey: ['photo-inspection', inspectionId] }),
+  })
+}
+
+/** Опубликованные заключения юриста по находкам страницы отчёта, пачкой. */
+export function useFindingReviews(findingIds: string[]) {
+  const sorted = [...findingIds].sort()
+  return useQuery({
+    queryKey: ['photo-finding-reviews', sorted],
+    queryFn: () => fetchFindingReviews(sorted),
+    enabled: sorted.length > 0,
+    staleTime: 30_000,
+  })
+}
+
+/** Имя подписавшего юриста для бейджа в отчёте (`photo_inspections.signed_by`). */
+export function useLawyerName(userId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['lawyer-name', userId],
+    queryFn: () => fetchLawyerName(userId!),
+    enabled: Boolean(userId),
+    staleTime: 5 * 60_000,
   })
 }

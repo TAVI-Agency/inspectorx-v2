@@ -9,6 +9,7 @@
 import { supabase } from '@/lib/supabase'
 import { prepareImageForUpload } from '@/lib/image'
 import type { Database } from '@/lib/database.types'
+import type { ReviewVerdict } from './types'
 
 export type PhotoInspectionRow = Database['public']['Tables']['photo_inspections']['Row']
 export type PhotoFindingRow = Database['public']['Tables']['photo_findings']['Row']
@@ -462,6 +463,143 @@ export async function upsertProductDimensions(input: {
     { onConflict: 'user_id,product_id,packaging_level' },
   )
   if (error) throw error
+}
+
+export type PhotoFindingReviewRow = Database['public']['Tables']['photo_finding_reviews']['Row']
+export type PhotoFindingQueueRow = Database['public']['Views']['photo_finding_queue']['Row']
+
+/**
+ * Строка очереди юриста (`public.photo_finding_queue`, Задача 14): находка,
+ * эскалированная подписчиком (`record_finding_action('escalated')`), без
+ * опубликованного заключения. Вью сама скрывает не-юристов предикатом
+ * `is_verified_lawyer()` (`20260810120000_photo_review_queue.sql`) — здесь
+ * авторизация не дублируется.
+ */
+export interface PhotoFindingQueueItem {
+  findingId: string
+  inspectionId: string
+  checkpointId: string
+  ruleRef: string
+  severity: string
+  status: string
+  message: string
+  productKey: string
+  packagingLevel: PackagingLevel
+  escalatedAt: string
+}
+
+/** Строки вью типизированы optional-полями (генератор Supabase для view), но
+ * реально ни одно не бывает null — все столбцы вью берутся из not-null полей
+ * `photo_findings`/`photo_inspections`/`photo_finding_actions`. Фолбэки ниже —
+ * только чтобы успокоить компилятор, не признак ожидаемых пустых значений. */
+function toQueueItem(r: PhotoFindingQueueRow): PhotoFindingQueueItem {
+  return {
+    findingId: r.finding_id ?? '',
+    inspectionId: r.inspection_id ?? '',
+    checkpointId: r.checkpoint_id ?? '',
+    ruleRef: r.rule_ref ?? '',
+    severity: r.severity ?? '',
+    status: r.status ?? '',
+    message: r.message ?? '',
+    productKey: r.product_key ?? '',
+    packagingLevel: (r.packaging_level as PackagingLevel) ?? 'consumer',
+    escalatedAt: r.escalated_at ?? '',
+  }
+}
+
+export async function fetchPhotoReviewQueue(): Promise<PhotoFindingQueueItem[]> {
+  const { data, error } = await supabase
+    .from('photo_finding_queue')
+    .select('*')
+    .order('escalated_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(toQueueItem)
+}
+
+/**
+ * Заключение юриста по находке (`photo_finding_reviews`, insert-only —
+ * append-only инвариант, политика "verified lawyer insert" держит
+ * `status` всегда `default 'pending'`, колоночный грант не даёт клиенту
+ * писать `status`/`official_reply` напрямую).
+ */
+export async function submitPhotoFindingReview(input: {
+  findingId: string
+  lawyerId: string
+  verdict: ReviewVerdict
+  commentText: string
+}): Promise<void> {
+  const { error } = await supabase.from('photo_finding_reviews').insert({
+    finding_id: input.findingId,
+    lawyer_id: input.lawyerId,
+    verdict: input.verdict,
+    comment_text: input.commentText,
+  })
+  if (error) throw error
+}
+
+/** Подпись вердикта (RPC `sign_photo_inspection`, только verified-юрист). */
+export async function signInspection(inspectionId: string): Promise<void> {
+  const { error } = await supabase.rpc('sign_photo_inspection', {
+    p_inspection_id: inspectionId,
+  })
+  if (error) throw error
+}
+
+/**
+ * Имя подписавшего юриста по `photo_inspections.signed_by` (auth.users.id).
+ * Публичное чтение verified-профилей уже открыто ("public read verified",
+ * `20260729013000_lawyer_reviews.sql`) — отдельного гранта не требуется.
+ */
+export async function fetchLawyerName(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('lawyer_profiles')
+    .select('display_name')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data?.display_name ?? null
+}
+
+/** Опубликованное заключение юриста по конкретной находке — для отчёта. */
+export interface PhotoFindingReviewItem {
+  id: string
+  findingId: string
+  verdict: ReviewVerdict
+  commentText: string
+  lawyerName: string
+  credentials?: string
+  createdAt: string
+}
+
+/**
+ * Опубликованные заключения пачкой по находкам страницы отчёта.
+ * `lawyer_profiles(display_name, credentials)` — та же встроенная связь
+ * (`lawyer_id -> lawyer_profiles.user_id`), что и у `requirement_reviews`
+ * (см. `REVIEW_SELECT` в `real.ts`); публичное чтение verified-профилей уже
+ * открыто политикой "public read verified" (`20260729013000_lawyer_reviews.sql`).
+ */
+export async function fetchFindingReviews(
+  findingIds: string[],
+): Promise<PhotoFindingReviewItem[]> {
+  if (findingIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('photo_finding_reviews')
+    .select(
+      'id, finding_id, verdict, comment_text, created_at, lawyer_profiles(display_name, credentials)',
+    )
+    .in('finding_id', findingIds)
+    .eq('status', 'published')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    findingId: r.finding_id,
+    verdict: r.verdict,
+    commentText: r.comment_text,
+    lawyerName: r.lawyer_profiles?.display_name ?? 'Юрист',
+    credentials: r.lawyer_profiles?.credentials ?? undefined,
+    createdAt: r.created_at,
+  }))
 }
 
 /** Действие юзера по находке (RPC `record_finding_action`, SECURITY DEFINER, own-only). */

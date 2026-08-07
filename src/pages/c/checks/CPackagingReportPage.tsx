@@ -14,11 +14,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   useEvidenceCropUrls,
   useFindingAction,
+  useFindingReviews,
   useInspectionBundle,
   useInspectionEvents,
+  useLawyerName,
+  useMyLawyerProfile,
   usePhotoFacts,
   useFactOverride,
   useRetake,
+  useSignInspection,
   useStartInspection,
 } from '@/data/hooks'
 import {
@@ -27,6 +31,7 @@ import {
   reportCounters,
   type InspectionBundle,
   type PhotoFactRow,
+  type PhotoFindingReviewItem,
   type PhotoFindingRow,
   type PhotoNotCheckableRow,
 } from '@/data'
@@ -41,6 +46,7 @@ import {
   splitFindings,
 } from './report-utils'
 import { CCard, CEyebrow, CStatTile, CountUp } from '../ui'
+import { CVerdictChip } from '../CLawyerReviews'
 import { CPackagingWaiting } from './CPackagingWaiting'
 
 const t = ru.packagingCheck
@@ -138,6 +144,14 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
     .filter((p): p is string => Boolean(p))
   const cropUrls = useEvidenceCropUrls(cropPaths)
 
+  // Опубликованные заключения юриста по находкам этого отчёта (Задача 14).
+  const findingIds = bundle.findings.map((f) => f.id)
+  const findingReviews = useFindingReviews(findingIds)
+
+  const { data: lawyerProfile } = useMyLawyerProfile()
+  const verifiedLawyer = lawyerProfile?.status === 'verified'
+  const sign = useSignInspection()
+
   const retakeGroups = groupRetakeBySurface(lists.needsHuman)
   const [factDialogOpen, setFactDialogOpen] = useState(false)
 
@@ -171,9 +185,9 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
         <p className="mt-2 text-xs text-muted-foreground">{t.coveragePdfNote}</p>
       </div>
 
-      {/* Бейджи предварительности/устаревания/новой ревизии */}
+      {/* Бейджи предварительности/устаревания/новой ревизии + подпись юриста */}
       {(preliminary || inspection.stale_since || inspection.superseded_by) && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {preliminary && (
             <span className="inline-flex h-6 items-center rounded-[6px] bg-brass/10 px-2 text-xs font-medium text-brass ring-1 ring-brass/25 ring-inset">
               {t.preliminaryBadge}
@@ -193,7 +207,21 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
               <ArrowRight className="size-3.5" />
             </Link>
           )}
+          {/* Вердикт с fail/критичной находкой не окончателен без подписи юриста (план §8) */}
+          {verifiedLawyer && preliminary && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={sign.isPending}
+              onClick={() => sign.mutate(inspection.id)}
+            >
+              {sign.isPending ? t.signPending : t.signCta}
+            </Button>
+          )}
         </div>
+      )}
+      {verifiedLawyer && sign.isError && (
+        <p className="text-xs text-destructive">{t.signError}</p>
       )}
 
       {/* Список 1 — нарушения */}
@@ -203,7 +231,13 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
         ) : (
           <div className="space-y-3">
             {lists.violations.map((f) => (
-              <FindingCard key={f.id} finding={f} productId={inspection.product_id} cropUrls={cropUrls.data} />
+              <FindingCard
+                key={f.id}
+                finding={f}
+                productId={inspection.product_id}
+                cropUrls={cropUrls.data}
+                reviews={findingReviews.data?.filter((r) => r.findingId === f.id)}
+              />
             ))}
           </div>
         )}
@@ -304,10 +338,12 @@ function FindingCard({
   finding,
   productId,
   cropUrls,
+  reviews,
 }: {
   finding: PhotoFindingRow
   productId: string | null
   cropUrls: Record<string, string> | undefined
+  reviews: PhotoFindingReviewItem[] | undefined
 }) {
   const action = useFindingAction()
   const [mode, setMode] = useState<'idle' | 'accepting'>('idle')
@@ -385,6 +421,32 @@ function FindingCard({
 
       {finding.recommendation && (
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{finding.recommendation}</p>
+      )}
+
+      {/* Опубликованные заключения юриста по этой находке (Задача 14) */}
+      {reviews && reviews.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="font-mono text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+            {t.findingReviewsTitle}
+          </p>
+          {reviews.map((r) => (
+            <div key={r.id} className="rounded-lg border border-border bg-secondary/30 p-2.5">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <CVerdictChip verdict={r.verdict} />
+                <span className="text-xs font-semibold tracking-tight">{r.lawyerName}</span>
+                {r.credentials && (
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+                    {r.credentials}
+                  </span>
+                )}
+                <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                  {formatDate(r.createdAt)}
+                </span>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed whitespace-pre-line">{r.commentText}</p>
+            </div>
+          ))}
+        </div>
       )}
 
       {done ? (
@@ -652,6 +714,13 @@ function AuditSection({
   inspection: InspectionBundle['inspection']
   assets: InspectionBundle['assets']
 }) {
+  // Публичное чтение verified-профилей (`lawyer_profiles`) уже открыто —
+  // сырой auth.users-id заменяем на имя, которое юрист указал в заявке.
+  const signer = useLawyerName(inspection.signed_by)
+  const signedValue = inspection.signed_by
+    ? t.signedByLawyer(signer.data ?? t.signedUnknownLawyer, formatDate(inspection.signed_at) || '—')
+    : t.signedNo
+
   return (
     <div>
       <h2 className="font-display text-lg font-medium tracking-tight">{t.auditTitle}</h2>
@@ -662,7 +731,7 @@ function AuditSection({
           <Row label={t.ruleset} value={`${inspection.ruleset_version ?? '—'} · ${inspection.ruleset_sha256.slice(0, 12)}…`} />
           <Row label={t.costUsd} value={inspection.cost_usd != null ? `$${inspection.cost_usd.toFixed(4)}` : '—'} />
           <Row label={t.degradedMode} value={inspection.degraded_mode ?? '—'} />
-          <Row label={t.signedBy} value={inspection.signed_by ?? t.signedNo} />
+          <Row label={t.signedBy} value={signedValue} />
         </dl>
 
         {inspection.reader_coverage != null && (
