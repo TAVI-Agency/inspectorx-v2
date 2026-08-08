@@ -28,7 +28,7 @@ import json
 
 import pytest
 
-from importer.build.agents import load_models_config
+from importer.build.agents import Verdict, load_models_config
 from importer.build.cartographer import Cartographer, CartographerReport
 from importer.build.llm_client import AgentLLMError
 from importer.build.orchestrator import MapAlreadyApprovedError, Orchestrator
@@ -259,7 +259,13 @@ def test_cartographer_map_can_be_approved_and_run_by_orchestrator():
     assert approved.approved_by == "owner"
     assert approved.approved_at is not None
 
-    steps = {name: (lambda ctx: StepResult(status="ok")) for name in STEP_ORDER}
+    # заглушка несёт pass-вердикт, как настоящий шаг: publish_ready больше
+    # не публикует айтем без единого вердикта (план фотоконтроля §3)
+    stub_verdict = Verdict(passed=True, reason="заглушка: подтверждено", model="stub")
+    steps = {
+        name: (lambda ctx: StepResult(status="ok", verdicts=[stub_verdict]))
+        for name in STEP_ORDER
+    }
     run_report = Orchestrator(store, steps=steps).run_group(cart_report.map_id)
 
     assert run_report.total_items == 2

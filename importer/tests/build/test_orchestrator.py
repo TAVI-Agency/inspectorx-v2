@@ -56,7 +56,14 @@ class ScriptedStep:
 
 
 def ok_step() -> ScriptedStep:
-    return ScriptedStep(StepResult(status="ok"))
+    # Заглушка несёт один pass-вердикт, как настоящий шаг: publish_ready
+    # больше не публикует айтем без единого вердикта (план фотоконтроля §3,
+    # «вакуальный pass»), и заглушка без вердиктов кодировала бы старую дыру.
+    return ScriptedStep(StepResult(status="ok", verdicts=[_stub_pass_verdict()]))
+
+
+def _stub_pass_verdict() -> Verdict:
+    return Verdict(passed=True, reason="заглушка: подтверждено", model="stub")
 
 
 class RaisingStep:
@@ -115,7 +122,7 @@ def test_run_group_processes_all_steps_in_fixed_order():
     def tracking_step(name):
         def _step(ctx):
             call_order.append(name)
-            return StepResult(status="ok")
+            return StepResult(status="ok", verdicts=[_stub_pass_verdict()])
         return _step
 
     steps = {name: tracking_step(name) for name in STEP_ORDER}
@@ -394,9 +401,11 @@ def test_step_verdicts_are_persisted_via_store():
 
     orchestrator.run_group("map-1")
 
-    assert len(store.verdicts) == 1
-    item_id, step_name, verdicts = store.verdicts[0]
-    assert step_name == "rule"
+    # заглушки остальных шагов тоже пишут по вердикту (см. ok_step) —
+    # проверяем именно запись шага 'rule'
+    rule_entries = [(i, s, v) for (i, s, v) in store.verdicts if s == "rule"]
+    assert len(rule_entries) == 1
+    item_id, step_name, verdicts = rule_entries[0]
     assert verdicts == [verdict]
     assert item_id in store.items
 
