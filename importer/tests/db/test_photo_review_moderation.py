@@ -7,14 +7,41 @@
 """
 from __future__ import annotations
 
+import re
+import subprocess
 import uuid
 
 import pytest
 
-from .conftest import STACK, _finished_inspection_with_finding, requires_db
+from .conftest import ROOT, STACK, _finished_inspection_with_finding, requires_db
 from .test_photo_reviews import verified_lawyer  # noqa: F401  (фикстура)
 
 pytestmark = [pytest.mark.integration, requires_db]
+
+QUEUE_VIEWS = ("public.photo_finding_queue", "public.photo_review_moderation_queue")
+
+
+def _db_container() -> str:
+    """Имя контейнера БД локального стека: `supabase_db_<project_id>`."""
+    m = re.search(r'^project_id\s*=\s*"([^"]+)"',
+                  (ROOT / "supabase" / "config.toml").read_text(), re.M)
+    assert m, "project_id не найден в supabase/config.toml"
+    return f"supabase_db_{m.group(1)}"
+
+
+def _psql(query: str) -> str:
+    """Сырой SQL на локальной базе. PostgREST системные каталоги не отдаёт, а
+    psycopg в .venv-importer нет — ходим psql'ом внутри контейнера БД."""
+    proc = subprocess.run(
+        ["docker", "exec", _db_container(), "psql", "-U", "postgres", "-d", "postgres",
+         "-tAc", query],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout.strip()
+
+
+def _has_select(role: str, relation: str) -> bool:
+    return _psql(f"select has_table_privilege('{role}', '{relation}', 'select')") == "t"
 
 
 @pytest.fixture()
@@ -93,24 +120,42 @@ def test_non_moderator_does_not_see_foreign_pending(
     assert not any(r["review_id"] == review_id for r in queue)
 
 
+@pytest.mark.parametrize("relation", QUEUE_VIEWS)
+def test_queue_views_have_no_anon_privilege(relation):
+    """Important-фикс ревью: `grant select … to authenticated` НИЧЕГО не сужает —
+    default privileges Supabase уже дали select всем ролям, и от анонимного
+    чтения очередей держал только WHERE-предикат внутри вью. Проверяем сам
+    ГРАНТ (`has_table_privilege`), а не поведение PostgREST: только так тест
+    ловит регрессию привилегии, а не гадает по коду ошибки HTTP-слоя."""
+    assert _has_select("anon", relation) is False
+    assert _has_select("authenticated", relation) is True
+
+
+@pytest.mark.parametrize("relation", QUEUE_VIEWS)
+def test_queue_views_are_security_barrier(relation):
+    """Minor того же ревью: предикат безопасности вью должен вычисляться до
+    пользовательских фильтров запроса."""
+    assert _psql(
+        f"select 'security_barrier=true' = any(c.reloptions) from pg_class c "
+        f"where c.oid = '{relation}'::regclass") == "t"
+
+
 def test_moderation_queue_blocks_anonymous_access(
         subscriber, service, verified_lawyer, current_ruleset, tobacco_product_id):
     """Тот же Critical, что чинили у photo_finding_queue: у anon-ключа
-    auth.uid() тоже null, поэтому предикат вью — `auth.role()`, а select-грант
-    сужен до authenticated."""
+    auth.uid() тоже null, поэтому предикат вью — `auth.role()`. После ревока
+    привилегии у anon исход ровно один — отказ на уровне прав, поэтому тест
+    строгий: «пустой ответ» больше не засчитывается."""
     client, uid = subscriber
     _, lawyer_uid = verified_lawyer
     _, fid = _finished_inspection_with_finding(client, uid, service, tobacco_product_id)
-    review_id = _pending_review(service, fid, lawyer_uid)
+    _pending_review(service, fid, lawyer_uid)
 
     from postgrest.exceptions import APIError
     from supabase import create_client
     anon_client = create_client(STACK["API_URL"], STACK["ANON_KEY"])
-    try:
-        rows = anon_client.table("photo_review_moderation_queue").select("*").execute().data
-    except APIError:
-        return  # permission denied — корректный, даже более строгий исход
-    assert not any(r["review_id"] == review_id for r in rows)
+    with pytest.raises(APIError):
+        anon_client.table("photo_review_moderation_queue").select("*").execute()
 
 
 # ── Позитив: модератор ──────────────────────────────────────────────────────
