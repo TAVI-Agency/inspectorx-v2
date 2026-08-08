@@ -1,6 +1,18 @@
 """Шаг 'rule' Build-конвейера (Задача 19, ADR-0003 решение 5: «критическая
 точка» Rule-maker → Verifier).
 
+## ПРИОСТАНОВЛЕН (06.08.2026, поправка 4 к ADR-0003, план фотоконтроля §3)
+
+Роль Rule-maker приостановлена до этапа 6 плана фотоконтроля: шаг — БЕЗУСЛОВНЫЙ
+no-op, ни одного вызова LLM, ни одной записи в `requirement_rules` (таблица
+объявлена deprecated). Источник правды машинных правил — YAML-пакеты
+`config/requirements/*.yaml` в `inspectorx-vision` (решение владельца по
+развилке 5, `PHOTOCONTROL_DECISIONS.md`). На этапе 6 шаг вернётся в другой
+роли: генератор PR-кандидатов в YAML-пакет, не писатель в базу. Класс
+`RuleStep._run` и его тесты сохранены под skip как эталон поведения для
+возвращения роли. Всё, что ниже по докстрингу, описывает приостановленный
+LLM-путь.
+
 Rule-maker — `Classifier` (`agents.py`) в роли producer'а, тир `mid`
 (ADR-0003 решение 9: «Средний = Retriever, Vision, Rule-maker»). Он читает
 ПЕРВОИСТОЧНИК нормы — `ctx.data['norm_fragment'].content`, НЕ `summary`
@@ -165,6 +177,15 @@ class RuleStep:
         self._maker = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
+        # Приостановка Rule-maker (см. заголовок докстринга модуля):
+        # безусловный no-op для ЛЮБОЙ категории, включая 'marking'.
+        ctx.data["rules"] = []
+        ctx.data["skipped_rule_step"] = True
+        return StepResult(status="ok")
+
+    def _suspended_llm_path(self, ctx: ItemContext) -> StepResult:
+        """Приостановленный LLM-путь шага (бывший `__call__`). Не вызывается;
+        сохранён как эталон для возвращения роли на этапе 6."""
         category_slug = ctx.data.get("category_slug")
         if category_slug != MARKING_CATEGORY_SLUG:
             ctx.data["rules"] = []

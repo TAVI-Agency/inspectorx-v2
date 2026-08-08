@@ -42,6 +42,8 @@ import json
 from dataclasses import dataclass, field
 from datetime import date
 
+import pytest
+
 from importer.build.agents import load_models_config, verifier_model_for
 from importer.build.legalx import NormFragment
 from importer.build.orchestrator import MapRecord, Orchestrator
@@ -138,6 +140,27 @@ def test_rule_step_missing_category_slug_in_ctx_also_skips():
     assert llm.calls == []
 
 
+# ── шаг 'rule': приостановка Rule-maker (поправка 4 к ADR-0003) ────────
+
+
+def test_rule_step_marking_category_is_also_a_no_op_while_rule_maker_is_suspended():
+    """Поправка 4 к ADR-0003 (план фотоконтроля §3, этап 1): роль Rule-maker
+    приостановлена до этапа 6 — шаг 'rule' БЕЗУСЛОВНЫЙ no-op. Даже для
+    category_slug='marking' с norm_fragment: ноль вызовов LLM, пустые rules,
+    skipped_rule_step=True. Правила живут в YAML-пакетах inspectorx-vision;
+    на этапе 6 шаг вернётся генератором PR-кандидатов, не писателем в базу."""
+    llm = ScriptedLLM(responses=[])
+    step = RuleStep(llm)
+    ctx = item_ctx()  # marking + norm_fragment — раньше это был LLM-путь
+
+    result = step(ctx)
+
+    assert result.status == "ok"
+    assert ctx.data["rules"] == []
+    assert ctx.data["skipped_rule_step"] is True
+    assert llm.calls == []
+
+
 # ── шаг 'rule': marking, но нет norm_fragment -> fail, не raise ────────
 
 
@@ -146,12 +169,18 @@ def test_rule_step_marking_without_norm_fragment_returns_fail_not_raise():
     step = RuleStep(llm)
     ctx = item_ctx(with_norm_fragment=False)
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "fail"
     assert "norm_fragment" in result.error.lower() or "norm" in result.error.lower()
     assert llm.calls == []
 
+
+# ── ПРИОСТАНОВЛЕННЫЙ LLM-путь (поправка 4 к ADR-0003) ──────────────────
+# Тесты ниже зовут `RuleStep._suspended_llm_path` напрямую: через `__call__`
+# путь недостижим (шаг — безусловный no-op до этапа 6 плана фотоконтроля),
+# но сохранённый эталон обязан оставаться рабочим — на этапе 6 роль
+# возвращается, и эти инварианты снова станут поведением шага.
 
 # ── шаг 'rule': happy-path — 2 правила, оба подтверждены ────────────────
 
@@ -168,7 +197,7 @@ def test_rule_step_happy_path_two_rules_both_verified_returns_ok():
     step = RuleStep(llm)
     ctx = item_ctx()
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "ok"
     assert len(result.verdicts) == 2
@@ -186,7 +215,7 @@ def test_rule_step_uses_mid_tier_and_verifier_gets_expensive_tier():
     ])
     step = RuleStep(llm)
 
-    step(item_ctx())
+    step._suspended_llm_path(item_ctx())
 
     config = load_models_config()
     assert llm.calls[0][1] == config.tiers["mid"]
@@ -207,7 +236,7 @@ def test_rule_step_invalid_maker_output_retries_with_error_message_then_succeeds
     step = RuleStep(llm)
     ctx = item_ctx()
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "ok"
     assert ctx.data["rules"] == [{"rule": {"barcode": "EAN-13"}, "verified": True}]
@@ -227,7 +256,7 @@ def test_rule_step_empty_rules_array_is_treated_as_invalid_and_retries():
     step = RuleStep(llm)
     ctx = item_ctx()
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "ok"
     assert ctx.data["rules"] == [{"rule": {"barcode": "EAN-13"}, "verified": True}]
@@ -244,7 +273,7 @@ def test_rule_step_twice_invalid_maker_output_returns_fail():
     step = RuleStep(llm)
     ctx = item_ctx()
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "fail"
     assert result.error is not None
@@ -267,7 +296,7 @@ def test_rule_step_one_of_two_rules_rejected_by_verifier_returns_fail():
     step = RuleStep(llm)
     ctx = item_ctx()
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "fail"
     assert len(result.verdicts) == 2
@@ -297,7 +326,7 @@ def test_rule_step_any_rejected_not_all_rejected_causes_fail_mutation_pin():
     step = RuleStep(llm)
     ctx = item_ctx()
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "fail"
     assert len(result.verdicts) == 3
@@ -327,7 +356,7 @@ def test_rule_step_verifier_exception_mid_loop_preserves_collected_verdicts():
     step = RuleStep(llm)
     ctx = item_ctx()
 
-    result = step(ctx)
+    result = step._suspended_llm_path(ctx)
 
     assert result.status == "fail"
     assert len(result.verdicts) == 1
@@ -343,6 +372,10 @@ def test_rule_step_verifier_exception_mid_loop_preserves_collected_verdicts():
 # ── интеграция: Orchestrator — verifier-фейл x3 -> needs_attention ──────
 
 
+@pytest.mark.skip(
+    reason="Rule-maker приостановлен (поправка 4 к ADR-0003): через пайплайн "
+    "LLM-путь недостижим, шаг — безусловный no-op; вернуть тест на этапе 6"
+)
 def test_rule_step_verifier_fail_x3_escalates_to_needs_attention_via_orchestrator():
     """Консервативная политика «критической точки» (ADR-0003 р.5, «кривое
     правило = кривой фото-чек»): ретраит ЦЕЛЫЙ шаг оркестратор, не сам шаг;

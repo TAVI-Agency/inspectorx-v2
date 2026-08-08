@@ -232,6 +232,16 @@ def publish_ready(store: BuildStore, run_id: str) -> int:
         if item.status != "draft_loaded":
             continue
         last_by_step = _last_verdict_per_step(store.list_item_verdicts(item.id))
+        is_dedup_duplicate = (item.last_error or "").startswith("duplicate_of=")
+        if not last_by_step and not is_dedup_duplicate:
+            # `all()` над пустым словарём — True: айтем без единой верификации
+            # публиковался бы как готовый (план фотоконтроля §3, «вакуальный pass»).
+            # Дедуп-дубль — исключение: он маркер, вердикты живут на оригинале.
+            store.update_item_status(
+                item.id, "needs_attention",
+                last_error="публикация отклонена: у айтема нет ни одного вердикта — он не проверялся",
+            )
+            continue
         if not all(v.passed for v in last_by_step.values()):
             store.update_item_status(
                 item.id, "needs_attention",
