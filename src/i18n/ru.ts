@@ -692,7 +692,6 @@ export const ru = {
     denyText:
       'Здесь публикуются заключения юристов. Доступ выдаёт команда InspectorX — если он вам нужен, напишите нам.',
     findingLabel: 'Находка',
-    reviewLabel: 'Заключение юриста',
     lawyerLabel: 'Юрист',
     publish: 'Опубликовать',
     reject: 'Отклонить',

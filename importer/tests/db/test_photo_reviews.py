@@ -126,11 +126,15 @@ def test_lawyer_cannot_write_foreign_inspection(
 
 def test_queue_blocks_anonymous_access(subscriber, service, current_ruleset, tobacco_product_id):
     """Critical-фикс: было `(select auth.uid()) is null` как эскейп для
-    service_role — у anon-ключа auth.uid() тоже null, вместе с `grant select
-    … to anon` вью читалась анонимно (подтверждено живым прогоном до фикса).
-    Теперь grant сужен до authenticated, предикат — `auth.role() =
-    'service_role'`: anon либо получает permission-denied, либо (если PostgREST
-    смолчит) обязан не видеть чужую находку."""
+    service_role — у anon-ключа auth.uid() тоже null, вместе с select-гранта
+    на anon вью читалась анонимно (подтверждено живым прогоном до фикса).
+    Предикат стал `auth.role() = 'service_role'`.
+
+    Ужесточено после ревью модерации: раньше тест засчитывал и «PostgREST
+    смолчал, но строки нет» — такой assert не ловил регрессию привилегии.
+    Привилегия anon снята явным ревоком в 20260810160000_photo_review_moderation.sql
+    (сам грант проверяется там же, `test_queue_views_have_no_anon_privilege`),
+    поэтому исход ровно один — отказ."""
     client, uid = subscriber
     ins_id, fid = _finished_inspection_with_finding(client, uid, service, tobacco_product_id)
     client.rpc("record_finding_action",
@@ -139,14 +143,8 @@ def test_queue_blocks_anonymous_access(subscriber, service, current_ruleset, tob
     from postgrest.exceptions import APIError
     from supabase import create_client
     anon_client = create_client(STACK["API_URL"], STACK["ANON_KEY"])
-    try:
-        rows = anon_client.table("photo_finding_queue").select("*").execute().data
-    except APIError:
-        return  # permission denied (нет select-гранта) — корректный, даже более строгий исход
-    # если запрос прошёл (напр. пустой select без ошибки) — строка чужой находки
-    # не должна утечь; ловим только ожидаемый APIError, а не bare Exception,
-    # чтобы AssertionError ниже не проглатывался молча
-    assert not any(r["finding_id"] == fid for r in rows)
+    with pytest.raises(APIError):
+        anon_client.table("photo_finding_queue").select("*").execute()
 
 
 def test_queue_hides_from_non_lawyer_authenticated(

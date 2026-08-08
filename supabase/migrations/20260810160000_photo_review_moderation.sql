@@ -157,7 +157,7 @@ grant execute on function public.moderate_photo_finding_review(uuid, text) to au
 -- включая её Critical-фикс: `security_invoker = off` (вью читает чужие
 -- проверки от владельца, мимо RLS), единственная граница безопасности — WHERE,
 -- и в нём НЕ `auth.uid() is null` (у anon-ключа uid тоже пуст), а явная роль
--- `auth.role() = 'service_role'`; select-грант сужен до authenticated.
+-- `auth.role() = 'service_role'`.
 create view public.photo_review_moderation_queue
 with (security_invoker = off) as
 select r.id           as review_id,
@@ -187,6 +187,26 @@ grant select on public.photo_review_moderation_queue to authenticated;
 -- раздают гранты всем — снимаем явно, хотя вью с join и так не автообновляемая.
 revoke insert, update, delete on public.photo_review_moderation_queue
   from anon, authenticated;
+
+-- ── ФИКС ПОСЛЕ РЕВЬЮ (Important): anon-привилегия на очереди ────────────────
+-- `grant select … to authenticated` НИЧЕГО НЕ СУЖАЕТ: default privileges
+-- Supabase уже выдали select всем ролям на любую новую таблицу/вью в public.
+-- То есть до этого ревока anon имел привилегию и на новую очередь модерации, и
+-- на `photo_finding_queue` (20260810120000): от анонимного чтения там держал
+-- ТОЛЬКО WHERE-предикат внутри вью, а комментарий той миграции («grant сужен до
+-- authenticated», «anon вообще не получает select») описывал слой, которого не
+-- существовало. Возвращаем второй слой явным ревоком — предикат остаётся, но
+-- больше не единственный. Чужую миграцию не правим: ревок из более поздней
+-- миграции корректен и накатывается тем же порядком.
+revoke all on public.photo_review_moderation_queue from anon;
+revoke all on public.photo_finding_queue from anon;
+
+-- Minor того же ревью: `security_barrier` не даёт планировщику протащить
+-- пользовательские (в т.ч. «текучие») предикаты PostgREST-запроса ВНУТРЬ вью,
+-- под её собственный WHERE — то есть предикат безопасности гарантированно
+-- вычисляется первым и не может протечь через дешёвую leaky-функцию в фильтре.
+alter view public.photo_review_moderation_queue set (security_barrier = true);
+alter view public.photo_finding_queue           set (security_barrier = true);
 
 -- ----------------------------------------------------------------------------
 -- 6. Сигнал модератору о новом заключении
