@@ -1127,6 +1127,8 @@ export type Database = {
           finding_id: string
           id: string
           lawyer_id: string
+          moderated_at: string | null
+          moderated_by: string | null
           official_replied_at: string | null
           official_reply: string | null
           published_at: string | null
@@ -1139,6 +1141,8 @@ export type Database = {
           finding_id: string
           id?: string
           lawyer_id: string
+          moderated_at?: string | null
+          moderated_by?: string | null
           official_replied_at?: string | null
           official_reply?: string | null
           published_at?: string | null
@@ -1151,6 +1155,8 @@ export type Database = {
           finding_id?: string
           id?: string
           lawyer_id?: string
+          moderated_at?: string | null
+          moderated_by?: string | null
           official_replied_at?: string | null
           official_reply?: string | null
           published_at?: string | null
@@ -1653,6 +1659,7 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
+          is_moderator: boolean
           is_subscribed: boolean
           phone: string | null
           subscribed_until: string | null
@@ -1663,6 +1670,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id: string
+          is_moderator?: boolean
           is_subscribed?: boolean
           phone?: string | null
           subscribed_until?: string | null
@@ -1673,6 +1681,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          is_moderator?: boolean
           is_subscribed?: boolean
           phone?: string | null
           subscribed_until?: string | null
@@ -3022,6 +3031,55 @@ export type Database = {
           },
         ]
       }
+      photo_review_moderation_queue: {
+        Row: {
+          checkpoint_id: string | null
+          comment_text: string | null
+          created_at: string | null
+          finding_id: string | null
+          inspection_id: string | null
+          lawyer_credentials: string | null
+          lawyer_id: string | null
+          lawyer_name: string | null
+          message: string | null
+          packaging_level: string | null
+          product_key: string | null
+          review_id: string | null
+          rule_ref: string | null
+          severity: string | null
+          verdict: Database["public"]["Enums"]["review_verdict"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_finding_reviews_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_finding_queue"
+            referencedColumns: ["finding_id"]
+          },
+          {
+            foreignKeyName: "photo_finding_reviews_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_findings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_finding_reviews_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "photo_findings_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       requirement_review_stats: {
         Row: {
           confirms: number | null
@@ -3238,6 +3296,7 @@ export type Database = {
         Args: { p_payload: Json; p_secret: string }
         Returns: string
       }
+      is_moderator: { Args: never; Returns: boolean }
       is_subscriber: { Args: never; Returns: boolean }
       is_verified_lawyer: { Args: never; Returns: boolean }
       lifecycle_status: {
@@ -3248,6 +3307,10 @@ export type Database = {
           p_valid_to: string
         }
         Returns: string
+      }
+      moderate_photo_finding_review: {
+        Args: { p_decision: string; p_review_id: string }
+        Returns: undefined
       }
       notify_admin_telegram: { Args: { message: string }; Returns: undefined }
       photo_checklist: {

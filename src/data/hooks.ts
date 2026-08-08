@@ -35,8 +35,10 @@ import {
   fetchFindingReviews,
   fetchInspectionBundle,
   fetchInspectionEvents,
+  fetchIsModerator,
   fetchLawyerName,
   fetchLawyerReviews,
+  fetchModerationQueue,
   fetchPackagingChecklist,
   fetchPhotoFacts,
   fetchPhotoReviewQueue,
@@ -45,6 +47,7 @@ import {
   fetchReviewStats,
   fetchServiceBundle,
   fetchTelemetry,
+  moderatePhotoFindingReview,
   requestRetake,
   search,
   setReviewVote,
@@ -873,6 +876,44 @@ export function useSubmitPhotoFindingReview() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['photo-review-queue'] })
       void qc.invalidateQueries({ queryKey: ['photo-finding-reviews'] })
+    },
+  })
+}
+
+// ── Модерация заключений (решение владельца «б»: публикует модератор) ──
+
+/** Роль модератора живёт на `profiles.is_moderator`, флаг ставит владелец
+ * SQL-ом. Без сессии не спрашиваем — для анонима ответ всегда false. */
+export function useIsModerator() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['is-moderator', session?.user.id],
+    queryFn: fetchIsModerator,
+    enabled: Boolean(session),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** `enabled` — вызывающая страница уже под гардом модератора. */
+export function useModerationQueue(enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-moderation-queue'],
+    queryFn: fetchModerationQueue,
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useModerateReview() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { reviewId: string; decision: 'published' | 'rejected' }) =>
+      moderatePhotoFindingReview(input.reviewId, input.decision),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['photo-moderation-queue'] })
+      // публикация меняет и то, что видит владелец проверки, и очередь юриста
+      void qc.invalidateQueries({ queryKey: ['photo-finding-reviews'] })
+      void qc.invalidateQueries({ queryKey: ['photo-review-queue'] })
     },
   })
 }

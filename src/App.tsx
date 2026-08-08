@@ -15,6 +15,7 @@ import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
 import { CLawyerQueuePage } from './pages/c/CLawyerQueuePage'
 import { CLawyerReviewsPage } from './pages/c/CLawyerReviewsPage'
+import { CModerationPage } from './pages/c/CModerationPage'
 import { CAuthPage } from './pages/c/CAuthPage'
 import { CConfirmEmailPage } from './pages/c/CConfirmEmailPage'
 import { CForgotPasswordPage } from './pages/c/CForgotPasswordPage'
@@ -44,6 +45,8 @@ const router = createBrowserRouter([
       { path: '/cabinet', element: <Navigate to="/products" replace /> },
       { path: '/lawyer/queue', element: <CLawyerQueuePage /> },
       { path: '/lawyer/reviews', element: <CLawyerReviewsPage /> },
+      // Модерация заключений — экран доступен только is_moderator (гард внутри)
+      { path: '/moderation', element: <CModerationPage /> },
       { path: '/login', element: <CAuthPage mode="login" /> },
       { path: '/register', element: <CAuthPage mode="register" /> },
       { path: '/auth/confirm', element: <CConfirmEmailPage /> },
