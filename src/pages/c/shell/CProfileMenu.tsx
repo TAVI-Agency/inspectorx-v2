@@ -13,6 +13,7 @@ import {
   MessageSquareText,
   Scale,
   Settings,
+  ShieldCheck,
   Wrench,
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -20,7 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
 import { useTheme, type ThemeSetting } from '@/app/theme'
-import { useMyLawyerProfile } from '@/data/hooks'
+import { useIsModerator, useMyLawyerProfile } from '@/data/hooks'
 import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { WhatsNewDialog } from '@/components/WhatsNewDialog'
 import { ru } from '@/i18n/ru'
@@ -60,6 +61,7 @@ export function CProfileMenu({
   const { setting, setSetting } = useTheme()
   const { data: lawyerProfile } = useMyLawyerProfile()
   const verified = lawyerProfile?.status === 'verified'
+  const { data: moderator } = useIsModerator()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -101,6 +103,11 @@ export function CProfileMenu({
                     {ru.nav.lawyerReviews}
                   </MenuNavLink>
                 </>
+              )}
+              {moderator && (
+                <MenuNavLink to="/moderation" icon={ShieldCheck} onGo={close}>
+                  {ru.nav.moderation}
+                </MenuNavLink>
               )}
             </div>
           )}

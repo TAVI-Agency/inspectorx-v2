@@ -559,6 +559,86 @@ export async function submitPhotoFindingReview(input: {
   if (error) throw error
 }
 
+// ── Модерация заключений (20260810160000_photo_review_moderation.sql) ──────
+
+export type PhotoModerationQueueRow =
+  Database['public']['Views']['photo_review_moderation_queue']['Row']
+
+/**
+ * Строка очереди модерации: pending-заключение юриста вместе с контекстом
+ * находки и автором. Вью сама скрывает не-модераторов предикатом
+ * `is_moderator()` — здесь авторизация не дублируется (тот же приём, что у
+ * `photo_finding_queue`).
+ */
+export interface PhotoModerationItem {
+  reviewId: string
+  findingId: string
+  inspectionId: string
+  verdict: ReviewVerdict
+  commentText: string
+  createdAt: string
+  lawyerName: string
+  lawyerCredentials?: string
+  ruleRef: string
+  severity: string
+  message: string
+  productKey: string
+  packagingLevel: PackagingLevel
+}
+
+/** Как и у `photo_finding_queue`: генератор типизирует столбцы вью optional,
+ * но ни один из них не бывает null — все берутся из not-null полей таблиц. */
+function toModerationItem(r: PhotoModerationQueueRow): PhotoModerationItem {
+  return {
+    reviewId: r.review_id ?? '',
+    findingId: r.finding_id ?? '',
+    inspectionId: r.inspection_id ?? '',
+    verdict: (r.verdict as ReviewVerdict) ?? 'confirm',
+    commentText: r.comment_text ?? '',
+    createdAt: r.created_at ?? '',
+    lawyerName: r.lawyer_name ?? ru.packagingCheck.signedUnknownLawyer,
+    lawyerCredentials: r.lawyer_credentials ?? undefined,
+    ruleRef: r.rule_ref ?? '',
+    severity: r.severity ?? '',
+    message: r.message ?? '',
+    productKey: r.product_key ?? '',
+    packagingLevel: (r.packaging_level as PackagingLevel) ?? 'consumer',
+  }
+}
+
+/** «Я модератор?» — RPC вместо чтения `profiles.is_moderator`: тот же предикат,
+ * что используют RLS и сам RPC модерации, без дублирования логики на клиенте. */
+export async function fetchIsModerator(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('is_moderator')
+  if (error) throw error
+  return data === true
+}
+
+export async function fetchModerationQueue(): Promise<PhotoModerationItem[]> {
+  const { data, error } = await supabase
+    .from('photo_review_moderation_queue')
+    .select('*')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map(toModerationItem)
+}
+
+/**
+ * Решение модератора: `pending -> published | rejected`. Прямого update у
+ * клиента нет ни при какой роли — только этот RPC (SECURITY DEFINER, внутри
+ * проверка `is_moderator()` и переход строго из `pending`).
+ */
+export async function moderatePhotoFindingReview(
+  reviewId: string,
+  decision: 'published' | 'rejected',
+): Promise<void> {
+  const { error } = await supabase.rpc('moderate_photo_finding_review', {
+    p_review_id: reviewId,
+    p_decision: decision,
+  })
+  if (error) throw error
+}
+
 /** Подпись вердикта (RPC `sign_photo_inspection`, только verified-юрист). */
 export async function signInspection(inspectionId: string): Promise<void> {
   const { error } = await supabase.rpc('sign_photo_inspection', {
