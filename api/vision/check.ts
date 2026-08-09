@@ -123,13 +123,26 @@ export default withVisionGuards(async function handler(
   // p_reason у RPC — необязательный аргумент со значением по умолчанию null,
   // поэтому «причины нет» передаётся не null-ом, а отсутствием ключа
   // (JSON.stringify выкидывает undefined).
-  const finalize = (outcome: 'done' | 'failed', reason: string | null, payload?: unknown) =>
+  //
+  // degradedMode передаётся, только когда он ЕСТЬ (typeof !== 'undefined'):
+  // ключ p_degraded_mode в теле RPC — это то, что отличает вызов ПЯТИПАРАМЕТРОВОЙ
+  // перегрузки finalize_photo_inspection (20260817100000_degraded_half_quota.sql,
+  // половина единицы квоты при "local_only") от исходной четырёхпараметровой
+  // (Волна 1) — PostgREST резолвит перегрузку по числу именованных аргументов,
+  // и лишний ключ здесь звал бы не ту функцию.
+  const finalize = (
+    outcome: 'done' | 'failed',
+    reason: string | null,
+    payload?: unknown,
+    degradedMode?: string | null,
+  ) =>
     db.rpc('finalize_photo_inspection', {
       p_inspection_id: inspectionId,
       p_outcome: outcome,
       p_reason: reason ?? undefined,
       p_payload: (payload ?? null) as never,
-    })
+      ...(degradedMode !== undefined ? { p_degraded_mode: degradedMode } : {}),
+    } as never)
 
   const failWith = async (reason: string): Promise<void> => {
     const { error } = await finalize('failed', reason)
@@ -195,7 +208,7 @@ export default withVisionGuards(async function handler(
   }
 
   const result = await workerResponse.json().catch(() => null) as
-    { findings?: Array<Record<string, unknown>> } | null
+    { findings?: Array<Record<string, unknown>>; degraded_mode?: string | null } | null
   if (!result) {
     // 200 с нечитаемым телом — отказ нашей инфраструктуры, а не данных
     // пользователя: код из возвратного списка, квота вернётся.
@@ -222,7 +235,7 @@ export default withVisionGuards(async function handler(
     delete findings[i].evidence_crop_b64
   }
 
-  const { error: finErr } = await finalize('done', null, { ...result, findings })
+  const { error: finErr } = await finalize('done', null, { ...result, findings }, result.degraded_mode ?? null)
   if (finErr) {
     // Наружу — только код: текст ошибки PostgREST несёт имена таблиц/колонок и
     // текст констрейнтов, а эндпоинт публичный с первого дня. Полная ошибка
