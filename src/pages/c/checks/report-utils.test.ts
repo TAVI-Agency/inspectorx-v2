@@ -4,6 +4,7 @@ import { reportCounters } from '@/data'
 import {
   decidedByLabel,
   faceLabel,
+  groupByReason,
   isRefundableReason,
   readerCoverageSummary,
   severityLabel,
@@ -74,6 +75,51 @@ it('faceLabel понимает оба словаря кодов граней', (
   expect(faceLabel('front_panel')).toBe('лицевая')
   expect(faceLabel('back')).toBe('оборотная')
   expect(faceLabel('unknown_face')).toBe('unknown_face')
+})
+
+it('faceLabel — полный словарь зон requirement_photo_checks.params.surface (сиды фотоконтроля)', () => {
+  expect(faceLabel('all_panels')).toBe('вся упаковка')
+  expect(faceLabel('any')).toBe('любая грань')
+  expect(faceLabel('any_panel')).toBe('любая панель')
+  expect(faceLabel('pallet_side')).toBe('боковая сторона паллеты')
+  expect(faceLabel('shipping_label')).toBe('транспортная этикетка')
+  expect(faceLabel('closure_cap_over_neck')).toBe('крышка на горловине')
+  // русское имя зоны из сида — показывается как есть, а не «переводится»
+  expect(faceLabel('лицевая')).toBe('лицевая')
+  // составное значение из трёх слепленных через «|» вариантов — незнакомый
+  // код, перевод не выдумываем, показываем как есть (осознанный контракт)
+  expect(faceLabel('top_panel_center | back_panel_wrapping_to_side | back_panel_over_lid_seam')).toBe(
+    'top_panel_center | back_panel_wrapping_to_side | back_panel_over_lid_seam',
+  )
+})
+
+describe('groupByReason', () => {
+  const item = (reason: string, id: number) => ({ reason, id })
+
+  it('схлопывает одинаковые причины и считает «× N»', () => {
+    const items = [item('a', 1), item('b', 2), item('a', 3), item('a', 4)]
+    const groups = groupByReason(items, (i) => i.reason)
+    expect(groups).toHaveLength(2)
+    expect(groups[0]).toMatchObject({ reason: 'a', count: 3 })
+    expect(groups[0].items.map((i) => i.id)).toEqual([1, 3, 4])
+    expect(groups[1]).toMatchObject({ reason: 'b', count: 1 })
+  })
+
+  it('сортирует группы по убыванию count', () => {
+    const items = [item('rare', 1), item('common', 2), item('common', 3), item('common', 4), item('mid', 5), item('mid', 6)]
+    const groups = groupByReason(items, (i) => i.reason)
+    expect(groups.map((g) => g.reason)).toEqual(['common', 'mid', 'rare'])
+  })
+
+  it('при равном count порядок — по первому появлению причины', () => {
+    const items = [item('second', 1), item('first', 2), item('second', 3), item('first', 4)]
+    const groups = groupByReason(items, (i) => i.reason)
+    expect(groups.map((g) => g.reason)).toEqual(['second', 'first'])
+  })
+
+  it('пустой список — пустой массив групп', () => {
+    expect(groupByReason([], (i: { reason: string }) => i.reason)).toEqual([])
+  })
 })
 
 it('isRefundableReason — закрытый список из RPC finalize_photo_inspection', () => {
