@@ -24,3 +24,4 @@ research-loop/backfill-verbatim-uz.jsonl
 # Локальное состояние Claude Code: конфиг запуска дев-сервера и рабочие worktree.
 # Машинно-специфично (пути, порты) — в общей истории делать нечего.
 .claude/
+.vercel
