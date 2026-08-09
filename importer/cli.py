@@ -9,6 +9,7 @@ from importer.build.coverage import coverage_report, publish_ready
 from importer.build.eval_golden import HeuristicBaselineLLM, load_golden_set, run_eval
 from importer.build.legalx import get_client as get_legalx_client
 from importer.build.llm_client import RunnerAgentLLM
+from importer.build.llm_live import make_live_runner
 from importer.build.orchestrator import (
     MapAlreadyApprovedError,
     MapNotApprovedError,
@@ -31,52 +32,35 @@ from importer.monitoring.impact_mapper import (
 from importer.pipeline import run_import
 
 
-def _cartographer_llm_runner(prompt: str, model: str) -> str:
-    """Заглушка runner'а для CLI `build map`: живое LLM-подключение
-    (Cartographer — expensive-тир, deep-research) не входит в эту задачу —
-    решение контроллера (task-15-brief.md) отнесло смоук на пилотной группе
-    2402 к пилотному прогону Задачи 27. Пилотный прогон Задачи 27 —
-    СИНТЕТИЧЕСКИЙ (решение контроллера, task-27-brief.md): карта пишется
-    руками через `store.save_map`, не через этот runner. В тестах
-    Cartographer используется скриптованный `AgentLLMClient` (см.
-    `importer/tests/build/test_cartographer.py`), сеть не трогается вообще."""
-    raise NotImplementedError(
-        "Живой LLM-runner для Cartographer ещё не подключён — 'build map' "
-        "заработает после получения живого LLM-ключа (вне Задачи 27, см. "
-        "importer/build/llm_client.py:RunnerAgentLLM)"
-    )
+_live_runner = None
 
 
-def _build_llm_runner(prompt: str, model: str) -> str:
-    """Заглушка runner'а для CLI `build run`: тот же принцип отсрочки, что
-    и `_cartographer_llm_runner` — живого LLM-ключа нет (решение
-    контроллера Задачи 27), падает только при РЕАЛЬНОМ вызове модели, не
-    при построении реестра шагов (`build_step_registry`). Синтетический
-    прогон Задачи 27 (`scripts/pilot_synthetic.py`) инжектирует свой
-    scripted-runner напрямую в Python, минуя эту CLI-заглушку."""
-    raise NotImplementedError(
-        "Живой LLM-runner для Build-конвейера ещё не подключён — 'build run' "
-        "заработает после получения живого LLM-ключа (см. "
-        "importer/build/llm_client.py:RunnerAgentLLM)"
-    )
+def _shared_live_runner(prompt: str, model: str):
+    """Один живой раннер на процесс CLI: общий потолок IMPORTER_LLM_MAX_CALLS
+    для build map / build run / monitor — перерасход невозможен по построению."""
+    global _live_runner
+    if _live_runner is None:
+        _live_runner = make_live_runner()
+    return _live_runner(prompt, model)
 
 
-def _monitor_llm_runner(prompt: str, model: str) -> str:
-    """Заглушка runner'а для CLI `monitor process-changes` (Задача 40) и
-    `monitor discovery` (Задача 41, генерация вопросов `question_writer`):
-    тот же принцип отсрочки, что и `_build_llm_runner`/
-    `_cartographer_llm_runner` — падает только при РЕАЛЬНОМ вызове модели
-    (Classifier-кандидаты пути (б), In-house lawyer или question_writer
-    discovery), не при построении объектов/вызове на событии, которое
-    разрешилось без единого обращения к LLM (точное цитатное совпадение пути
-    (а) у `process_changes` либо пустой список событий у `run_discovery`).
-    Живое подключение — после получения живого LLM-ключа, как и у остальных
-    LLM-раннеров CLI."""
-    raise NotImplementedError(
-        "Живой LLM-runner для мониторинга ещё не подключён — "
-        "'monitor process-changes'/'monitor discovery' заработают после "
-        "получения живого LLM-ключа (см. importer/build/llm_client.py:RunnerAgentLLM)"
-    )
+def _cartographer_llm_runner(prompt: str, model: str):
+    """Живой Claude-раннер для CLI `build map` (Волна 2): делегирует общему
+    раннеру процесса (`_shared_live_runner`), см. `importer/build/llm_live.py`."""
+    return _shared_live_runner(prompt, model)
+
+
+def _build_llm_runner(prompt: str, model: str):
+    """Живой Claude-раннер для CLI `build run` (Волна 2): делегирует общему
+    раннеру процесса (`_shared_live_runner`), см. `importer/build/llm_live.py`."""
+    return _shared_live_runner(prompt, model)
+
+
+def _monitor_llm_runner(prompt: str, model: str):
+    """Живой Claude-раннер для CLI `monitor process-changes`/`monitor discovery`
+    (Волна 2): делегирует общему раннеру процесса (`_shared_live_runner`),
+    см. `importer/build/llm_live.py`."""
+    return _shared_live_runner(prompt, model)
 
 
 def main(argv=None):

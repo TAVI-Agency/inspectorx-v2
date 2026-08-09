@@ -763,6 +763,8 @@ export const ru = {
     reportNotCheckable: 'По фотографии не проверяется — это граница метода, а не пробел',
     reportNoGold: 'Правило есть, эталонного примера нет — вердикт не выносим',
     retakeCta: 'Доснять',
+    /** Кнопка «Доснять» — про фото-кадры; для проверки по PDF-макету (source_kind = 'master_pdf') вместо неё эта строка. */
+    retakeNotAvailablePdfHint: 'Для макета: исправьте макет и запустите новую проверку.',
     fixFactCta: 'Поправить факт',
     escalateCta: 'Эскалировать юристу',
     acceptCta: 'Принять с обоснованием',
@@ -785,9 +787,12 @@ export const ru = {
     violationsLabel: 'Нарушений',
     checkedLabel: 'Проверено пунктов',
     needsHumanLabel: 'Требует человека',
+    notCheckableLabel: 'Не измерить по этому источнику',
     sourceLabel: 'Источник',
     counterViolationsN: (n: number) => `Нарушений: ${n}`,
     counterCheckedOf: (decided: number, checked: number) => `${decided} из ${checked}`,
+    /** Счётчик схлопнутых одинаковых причин (groupByReason, report-utils.ts) — «× N» рядом с текстом. */
+    countTimes: (n: number) => `× ${n}`,
     counterNeedsHumanN: (n: number) => `Требует человека: ${n}`,
     sourceMasterPdf: (pages: number) => `${pages} стр.`,
     sourcePhotoCoverage: (have: number, of: number) => `покрытие: ${have} граней из ${of}`,
@@ -837,12 +842,47 @@ export const ru = {
       info: 'к сведению',
     } as Record<string, string>,
 
-    // Грани упаковки (photo_findings.surface)
-    faceFront: 'лицевая',
-    faceBack: 'оборотная',
-    faceSide: 'торец',
-    faceTop: 'верх',
-    faceBottom: 'низ',
+    // Грани/зоны упаковки (photo_findings.surface, requirement_photo_checks.params.surface).
+    // Словарь собран по фактическим значениям в сидах (Задача A, план фотоконтроля
+    // волны 2): grep "surface":" по supabase/migrations/20260810130000_requirement_photo.sql
+    // и 20260810140000_photo_checks_content.sql — 28 разных строк на выгрузке 09.08.2026.
+    // Одно составное значение («top_panel_center | back_panel_wrapping_to_side |
+    // back_panel_over_lid_seam») сюда намеренно не включено — это три слепленных
+    // через «|» варианта, а не один код; показывается как есть (см. faceLabel).
+    zones: {
+      front: 'лицевая',
+      front_panel: 'лицевая',
+      front_panel_upper_part: 'лицевая панель, верхняя часть',
+      back: 'оборотная',
+      back_panel: 'оборотная',
+      back_panel_lower_part: 'оборотная панель, нижняя часть',
+      side: 'торец',
+      side_panel: 'торец',
+      side_wall: 'боковая стенка',
+      top: 'верх',
+      bottom: 'низ',
+      bottom_or_side_panel: 'низ или боковая панель',
+      all_panels: 'вся упаковка',
+      any: 'любая грань',
+      any_panel: 'любая панель',
+      carton_side: 'боковая сторона картонной пачки',
+      case_side_panel: 'боковая панель короба',
+      closure_cap_over_neck: 'крышка на горловине',
+      consumer_panel: 'панель потребительской упаковки',
+      four_side_faces_of_transport_pallet: 'четыре боковые грани паллеты',
+      group_pack: 'групповая упаковка',
+      logistic_label: 'логистическая этикетка',
+      main_label: 'основная этикетка',
+      original_manufacturer_marking: 'оригинальная маркировка производителя',
+      pallet_side: 'боковая сторона паллеты',
+      pallet_two_adjacent_sides: 'две смежные стороны паллеты',
+      panel_with_eac_mark: 'панель со знаком EAC',
+      primary_pack_surface_not_removable_film: 'поверхность первичной упаковки вне съёмной плёнки',
+      same_focal_plane_as_measured_mark: 'в одном кадре с измеряемым знаком',
+      shipping_label: 'транспортная этикетка',
+      transport_pack: 'транспортная упаковка',
+      two_adjacent_side_walls_top_left_corner: 'две смежные боковые стенки, верхний левый угол',
+    } as Record<string, string>,
 
     revisionLimitHint: 'Четвёртая досъёмка — новая проверка',
     retakeUploadCta: 'Выбрать фото и доснять',

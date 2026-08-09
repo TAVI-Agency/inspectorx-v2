@@ -68,27 +68,56 @@ export function severityLabel(code: string): string {
 }
 
 /**
- * Грань упаковки словами. Принимает оба словаря значений, которые могут
- * встретиться в проверке: короткие коды `photo_findings.surface`
- * (`front`/`back`/…) и коды `photo_assets.face_name`, которые уже
- * используются на экране загрузки (`front_panel`/`back_panel`/…,
- * `CPackagingUpload.tsx`) — контракт значения `surface` со стороны воркера
- * вне этого репозитория не задокументирован (см. Concerns Задачи 11), а
- * ложная подмена кода словом хуже, чем сырой код на экране.
+ * Грань/зона упаковки словами. Словарь — `ru.packagingCheck.zones`
+ * (Задача A, план фотоконтроля волны 2): и короткие коды
+ * `photo_findings.surface` (`front`/`back`/…), и коды `photo_assets.face_name`
+ * с экрана загрузки (`front_panel`/`back_panel`/…, `CPackagingUpload.tsx`), и
+ * полный словарь `requirement_photo_checks.params.surface` из сидов
+ * (`all_panels`, `any`, `pallet_side`, …) — контракт значения `surface` со
+ * стороны воркера вне этого репозитория не задокументирован (см. Concerns
+ * Задачи 11), а ложная подмена кода словом хуже, чем сырой код на экране:
+ * незнакомый код по-прежнему показывается как есть.
  */
-const FACE_LABELS: Record<string, string> = {
-  front: t.faceFront,
-  front_panel: t.faceFront,
-  back: t.faceBack,
-  back_panel: t.faceBack,
-  side: t.faceSide,
-  side_panel: t.faceSide,
-  top: t.faceTop,
-  bottom: t.faceBottom,
+export function faceLabel(surface: string): string {
+  return t.zones[surface] ?? surface
 }
 
-export function faceLabel(surface: string): string {
-  return FACE_LABELS[surface] ?? surface
+export interface ReasonGroup<T> {
+  /** Текст причины, по которому схлопнули группу. */
+  reason: string
+  /** Сколько карточек с этим текстом попало в группу. */
+  count: number
+  /** Исходные элементы группы, в порядке появления. */
+  items: T[]
+}
+
+/**
+ * Схлопывает карточки с одинаковым текстом причины в одну строку со
+ * счётчиком «× N» (Задача A, план фотоконтроля волны 2, п.2): владелец
+ * увидел «простыню одинаковых причин» в списках «нужен человек/досъёмка» и
+ * «границы метода» — эта функция общая для обоих списков. Порядок групп —
+ * по убыванию `count`; при равенстве числа — порядок первого появления
+ * причины во входном массиве (`Array.prototype.sort` стабилен в V8 с
+ * ES2019). Разные тексты причины остаются разными группами.
+ */
+export function groupByReason<T>(items: T[], reasonOf: (item: T) => string): ReasonGroup<T>[] {
+  const order: string[] = []
+  const byReason = new Map<string, T[]>()
+  for (const item of items) {
+    const reason = reasonOf(item)
+    const list = byReason.get(reason)
+    if (list) list.push(item)
+    else {
+      byReason.set(reason, [item])
+      order.push(reason)
+    }
+  }
+  return order
+    .map((reason) => {
+      const list = byReason.get(reason) as T[]
+      return { reason, count: list.length, items: list }
+    })
+    .sort((a, b) => b.count - a.count)
 }
 
 /**
