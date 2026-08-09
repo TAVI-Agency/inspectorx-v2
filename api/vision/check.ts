@@ -3,16 +3,18 @@
 // (RPC finalize_photo_inspection). Немедленного 202 нет намеренно: фронт всё
 // равно живёт поллингом photo_inspection_events, а один синхронный вызов
 // избавляет от второго диспетчера и от гонки «кто финализирует».
-// maxDuration 120 задаётся в vercel.json.
+// maxDuration 300 задаётся в vercel.json.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import {
   adminClient, assertOwnPrefix, bucketFor, EVIDENCE_BUCKET, getUserFromRequest,
   REFUNDABLE_REASONS, withVisionGuards, workerSecret, workerUrl,
 } from '../_lib/vision.js'
 
-// Ниже потолка функции (120 с в vercel.json): у нас должно остаться время
+// Ниже потолка функции (300 с в vercel.json): у нас должно остаться время
 // записать финал, иначе прогон повиснет в running до реперной джобы.
-const WORKER_TIMEOUT_MS = 90_000
+// 90 с не хватало живому прогону: табачный PDF на CPU Railway упёрся в
+// worker_timeout 09.08.2026 при холодном старте.
+const WORKER_TIMEOUT_MS = 270_000
 const SIGNED_URL_TTL_SEC = 600
 
 interface SignedUrlRow {
