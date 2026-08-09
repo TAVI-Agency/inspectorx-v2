@@ -21,6 +21,7 @@ export function targetSize(w: number, h: number, maxSide = 2048): { w: number; h
  * 20260810110000_photo_storage.sql).
  */
 export async function prepareImageForUpload(file: File): Promise<Blob> {
+  if (typeof createImageBitmap !== 'function') throw new Error('create_image_bitmap_unsupported')
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
   try {
     const { w, h } = targetSize(bitmap.width, bitmap.height)
@@ -39,5 +40,37 @@ export async function prepareImageForUpload(file: File): Promise<Blob> {
     })
   } finally {
     bitmap.close()
+  }
+}
+
+/** Расширение и MIME по имени/типу файла — только форматы, зашитые в бакет `packaging-photos`. */
+const PHOTO_FORMATS: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  heic: 'image/heic',
+  heif: 'image/heif',
+}
+
+/**
+ * Кадр к заливке с деградацией: пытаемся конвертировать в JPEG на клиенте
+ * (быстрее и меньше трафика), а если браузер формат не декодирует — например,
+ * HEIC с айфона в Chrome/Firefox — грузим ОРИГИНАЛ как есть: бакет принимает
+ * heic/heif, а воркер разворачивает их сам через pillow-heif (это и есть
+ * «вторая страховка» плана §2Б шаг 3). Ошибка `unsupported_image` — только
+ * когда файл не входит в форматы бакета и конвертация тоже не удалась.
+ */
+export async function preparePhotoForUpload(
+  file: File,
+): Promise<{ blob: Blob; ext: string; contentType: string }> {
+  try {
+    const blob = await prepareImageForUpload(file)
+    return { blob, ext: 'jpg', contentType: 'image/jpeg' }
+  } catch {
+    const extFromName = file.name.split('.').pop()?.toLowerCase() ?? ''
+    const extFromType = Object.keys(PHOTO_FORMATS).find((e) => PHOTO_FORMATS[e] === file.type)
+    const ext = PHOTO_FORMATS[extFromName] ? extFromName : extFromType
+    if (!ext) throw new Error('unsupported_image')
+    return { blob: file, ext, contentType: PHOTO_FORMATS[ext] }
   }
 }

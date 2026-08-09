@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { prepareImageForUpload, targetSize } from './image'
+import { prepareImageForUpload, preparePhotoForUpload, targetSize } from './image'
 
 describe('targetSize', () => {
   it('длинная сторона ужимается до 2048, пропорции сохраняются', () => {
@@ -68,5 +68,65 @@ describe('prepareImageForUpload', () => {
     const file = new File([new Uint8Array([1])], 'pack.jpg', { type: 'image/jpeg' })
     await expect(prepareImageForUpload(file)).rejects.toThrow('canvas_to_blob_failed')
     expect(close).toHaveBeenCalled()
+  })
+})
+
+describe('preparePhotoForUpload', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('HEIC, который браузер не декодирует, уходит оригиналом — воркер развернёт сам', async () => {
+    // Chrome/Firefox не умеют HEIC: createImageBitmap кидает — деградируем к оригиналу
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('decode failed')))
+    const file = new File([new Uint8Array([1, 2, 3])], 'IMG_0001.HEIC', { type: 'image/heic' })
+    const out = await preparePhotoForUpload(file)
+    expect(out.blob).toBe(file)
+    expect(out.ext).toBe('heic')
+    expect(out.contentType).toBe('image/heic')
+  })
+
+  it('расширение берётся из MIME, если имя файла без расширения', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('decode failed')))
+    const file = new File([new Uint8Array([1])], 'photo', { type: 'image/png' })
+    const out = await preparePhotoForUpload(file)
+    expect(out.ext).toBe('png')
+    expect(out.contentType).toBe('image/png')
+  })
+
+  it('неизвестный формат при провале конвертации — именованная ошибка, не нативная', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('decode failed')))
+    const file = new File([new Uint8Array([1])], 'scan.tiff', { type: 'image/tiff' })
+    await expect(preparePhotoForUpload(file)).rejects.toThrow('unsupported_image')
+  })
+
+  it('среда без createImageBitmap тоже деградирует к оригиналу, а не падает нативно', async () => {
+    vi.stubGlobal('createImageBitmap', undefined)
+    const file = new File([new Uint8Array([1])], 'pack.jpg', { type: 'image/jpeg' })
+    const out = await preparePhotoForUpload(file)
+    expect(out.blob).toBe(file)
+    expect(out.ext).toBe('jpg')
+    expect(out.contentType).toBe('image/jpeg')
+  })
+
+  it('успешная конвертация по-прежнему отдаёт JPEG', async () => {
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn().mockResolvedValue({ width: 100, height: 100, close: vi.fn() }),
+    )
+    const fakeCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+      toBlob: vi.fn((cb: (b: Blob | null) => void, type?: string) =>
+        cb(new Blob(['jpeg'], { type })),
+      ),
+    }
+    vi.stubGlobal('document', { createElement: vi.fn(() => fakeCanvas) })
+    const file = new File([new Uint8Array([1])], 'IMG.HEIC', { type: 'image/heic' })
+    const out = await preparePhotoForUpload(file)
+    expect(out.ext).toBe('jpg')
+    expect(out.contentType).toBe('image/jpeg')
+    expect(out.blob.type).toBe('image/jpeg')
   })
 })
