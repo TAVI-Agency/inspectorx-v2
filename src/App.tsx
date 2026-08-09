@@ -6,6 +6,8 @@ import { CProductsPage } from './pages/c/CProductsPage'
 import { CChangesPage } from './pages/c/CChangesPage'
 import { CQuestionsPage } from './pages/c/CQuestionsPage'
 import { CCheckAnnouncePage } from './pages/c/CCheckAnnouncePage'
+import { CPackagingCheckPage } from './pages/c/checks/CPackagingCheckPage'
+import { CPackagingReportPage } from './pages/c/checks/CPackagingReportPage'
 import { CSettingsPage } from './pages/c/CSettingsPage'
 import { CHelpPage } from './pages/c/CHelpPage'
 import { CProductPage } from './pages/c/CProductPage'
@@ -13,6 +15,7 @@ import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
 import { CLawyerQueuePage } from './pages/c/CLawyerQueuePage'
 import { CLawyerReviewsPage } from './pages/c/CLawyerReviewsPage'
+import { CModerationPage } from './pages/c/CModerationPage'
 import { CAuthPage } from './pages/c/CAuthPage'
 import { CConfirmEmailPage } from './pages/c/CConfirmEmailPage'
 import { CForgotPasswordPage } from './pages/c/CForgotPasswordPage'
@@ -30,7 +33,8 @@ const router = createBrowserRouter([
       { path: '/products', element: <CProductsPage /> },
       { path: '/changes', element: <CChangesPage /> },
       { path: '/questions', element: <CQuestionsPage /> },
-      { path: '/checks/packaging', element: <CCheckAnnouncePage check="packaging" /> },
+      { path: '/checks/packaging', element: <CPackagingCheckPage /> },
+      { path: '/checks/packaging/:inspectionId', element: <CPackagingReportPage /> },
       { path: '/checks/documents', element: <CCheckAnnouncePage check="documents" /> },
       { path: '/settings', element: <CSettingsPage /> },
       { path: '/help', element: <CHelpPage /> },
@@ -41,6 +45,8 @@ const router = createBrowserRouter([
       { path: '/cabinet', element: <Navigate to="/products" replace /> },
       { path: '/lawyer/queue', element: <CLawyerQueuePage /> },
       { path: '/lawyer/reviews', element: <CLawyerReviewsPage /> },
+      // Модерация заключений — экран доступен только is_moderator (гард внутри)
+      { path: '/moderation', element: <CModerationPage /> },
       { path: '/login', element: <CAuthPage mode="login" /> },
       { path: '/register', element: <CAuthPage mode="register" /> },
       { path: '/auth/confirm', element: <CConfirmEmailPage /> },
