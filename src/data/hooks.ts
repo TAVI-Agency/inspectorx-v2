@@ -85,7 +85,7 @@ import {
   submitSubscriptionRequest,
   updateProfileReal,
 } from './real'
-import { demoQuestions } from './mock/fixtures'
+import { CIGARETTES_PRODUCT_ID, demoQuestions } from './mock/fixtures'
 import {
   markChangeRead,
   markQuestionAnswerRead,
@@ -251,8 +251,12 @@ export function useMyQuestions() {
     queryKey: ['my-questions', session?.user.id ?? 'anon', mockSubscriber],
     queryFn: async (): Promise<UserQuestion[]> => {
       if (session) return fetchMyQuestionsReal()
-      // Демо-витрина пути эскалации — без сессии в мок-режиме
-      return mockSubscriber ? demoQuestions : []
+      // Демо-витрина пути эскалации — без сессии в мок-режиме.
+      // Товар IQOS скрыт с витрины — демо-вопрос по нему из выдачи убираем
+      // (фикстуру не удаляем, см. src/data/mock/fixtures.ts).
+      return mockSubscriber
+        ? demoQuestions.filter((q) => q.productId !== CIGARETTES_PRODUCT_ID)
+        : []
     },
     staleTime: 30_000,
   })
