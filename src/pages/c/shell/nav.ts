@@ -7,10 +7,11 @@ import {
   MessageCircle,
   Package,
   Scale,
+  ShieldCheck,
   TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
-import { useMyLawyerProfile, useNotificationCenter } from '@/data/hooks'
+import { useIsModerator, useMyLawyerProfile, useNotificationCenter } from '@/data/hooks'
 import { ru } from '@/i18n/ru'
 
 export interface NavItem {
@@ -32,6 +33,9 @@ export function useNavSections(): NavSection[] {
   const { changesUnread } = useNotificationCenter()
   const { data: lawyerProfile } = useMyLawyerProfile()
   const verified = lawyerProfile?.status === 'verified'
+  // Роль модератора — отдельная от юриста: публикует чужие заключения,
+  // сам их не пишет (решение владельца «б»).
+  const { data: moderator } = useIsModerator()
 
   return [
     {
@@ -45,7 +49,7 @@ export function useNavSections(): NavSection[] {
     {
       label: ru.nav.checksSection,
       items: [
-        { to: '/checks/packaging', label: ru.nav.packaging, icon: Camera, soon: true },
+        { to: '/checks/packaging', label: ru.nav.packaging, icon: Camera },
         { to: '/checks/documents', label: ru.nav.documents, icon: FileCheck, soon: true },
       ],
     },
@@ -57,6 +61,13 @@ export function useNavSections(): NavSection[] {
               { to: '/lawyer/queue', label: ru.nav.lawyerQueue, icon: Scale },
               { to: '/lawyer/reviews', label: ru.nav.lawyerReviews, icon: FileText },
             ],
+          },
+        ]
+      : []),
+    ...(moderator
+      ? [
+          {
+            items: [{ to: '/moderation', label: ru.nav.moderation, icon: ShieldCheck }],
           },
         ]
       : []),
@@ -72,6 +83,7 @@ const CRUMBS: [prefix: string, label: string][] = [
   ['/checks/documents', ru.nav.crumb.documents],
   ['/lawyer/queue', ru.nav.crumb.lawyerQueue],
   ['/lawyer/reviews', ru.nav.crumb.lawyerReviews],
+  ['/moderation', ru.nav.crumb.moderation],
   ['/settings', ru.nav.crumb.settings],
   ['/help', ru.nav.crumb.help],
   ['/pricing', ru.nav.crumb.pricing],

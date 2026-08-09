@@ -165,6 +165,226 @@ export type Database = {
       [_ in never]: never
     }
   }
+  pipeline: {
+    Tables: {
+      items: {
+        Row: {
+          category_slug: string | null
+          expected_item: string
+          id: string
+          last_error: string | null
+          requirement_id: string | null
+          retry_count: number
+          run_id: string
+          status: string
+          summary_text: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_slug?: string | null
+          expected_item: string
+          id?: string
+          last_error?: string | null
+          requirement_id?: string | null
+          retry_count?: number
+          run_id: string
+          status?: string
+          summary_text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_slug?: string | null
+          expected_item?: string
+          id?: string
+          last_error?: string | null
+          requirement_id?: string | null
+          retry_count?: number
+          run_id?: string
+          status?: string
+          summary_text?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      llm_calls: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          id: string
+          input_tokens: number | null
+          item_id: string | null
+          model: string
+          output_tokens: number | null
+          role: string
+          run_id: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          item_id?: string | null
+          model: string
+          output_tokens?: number | null
+          role: string
+          run_id?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          item_id?: string | null
+          model?: string
+          output_tokens?: number | null
+          role?: string
+          run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "llm_calls_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "llm_calls_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maps: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          group_ref: string
+          id: string
+          jurisdiction: string
+          payload: Json
+          status: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          group_ref: string
+          id?: string
+          jurisdiction: string
+          payload: Json
+          status?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          group_ref?: string
+          id?: string
+          jurisdiction?: string
+          payload?: Json
+          status?: string
+        }
+        Relationships: []
+      }
+      runs: {
+        Row: {
+          coverage_report: string | null
+          finished_at: string | null
+          id: string
+          map_id: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          coverage_report?: string | null
+          finished_at?: string | null
+          id?: string
+          map_id: string
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          coverage_report?: string | null
+          finished_at?: string | null
+          id?: string
+          map_id?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "runs_map_id_fkey"
+            columns: ["map_id"]
+            isOneToOne: false
+            referencedRelation: "maps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verdicts: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          model: string | null
+          reason: string | null
+          step: string
+          verdict: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          model?: string | null
+          reason?: string | null
+          step: string
+          verdict: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          model?: string | null
+          reason?: string | null
+          step?: string
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verdicts_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       act_paragraphs: {
@@ -316,6 +536,7 @@ export type Database = {
           now_text: string | null
           paragraph_id: string | null
           payload: Json
+          processed_at: string | null
           source: Database["public"]["Enums"]["change_source"]
           summary: string | null
           title: string
@@ -332,6 +553,7 @@ export type Database = {
           now_text?: string | null
           paragraph_id?: string | null
           payload?: Json
+          processed_at?: string | null
           source?: Database["public"]["Enums"]["change_source"]
           summary?: string | null
           title: string
@@ -348,6 +570,7 @@ export type Database = {
           now_text?: string | null
           paragraph_id?: string | null
           payload?: Json
+          processed_at?: string | null
           source?: Database["public"]["Enums"]["change_source"]
           summary?: string | null
           title?: string
@@ -720,6 +943,663 @@ export type Database = {
         }
         Relationships: []
       }
+      photo_assets: {
+        Row: {
+          face_name: string
+          height: number | null
+          idx: number
+          inspection_id: string
+          kind: string
+          mime: string | null
+          problems: Json
+          purged_at: string | null
+          sha256: string | null
+          storage_path: string
+          usable: boolean
+          width: number | null
+        }
+        Insert: {
+          face_name?: string
+          height?: number | null
+          idx: number
+          inspection_id: string
+          kind: string
+          mime?: string | null
+          problems?: Json
+          purged_at?: string | null
+          sha256?: string | null
+          storage_path: string
+          usable?: boolean
+          width?: number | null
+        }
+        Update: {
+          face_name?: string
+          height?: number | null
+          idx?: number
+          inspection_id?: string
+          kind?: string
+          mime?: string | null
+          problems?: Json
+          purged_at?: string | null
+          sha256?: string | null
+          storage_path?: string
+          usable?: boolean
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_assets_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_fact_overrides: {
+        Row: {
+          author_user_id: string
+          created_at: string
+          id: string
+          inspection_id: string
+          note: string
+          payload: Json
+          slot_id: string
+        }
+        Insert: {
+          author_user_id: string
+          created_at?: string
+          id?: string
+          inspection_id: string
+          note?: string
+          payload: Json
+          slot_id: string
+        }
+        Update: {
+          author_user_id?: string
+          created_at?: string
+          id?: string
+          inspection_id?: string
+          note?: string
+          payload?: Json
+          slot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_fact_overrides_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_facts: {
+        Row: {
+          asset_idx: number | null
+          bbox: Json | null
+          confidence: number | null
+          id: number
+          inspection_id: string
+          payload: Json
+          revision: number
+          slot_id: string
+          source: string
+        }
+        Insert: {
+          asset_idx?: number | null
+          bbox?: Json | null
+          confidence?: number | null
+          id?: never
+          inspection_id: string
+          payload?: Json
+          revision?: number
+          slot_id: string
+          source: string
+        }
+        Update: {
+          asset_idx?: number | null
+          bbox?: Json | null
+          confidence?: number | null
+          id?: never
+          inspection_id?: string
+          payload?: Json
+          revision?: number
+          slot_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_facts_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_finding_actions: {
+        Row: {
+          action: string
+          created_at: string
+          finding_id: string
+          id: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          finding_id: string
+          id?: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          finding_id?: string
+          id?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_finding_actions_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_finding_queue"
+            referencedColumns: ["finding_id"]
+          },
+          {
+            foreignKeyName: "photo_finding_actions_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_findings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_finding_reviews: {
+        Row: {
+          comment_text: string
+          created_at: string
+          finding_id: string
+          id: string
+          lawyer_id: string
+          moderated_at: string | null
+          moderated_by: string | null
+          official_replied_at: string | null
+          official_reply: string | null
+          published_at: string | null
+          status: Database["public"]["Enums"]["review_status"]
+          verdict: Database["public"]["Enums"]["review_verdict"]
+        }
+        Insert: {
+          comment_text: string
+          created_at?: string
+          finding_id: string
+          id?: string
+          lawyer_id: string
+          moderated_at?: string | null
+          moderated_by?: string | null
+          official_replied_at?: string | null
+          official_reply?: string | null
+          published_at?: string | null
+          status?: Database["public"]["Enums"]["review_status"]
+          verdict: Database["public"]["Enums"]["review_verdict"]
+        }
+        Update: {
+          comment_text?: string
+          created_at?: string
+          finding_id?: string
+          id?: string
+          lawyer_id?: string
+          moderated_at?: string | null
+          moderated_by?: string | null
+          official_replied_at?: string | null
+          official_reply?: string | null
+          published_at?: string | null
+          status?: Database["public"]["Enums"]["review_status"]
+          verdict?: Database["public"]["Enums"]["review_verdict"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_finding_reviews_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_finding_queue"
+            referencedColumns: ["finding_id"]
+          },
+          {
+            foreignKeyName: "photo_finding_reviews_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_findings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_finding_reviews_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      photo_findings: {
+        Row: {
+          basis: string
+          checkpoint_id: string
+          confidence_class: string
+          decided_by: string
+          evidence: Json
+          evidence_crop_path: string | null
+          group_key: string
+          id: string
+          inspection_id: string
+          kind: string
+          message: string
+          recommendation: string | null
+          requirement_id: string | null
+          rule_ref: string
+          severity: string
+          status: string
+          surface: string
+        }
+        Insert: {
+          basis?: string
+          checkpoint_id: string
+          confidence_class?: string
+          decided_by?: string
+          evidence?: Json
+          evidence_crop_path?: string | null
+          group_key: string
+          id?: string
+          inspection_id: string
+          kind: string
+          message?: string
+          recommendation?: string | null
+          requirement_id?: string | null
+          rule_ref: string
+          severity: string
+          status: string
+          surface?: string
+        }
+        Update: {
+          basis?: string
+          checkpoint_id?: string
+          confidence_class?: string
+          decided_by?: string
+          evidence?: Json
+          evidence_crop_path?: string | null
+          group_key?: string
+          id?: string
+          inspection_id?: string
+          kind?: string
+          message?: string
+          recommendation?: string | null
+          requirement_id?: string | null
+          rule_ref?: string
+          severity?: string
+          status?: string
+          surface?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_findings_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_findings_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_findings_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_findings_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
+        ]
+      }
+      photo_inspection_events: {
+        Row: {
+          at: string
+          detail: Json
+          id: number
+          inspection_id: string
+          stage: string
+        }
+        Insert: {
+          at?: string
+          detail?: Json
+          id?: never
+          inspection_id: string
+          stage: string
+        }
+        Update: {
+          at?: string
+          detail?: Json
+          id?: never
+          inspection_id?: string
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_inspection_events_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_inspections: {
+        Row: {
+          attempts: number
+          checked: number | null
+          checked_at: string | null
+          cost_usd: number | null
+          created_at: string
+          decided: number | null
+          degraded_mode: string | null
+          evaluated_at: string | null
+          extraction_errors: Json | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string
+          last_error: string | null
+          markets: string[]
+          model_versions: Json | null
+          overall: string | null
+          packaging_level: string
+          policy_applied: Json | null
+          product_id: string | null
+          product_key: string
+          prompt_version: string | null
+          reader_coverage: Json | null
+          revision: number
+          ruleset_sha256: string
+          ruleset_version: string | null
+          signed_at: string | null
+          signed_by: string | null
+          source_kind: string
+          stale_since: string | null
+          status: string
+          superseded_by: string | null
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          checked?: number | null
+          checked_at?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          decided?: number | null
+          degraded_mode?: string | null
+          evaluated_at?: string | null
+          extraction_errors?: Json | null
+          heartbeat_at?: string | null
+          id?: string
+          idempotency_key: string
+          last_error?: string | null
+          markets?: string[]
+          model_versions?: Json | null
+          overall?: string | null
+          packaging_level: string
+          policy_applied?: Json | null
+          product_id?: string | null
+          product_key: string
+          prompt_version?: string | null
+          reader_coverage?: Json | null
+          revision?: number
+          ruleset_sha256: string
+          ruleset_version?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
+          source_kind: string
+          stale_since?: string | null
+          status?: string
+          superseded_by?: string | null
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          checked?: number | null
+          checked_at?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          decided?: number | null
+          degraded_mode?: string | null
+          evaluated_at?: string | null
+          extraction_errors?: Json | null
+          heartbeat_at?: string | null
+          id?: string
+          idempotency_key?: string
+          last_error?: string | null
+          markets?: string[]
+          model_versions?: Json | null
+          overall?: string | null
+          packaging_level?: string
+          policy_applied?: Json | null
+          product_id?: string | null
+          product_key?: string
+          prompt_version?: string | null
+          reader_coverage?: Json | null
+          revision?: number
+          ruleset_sha256?: string
+          ruleset_version?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
+          source_kind?: string
+          stale_since?: string | null
+          status?: string
+          superseded_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_inspections_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_inspections_ruleset_sha256_fkey"
+            columns: ["ruleset_sha256"]
+            isOneToOne: false
+            referencedRelation: "ruleset_versions"
+            referencedColumns: ["sha256"]
+          },
+          {
+            foreignKeyName: "photo_inspections_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_model_calls: {
+        Row: {
+          cost_usd: number
+          id: number
+          inspection_id: string
+          latency_ms: number
+          model: string
+          provider: string
+          stage: string
+          tokens_in: number
+          tokens_out: number
+        }
+        Insert: {
+          cost_usd?: number
+          id?: never
+          inspection_id: string
+          latency_ms?: number
+          model?: string
+          provider?: string
+          stage: string
+          tokens_in?: number
+          tokens_out?: number
+        }
+        Update: {
+          cost_usd?: number
+          id?: never
+          inspection_id?: string
+          latency_ms?: number
+          model?: string
+          provider?: string
+          stage?: string
+          tokens_in?: number
+          tokens_out?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_model_calls_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_not_checkable: {
+        Row: {
+          checkpoint_key: string
+          class: string
+          id: number
+          inspection_id: string
+          reason: string
+          rule_ref: string
+        }
+        Insert: {
+          checkpoint_key: string
+          class: string
+          id?: never
+          inspection_id: string
+          reason: string
+          rule_ref?: string
+        }
+        Update: {
+          checkpoint_key?: string
+          class?: string
+          id?: never
+          inspection_id?: string
+          reason?: string
+          rule_ref?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_not_checkable_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_product_dimensions: {
+        Row: {
+          depth_mm: number | null
+          height_mm: number
+          packaging_level: string
+          product_id: string
+          updated_at: string
+          user_id: string
+          width_mm: number
+        }
+        Insert: {
+          depth_mm?: number | null
+          height_mm: number
+          packaging_level: string
+          product_id: string
+          updated_at?: string
+          user_id: string
+          width_mm: number
+        }
+        Update: {
+          depth_mm?: number | null
+          height_mm?: number
+          packaging_level?: string
+          product_id?: string
+          updated_at?: string
+          user_id?: string
+          width_mm?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_product_dimensions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_profiles: {
+        Row: {
+          hs_prefixes: string[]
+          profile_id: string
+          title_ru: string
+        }
+        Insert: {
+          hs_prefixes: string[]
+          profile_id: string
+          title_ru: string
+        }
+        Update: {
+          hs_prefixes?: string[]
+          profile_id?: string
+          title_ru?: string
+        }
+        Relationships: []
+      }
+      photo_quota: {
+        Row: {
+          limit_n: number
+          period_start: string
+          refunds_used: number
+          reserved: number
+          spent_usd: number
+          used: number
+          user_id: string
+        }
+        Insert: {
+          limit_n?: number
+          period_start: string
+          refunds_used?: number
+          reserved?: number
+          spent_usd?: number
+          used?: number
+          user_id: string
+        }
+        Update: {
+          limit_n?: number
+          period_start?: string
+          refunds_used?: number
+          reserved?: number
+          spent_usd?: number
+          used?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           complexity_index: number | null
@@ -779,6 +1659,7 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
+          is_moderator: boolean
           is_subscribed: boolean
           phone: string | null
           subscribed_until: string | null
@@ -789,6 +1670,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id: string
+          is_moderator?: boolean
           is_subscribed?: boolean
           phone?: string | null
           subscribed_until?: string | null
@@ -799,6 +1681,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          is_moderator?: boolean
           is_subscribed?: boolean
           phone?: string | null
           subscribed_until?: string | null
@@ -1205,6 +2088,176 @@ export type Database = {
           },
         ]
       }
+      requirement_photo: {
+        Row: {
+          checkability: Database["public"]["Enums"]["photo_checkability"]
+          created_at: string
+          hs_prefixes: string[]
+          markets: string[]
+          pack: string
+          packaging_level: Database["public"]["Enums"]["photo_packaging_level"]
+          requirement_id: string | null
+          rule_ref: string
+          ruleset_sha256: string | null
+          scope: string
+          source: Json
+          title_ru: string
+          updated_at: string
+          why: string
+        }
+        Insert: {
+          checkability: Database["public"]["Enums"]["photo_checkability"]
+          created_at?: string
+          hs_prefixes?: string[]
+          markets?: string[]
+          pack?: string
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          requirement_id?: string | null
+          rule_ref: string
+          ruleset_sha256?: string | null
+          scope?: string
+          source?: Json
+          title_ru?: string
+          updated_at?: string
+          why: string
+        }
+        Update: {
+          checkability?: Database["public"]["Enums"]["photo_checkability"]
+          created_at?: string
+          hs_prefixes?: string[]
+          markets?: string[]
+          pack?: string
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          requirement_id?: string | null
+          rule_ref?: string
+          ruleset_sha256?: string | null
+          scope?: string
+          source?: Json
+          title_ru?: string
+          updated_at?: string
+          why?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_photo_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_photo_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements_with_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirement_photo_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "user_deadline_events"
+            referencedColumns: ["requirement_id"]
+          },
+        ]
+      }
+      requirement_photo_check_contents: {
+        Row: {
+          check_id: string
+          hint: string | null
+          lang: string
+          question: string | null
+          title: string | null
+        }
+        Insert: {
+          check_id: string
+          hint?: string | null
+          lang: string
+          question?: string | null
+          title?: string | null
+        }
+        Update: {
+          check_id?: string
+          hint?: string | null
+          lang?: string
+          question?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_photo_check_contents_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "requirement_photo_checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      requirement_photo_checks: {
+        Row: {
+          check_id: string
+          created_at: string
+          group_key: string
+          hint_ru: string | null
+          id: string
+          kind: Database["public"]["Enums"]["photo_check_kind"]
+          measure: string | null
+          ord: number
+          packaging_level: Database["public"]["Enums"]["photo_packaging_level"]
+          params: Json
+          question_ru: string | null
+          rule_ref: string
+          severity: Database["public"]["Enums"]["photo_severity"]
+          subject: string
+          target: string | null
+          title_ru: string | null
+        }
+        Insert: {
+          check_id: string
+          created_at?: string
+          group_key: string
+          hint_ru?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["photo_check_kind"]
+          measure?: string | null
+          ord?: number
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          params?: Json
+          question_ru?: string | null
+          rule_ref: string
+          severity?: Database["public"]["Enums"]["photo_severity"]
+          subject?: string
+          target?: string | null
+          title_ru?: string | null
+        }
+        Update: {
+          check_id?: string
+          created_at?: string
+          group_key?: string
+          hint_ru?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["photo_check_kind"]
+          measure?: string | null
+          ord?: number
+          packaging_level?: Database["public"]["Enums"]["photo_packaging_level"]
+          params?: Json
+          question_ru?: string | null
+          rule_ref?: string
+          severity?: Database["public"]["Enums"]["photo_severity"]
+          subject?: string
+          target?: string | null
+          title_ru?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirement_photo_checks_rule_ref_fkey"
+            columns: ["rule_ref"]
+            isOneToOne: false
+            referencedRelation: "requirement_photo"
+            referencedColumns: ["rule_ref"]
+          },
+        ]
+      }
       requirement_reviews: {
         Row: {
           comment_text: string
@@ -1588,6 +2641,33 @@ export type Database = {
           },
         ]
       }
+      ruleset_versions: {
+        Row: {
+          built_at: string
+          checks_count: number
+          is_current: boolean
+          packs: Json
+          sha256: string
+          version: string
+        }
+        Insert: {
+          built_at?: string
+          checks_count?: number
+          is_current?: boolean
+          packs?: Json
+          sha256: string
+          version: string
+        }
+        Update: {
+          built_at?: string
+          checks_count?: number
+          is_current?: boolean
+          packs?: Json
+          sha256?: string
+          version?: string
+        }
+        Relationships: []
+      }
       search_aliases: {
         Row: {
           alias: string
@@ -1928,6 +3008,78 @@ export type Database = {
           },
         ]
       }
+      photo_finding_queue: {
+        Row: {
+          checkpoint_id: string | null
+          escalated_at: string | null
+          finding_id: string | null
+          inspection_id: string | null
+          message: string | null
+          packaging_level: string | null
+          product_key: string | null
+          rule_ref: string | null
+          severity: string | null
+          status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_findings_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_review_moderation_queue: {
+        Row: {
+          checkpoint_id: string | null
+          comment_text: string | null
+          created_at: string | null
+          finding_id: string | null
+          inspection_id: string | null
+          lawyer_credentials: string | null
+          lawyer_id: string | null
+          lawyer_name: string | null
+          message: string | null
+          packaging_level: string | null
+          product_key: string | null
+          review_id: string | null
+          rule_ref: string | null
+          severity: string | null
+          verdict: Database["public"]["Enums"]["review_verdict"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_finding_reviews_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_finding_queue"
+            referencedColumns: ["finding_id"]
+          },
+          {
+            foreignKeyName: "photo_finding_reviews_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "photo_findings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_finding_reviews_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "photo_findings_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "photo_inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       requirement_review_stats: {
         Row: {
           confirms: number | null
@@ -2122,6 +3274,29 @@ export type Database = {
       }
     }
     Functions: {
+      create_photo_revision: {
+        Args: { p_parent_id: string; p_payload: Json }
+        Returns: string
+      }
+      fanout_change_notifications: {
+        Args: { p_impact_ids: string[] }
+        Returns: number
+      }
+      finalize_photo_inspection: {
+        Args: {
+          p_inspection_id: string
+          p_outcome: string
+          p_payload?: Json
+          p_reason?: string
+        }
+        Returns: undefined
+      }
+      flag_stale_photo_inspections: { Args: never; Returns: number }
+      ingest_change_event: {
+        Args: { p_payload: Json; p_secret: string }
+        Returns: string
+      }
+      is_moderator: { Args: never; Returns: boolean }
       is_subscriber: { Args: never; Returns: boolean }
       is_verified_lawyer: { Args: never; Returns: boolean }
       lifecycle_status: {
@@ -2133,8 +3308,74 @@ export type Database = {
         }
         Returns: string
       }
+      moderate_photo_finding_review: {
+        Args: { p_decision: string; p_review_id: string }
+        Returns: undefined
+      }
       notify_admin_telegram: { Args: { message: string }; Returns: undefined }
+      photo_checklist: {
+        Args: { p_level: string; p_markets?: string[]; p_product_id: string }
+        Returns: {
+          check_id: string
+          group_key: string
+          hint_ru: string
+          kind: Database["public"]["Enums"]["photo_check_kind"]
+          measure: string
+          params: Json
+          question_ru: string
+          requirement_id: string
+          rule_ref: string
+          severity: Database["public"]["Enums"]["photo_severity"]
+          subject: string
+          target: string
+          title_ru: string
+        }[]
+      }
+      photo_profile_for_product: {
+        Args: { p_product_id: string }
+        Returns: string
+      }
+      process_lifecycle_transitions: { Args: never; Returns: number }
+      purge_expired_photo_assets: { Args: never; Returns: number }
+      reap_stale_inspections: { Args: never; Returns: number }
+      record_finding_action: {
+        Args: { p_action: string; p_finding_id: string; p_reason?: string }
+        Returns: string
+      }
+      replace_requirement_children: {
+        Args: {
+          p_applicability: Json
+          p_contents: Json
+          p_details: Json
+          p_requirement_id: string
+          p_rules: Json
+        }
+        Returns: undefined
+      }
+      request_photo_inspection: {
+        Args: {
+          p_asset_paths: string[]
+          p_idempotency_key: string
+          p_level: string
+          p_markets: string[]
+          p_product_id: string
+          p_source_kind: string
+        }
+        Returns: string
+      }
+      request_photo_retake: {
+        Args: {
+          p_idempotency_key: string
+          p_inspection_id: string
+          p_new_asset_paths: string[]
+        }
+        Returns: string
+      }
       review_votable: { Args: { rid: string }; Returns: boolean }
+      sign_photo_inspection: {
+        Args: { p_inspection_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       act_status: "active" | "repealed" | "pending"
@@ -2182,6 +3423,10 @@ export type Database = {
         | "carrier"
         | "all"
         | "service_provider"
+      photo_check_kind: "presence" | "text_semantic" | "absence" | "geometry"
+      photo_checkability: "checkable" | "partial" | "not_checkable"
+      photo_packaging_level: "consumer" | "transport" | "both"
+      photo_severity: "critical" | "major" | "minor" | "info"
       question_status:
         | "new"
         | "ai_answered"
@@ -2347,6 +3592,9 @@ export const Constants = {
   graphql_public: {
     Enums: {},
   },
+  pipeline: {
+    Enums: {},
+  },
   public: {
     Enums: {
       act_status: ["active", "repealed", "pending"],
@@ -2399,6 +3647,10 @@ export const Constants = {
         "all",
         "service_provider",
       ],
+      photo_check_kind: ["presence", "text_semantic", "absence", "geometry"],
+      photo_checkability: ["checkable", "partial", "not_checkable"],
+      photo_packaging_level: ["consumer", "transport", "both"],
+      photo_severity: ["critical", "major", "minor", "info"],
       question_status: [
         "new",
         "ai_answered",

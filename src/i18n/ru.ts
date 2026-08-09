@@ -418,6 +418,20 @@ export const ru = {
       queueAllProducts: 'Все товары',
       queueAllServices: 'Все услуги',
 
+      // ── Очередь по находкам фотоконтроля (Задача 14) ──────────────
+      photoQueueTitle: 'Находки фотоконтроля',
+      photoQueueHint: 'Находки, эскалированные подписчиками — оставьте заключение',
+      photoQueueEmpty: 'Пока нет эскалированных находок.',
+      photoQueueError: 'Не получилось загрузить очередь.',
+      photoFinding: {
+        dialogTitle: 'Заключение по находке',
+        submitCta: 'Оставить заключение',
+        submitted: 'Заключение отправлено на модерацию.',
+        submitError: 'Не получилось отправить. Попробуйте ещё раз.',
+        /** 23505 — photo_finding_reviews_pending_uidx: заключение уже есть, это не сбой */
+        duplicatePending: 'Вы уже отправили заключение по этой находке — оно на модерации.',
+      },
+
       myReviewsTitle: 'Мои заключения',
       myReviewsEmpty: 'Вы ещё не оставили ни одного заключения — начните с очереди слева.',
       reviewStatus: {
@@ -540,6 +554,7 @@ export const ru = {
     lawyerSection: 'Кабинет юриста',
     lawyerQueue: 'Очередь проверки',
     lawyerReviews: 'Мои заключения',
+    moderation: 'Модерация заключений',
     profile: 'Профиль',
     collapse: 'Свернуть меню',
     expand: 'Развернуть меню',
@@ -552,6 +567,7 @@ export const ru = {
       documents: 'Проверки · Документы',
       lawyerQueue: 'Юрист · Очередь проверки',
       lawyerReviews: 'Юрист · Мои заключения',
+      moderation: 'Модерация заключений',
       settings: 'Настройки',
       help: 'Помощь',
       pricing: 'Тариф',
@@ -662,6 +678,219 @@ export const ru = {
       title: 'Проверка документов',
       text: 'Загрузите сертификаты и декларации — сверим с чек-листом вашего товара и покажем, чего не хватает.',
     },
+  },
+
+  // Модерация заключений юристов по находкам фотоконтроля: публикует модератор,
+  // автопубликации нет (решение владельца, вариант «б»).
+  moderation: {
+    eyebrow: 'Модерация',
+    title: 'Заключения на модерации',
+    hint: 'Заключение юриста появляется в отчёте клиента только после публикации здесь.',
+    empty: 'Очередь пуста — новых заключений нет.',
+    error: 'Не получилось загрузить очередь.',
+    denyTitle: 'Раздел модератора',
+    denyText:
+      'Здесь публикуются заключения юристов. Доступ выдаёт команда InspectorX — если он вам нужен, напишите нам.',
+    findingLabel: 'Находка',
+    lawyerLabel: 'Юрист',
+    publish: 'Опубликовать',
+    reject: 'Отклонить',
+    confirmPublishTitle: 'Опубликовать заключение?',
+    confirmPublishText: 'Клиент увидит его в отчёте по проверке. Отменить публикацию нельзя.',
+    confirmRejectTitle: 'Отклонить заключение?',
+    confirmRejectText: 'Клиент его не увидит. Вернуть заключение в очередь нельзя.',
+    published: 'Опубликовано.',
+    rejected: 'Отклонено.',
+    actionError: 'Не получилось. Обновите страницу и попробуйте ещё раз.',
+    /** RPC поднимает `review_not_pending`, когда решение уже принято (вторая вкладка) */
+    alreadyModerated: 'По этому заключению решение уже принято — обновите страницу.',
+  },
+
+  packagingCheck: {
+    title: 'Проверка упаковки',
+    pickProduct: 'Найдите свой товар — тем же поиском, что и в каталоге',
+    pickLevel: 'Уровень упаковки',
+    levelConsumer: 'Потребительская (пачка)',
+    levelTransport: 'Транспортная (короб)',
+    whatWeCheck: 'Что проверим',
+    counterCheckable: 'проверим',
+    counterPartial: 'частично',
+    counterNotCheckable: 'не проверяется по фото',
+    counterNoGold: 'без эталонного примера',
+    noChecklistTitle: 'Чек-лист для этого товара ещё не собран',
+    noChecklistText:
+      'Пока поддержаны: табачная продукция, молочная продукция, бытовая электроника. Отсутствие чек-листа не означает, что требований нет.',
+    notifyCta: 'Сообщить, когда появится',
+    notifyDone: 'Заявка принята — напишем, когда появится.',
+    uploadPdfTitle: 'Макет в PDF, до 50 МБ',
+    uploadPdfHint:
+      'Один файл от типографии. Если текст переведён в кривые — скажем об этом до запуска проверки.',
+    uploadPhotoTitle: 'Фотографии упаковки',
+    needFourFrames:
+      'Нужно минимум четыре кадра: по одному кадру мы не сможем утверждать, что каких-то сведений на упаковке нет.',
+    shootingHints: 'Сценарий съёмки',
+    uploadCta: 'Загрузить макет или фото',
+    startCheck: 'Проверить',
+    uploading: 'Загружаем…',
+    quotaExhausted: 'Квота проверок на этот месяц исчерпана.',
+    notSubscriber: 'Проверка упаковки доступна по подписке.',
+    loginRequired: 'Войдите, чтобы отправить фото или макет на проверку.',
+    checkFailed: 'Не получилось отправить проверку. Попробуйте ещё раз.',
+    changeProduct: 'Выбрать другой товар',
+    tabPdf: 'PDF-макет',
+    tabPhoto: 'Фото',
+    removeFile: 'Убрать',
+    faceLabel: 'Грань',
+    faces: {
+      front_panel: 'Лицевая панель',
+      back_panel: 'Оборотная панель',
+      side_panel: 'Боковая панель',
+      top: 'Верх',
+      bottom: 'Низ',
+    },
+    frameLabel: (i: number) => `Кадр ${i + 1}`,
+
+    // ── Габариты упаковки (Задача 15, шаг 6): без них min_size_mm не проверяется ──
+    dimensionsTitle: 'Габариты упаковки (необязательно)',
+    dimensionsHint:
+      'Без габаритов пункты про минимальный размер шрифта или знака уходят в «не проверяется: не знаем размер вашей упаковки».',
+    dimensionsWidthLabel: 'Ширина, мм',
+    dimensionsHeightLabel: 'Высота, мм',
+
+    // ── Отчёт /checks/packaging/:inspectionId (Задача 13, план §7) ──
+    reportViolations: 'Нарушения',
+    reportNeedsHuman: 'Требует досъёмки или человека',
+    reportNotCheckable: 'По фотографии не проверяется — это граница метода, а не пробел',
+    reportNoGold: 'Правило есть, эталонного примера нет — вердикт не выносим',
+    retakeCta: 'Доснять',
+    fixFactCta: 'Поправить факт',
+    escalateCta: 'Эскалировать юристу',
+    acceptCta: 'Принять с обоснованием',
+    fixedCta: 'Исправлю',
+    preliminaryBadge: 'Предварительный — ждёт подписи юриста',
+    staleBadge: (date: string) => `Проверка устарела: норма изменилась ${date}`,
+    /** Текст уведомления в колокольчике (user_notifications, kind='checklist_version', Задача 16) */
+    staleNotification: (date: string) =>
+      `Ваша проверка упаковки больше не актуальна: норма изменилась ${date}`,
+    supersededBadge: 'Есть новая ревизия',
+    auditTitle: 'Реквизиты проверки',
+    sourcePdf: 'макет PDF',
+    sourcePhoto: 'фотографии',
+    /** nUnit — уже склонённое «2 пункта» из pluralize (src/lib/format.ts) */
+    missingFace: (face: string, nUnit: string) => `не хватает: ${face} — ${nUnit}`,
+    /** Формы для pluralize (src/lib/format.ts): «1 пункт / 2 пункта / 5 пунктов» */
+    unitItem: ['пункт', 'пункта', 'пунктов'] as [string, string, string],
+
+    // Числа наверху отчёта — короткие подписи плиток (CStatTile: label + value)
+    violationsLabel: 'Нарушений',
+    checkedLabel: 'Проверено пунктов',
+    needsHumanLabel: 'Требует человека',
+    sourceLabel: 'Источник',
+    counterViolationsN: (n: number) => `Нарушений: ${n}`,
+    counterCheckedOf: (decided: number, checked: number) => `${decided} из ${checked}`,
+    counterNeedsHumanN: (n: number) => `Требует человека: ${n}`,
+    sourceMasterPdf: (pages: number) => `${pages} стр.`,
+    sourcePhotoCoverage: (have: number, of: number) => `покрытие: ${have} граней из ${of}`,
+
+    // Стадии ожидания (photo_inspection_events.stage)
+    stageReceived: 'приняли заявку',
+    stagePrepare: 'готовим кадры',
+    stagePrepareArtwork: 'разбираем макет',
+    stageRead: 'читаем этикетку',
+    stageJudge: 'сверяем с требованиями',
+    stageRender: 'готовим доказательства',
+    waitingTitle: 'Проверяем',
+    waitingHint: 'Обычно занимает меньше минуты — страница обновится сама.',
+    framesTitle: 'Кадры',
+    failedTitle: 'Проверка не удалась',
+    failedRefundable: 'Квота возвращена — повторите проверку.',
+    startOverCta: 'Начать заново',
+    failReasons: {
+      worker_unreachable: 'Не достучались до сервиса проверки.',
+      worker_timeout: 'Сервис проверки не ответил вовремя.',
+      dispatch_lost: 'Заявка потерялась на пути к сервису проверки.',
+      ruleset_drift: 'Правила изменились прямо во время проверки.',
+      ocr_unavailable: 'Распознавание текста было недоступно.',
+      vlm_unavailable: 'Модель распознавания изображений была недоступна.',
+      no_text_layer: 'В PDF-макете нет текстового слоя — нужен файл с текстом, не сканы.',
+      asset_fetch_failed: 'Не получилось скачать загруженные файлы.',
+      checklist_empty: 'Для этого товара нет ни одного проверяемого пункта.',
+    } as Record<string, string>,
+
+    // decided_by словами (photo_findings.decided_by)
+    decidedBy: {
+      pdf_text: 'прочитано в макете',
+      zbar: 'декодирован штрих-код',
+      ocr: 'распознано OCR',
+      yolo: 'найдено детектором',
+      geometry: 'измерено по макету',
+      human: 'подтверждено человеком',
+    } as Record<string, string>,
+
+    // Тяжесть находки (photo_findings.severity) — enum движка (models.py, inspectorx-vision):
+    // critical | major | minor | info; critical/minor/info дополнительно подтверждены
+    // фикстурами src/data/vision.test.ts
+    severity: {
+      critical: 'критично',
+      major: 'существенно',
+      minor: 'незначительно',
+      info: 'к сведению',
+    } as Record<string, string>,
+
+    // Грани упаковки (photo_findings.surface)
+    faceFront: 'лицевая',
+    faceBack: 'оборотная',
+    faceSide: 'торец',
+    faceTop: 'верх',
+    faceBottom: 'низ',
+
+    revisionLimitHint: 'Четвёртая досъёмка — новая проверка',
+    retakeUploadCta: 'Выбрать фото и доснять',
+    fixFactDialogTitle: 'Поправить факт',
+    fixFactDialogText: 'Правка факта запускает новый пересуд без повторной съёмки — появится новая ревизия проверки.',
+    fixFactNoSlots: 'В этой проверке нет фактов, которые можно поправить вручную.',
+    fixFactNoteLabel: 'Почему вы правите факт',
+    fixFactNotePlaceholder: 'Коротко — что не так с распознанным значением',
+    fixFactSubmit: 'Пересудить',
+    fixFactSubmitting: 'Пересуживаем…',
+    fixFactNoteRequired: 'Опишите, что не так — минимум несколько слов.',
+    acceptReasonLabel: 'Обоснование',
+    acceptReasonPlaceholder: 'Почему это можно принять как есть — минимум 10 символов',
+    acceptReasonRequired: 'Обоснование — минимум 10 символов.',
+    actionDone: 'Принято',
+    actionError: 'Не получилось сохранить. Попробуйте ещё раз.',
+    reportError: 'Не получилось загрузить отчёт.',
+    reportNotFound: 'Проверка не найдена или недоступна.',
+    coveragePdfNote: 'Процентной оценки нет — только явные числа.',
+    ruleRefLabel: 'Пункт правила',
+    noRequirementLink: 'Ссылка на карточку требования не установлена.',
+    evidenceQuote: 'Цитата',
+    evidenceCrop: 'Фрагмент',
+    /** Откуда цитата-доказательство: страница макета или номер кадра */
+    evidencePage: (page: number) => `стр. ${page}`,
+    evidenceFrame: (frame: number) => `кадр ${frame}`,
+    ruleset: 'Набор правил',
+    readerCoverage: 'Покрытие чтецами',
+    modelVersions: 'Версии моделей',
+    fileHashes: 'sha256 файлов',
+    costUsd: 'Стоимость прогона',
+    degradedMode: 'Режим деградации',
+    signedBy: 'Подписал',
+    signedNo: 'Ещё не подписано',
+    checkedAtLabel: 'Проверено',
+    evaluatedAtLabel: 'Съёмка/макет от',
+    policyApplied: 'Применённая политика',
+    normEditionMissing: 'Редакция акта на эту дату в реестре InspectorX не зафиксирована.',
+
+    // ── Подпись вердикта юристом (Задача 14, план §8) ──
+    signCta: 'Подписать вердикт',
+    signPending: 'Подписываем…',
+    signError: 'Не получилось подписать. Попробуйте ещё раз.',
+    /** Бейдж после подписи: имя юриста (lawyer_profiles.display_name) + дата */
+    signedByLawyer: (name: string, date: string) => `Подписано: ${name}, ${date}`,
+    /** Заглушка на время загрузки имени подписавшего юриста */
+    signedUnknownLawyer: 'Юрист',
+    findingReviewsTitle: 'Заключения юристов',
   },
 
   settings: {

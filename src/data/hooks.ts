@@ -10,6 +10,7 @@ import {
 import { useAuth } from '@/app/auth'
 import { useAppMode } from '@/app/app-mode'
 import { supabase } from '@/lib/supabase'
+import { formatDate } from '@/lib/format'
 import { ru } from '@/i18n/ru'
 import type {
   AppNotification,
@@ -30,17 +31,39 @@ import {
   fetchCard,
   fetchChangeFeed,
   fetchComparisonMatrix,
+  fetchEvidenceCropUrls,
+  fetchFindingReviews,
+  fetchInspectionBundle,
+  fetchInspectionEvents,
+  fetchIsModerator,
+  fetchLawyerName,
   fetchLawyerReviews,
+  fetchModerationQueue,
+  fetchPackagingChecklist,
+  fetchPhotoFacts,
+  fetchPhotoReviewQueue,
   fetchProductBundle,
+  fetchProductDimensions,
   fetchReviewStats,
   fetchServiceBundle,
   fetchTelemetry,
+  moderatePhotoFindingReview,
+  requestRetake,
   search,
   setReviewVote,
+  signInspection,
+  startInspection,
+  submitFactOverride,
+  submitFindingAction,
+  submitPhotoFindingReview,
+  uploadAndRequestInspection,
+  upsertProductDimensions,
   type DataCtx,
+  type PackagingLevel,
 } from './index'
 import {
   addChosenReal,
+  fetchChecklistVersionNotificationsReal,
   fetchChosenReal,
   fetchContentRequests,
   fetchLawyerNotificationsReal,
@@ -52,6 +75,7 @@ import {
   fetchMyReviewsReal,
   fetchReviewQueueReal,
   fetchSubscriptionRequests,
+  markChecklistVersionNotificationReadReal,
   markLawyerNotificationReadReal,
   markLifecycleNotificationReadReal,
   removeChosenReal,
@@ -306,9 +330,11 @@ export function useNotificationCenter() {
   const verified = lawyerProfile?.status === 'verified'
   const { data: lawyerNotifs } = useLawyerNotifications(verified)
   const { data: lifecycleNotifs } = useLifecycleNotifications()
+  const { data: checklistVersionNotifs } = useChecklistVersionNotifications()
   const markChange = useMarkChangeRead()
   const markLawyer = useMarkNotificationRead()
   const markLifecycle = useMarkLifecycleNotificationRead()
+  const markChecklistVersion = useMarkChecklistVersionNotificationRead()
 
   const items: AppNotification[] = []
 
@@ -370,6 +396,18 @@ export function useNotificationCenter() {
     })
   }
 
+  for (const n of checklistVersionNotifs ?? []) {
+    items.push({
+      id: `checklist-version-${n.id}`,
+      kind: 'checklist_version',
+      sourceId: n.id,
+      title: ru.packagingCheck.staleNotification(formatDate(n.effectiveDate)),
+      link: n.link,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+    })
+  }
+
   items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   const markRead = (n: AppNotification) => {
@@ -377,6 +415,7 @@ export function useNotificationCenter() {
     if (n.kind === 'change') markChange.mutate(n.sourceId)
     else if (n.kind === 'lawyer') markLawyer.mutate(n.sourceId)
     else if (n.kind === 'lifecycle') markLifecycle.mutate(n.sourceId)
+    else if (n.kind === 'checklist_version') markChecklistVersion.mutate(n.sourceId)
     else {
       markQuestionAnswerRead(n.sourceId)
       void qc.invalidateQueries({ queryKey: ['my-questions'] })
@@ -629,6 +668,27 @@ export function useMarkLifecycleNotificationRead() {
   })
 }
 
+/** Checklist_version-уведомления (user_notifications, kind='checklist_version') — заводит Задача 16 */
+export function useChecklistVersionNotifications() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['checklist-version-notifications', session?.user.id ?? 'anon'],
+    queryFn: fetchChecklistVersionNotificationsReal,
+    enabled: Boolean(session),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+}
+
+export function useMarkChecklistVersionNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => markChecklistVersionNotificationReadReal(id),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['checklist-version-notifications'] }),
+  })
+}
+
 // ── Админка ────────────────────────────────────────────────────────
 
 export function useSubscriptionRequests() {
@@ -656,5 +716,234 @@ export function useContentRequest() {
       productId?: string
       comment?: string
     }) => submitContentRequest({ ...input, userId: session?.user.id }),
+  })
+}
+
+// ── Фотоконтроль упаковки (Волна 1, Задача 11) ──────────────────────
+
+/** Публичный тизер — без авторизации, кэшируется 5 минут (см. api/vision/checklist.ts). */
+export function usePackagingChecklist(productId: string | undefined, level: PackagingLevel) {
+  return useQuery({
+    queryKey: ['packaging-checklist', productId, level],
+    queryFn: () => fetchPackagingChecklist(productId!, level),
+    enabled: Boolean(productId),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useRequestPackagingInspection() {
+  return useMutation({
+    mutationFn: (input: {
+      productId: string
+      level: PackagingLevel
+      sourceKind: 'photo' | 'master_pdf'
+      files: File[]
+      faces?: string[]
+    }) => uploadAndRequestInspection(input),
+  })
+}
+
+/** Габариты SKU (Задача 15, шаг 6) — own-all RLS, читаются перед запуском фотопути. */
+export function useProductDimensions(productId: string | undefined, level: PackagingLevel) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['photo-product-dimensions', productId, level, session?.user.id],
+    queryFn: () => fetchProductDimensions(productId!, level),
+    enabled: Boolean(productId && session),
+  })
+}
+
+export function useUpsertDimensions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      productId: string
+      level: PackagingLevel
+      widthMm: number
+      heightMm: number
+      depthMm?: number
+    }) => upsertProductDimensions(input),
+    onSuccess: (_data, input) =>
+      void qc.invalidateQueries({
+        queryKey: ['photo-product-dimensions', input.productId, input.level],
+      }),
+  })
+}
+
+/** Поллинг раз в 1.5с, пока прогон в очереди/идёт — синхронный /api/vision/check живёт дольше одного тика. */
+export function useInspectionBundle(inspectionId: string | undefined) {
+  return useQuery({
+    queryKey: ['photo-inspection', inspectionId],
+    queryFn: () => fetchInspectionBundle(inspectionId!),
+    enabled: Boolean(inspectionId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.inspection.status
+      return status === 'queued' || status === 'running' ? 1500 : false
+    },
+  })
+}
+
+export function useInspectionEvents(inspectionId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-inspection-events', inspectionId],
+    queryFn: () => fetchInspectionEvents(inspectionId!),
+    enabled: enabled && Boolean(inspectionId),
+    refetchInterval: 1500,
+  })
+}
+
+export function useStartInspection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inspectionId: string) => startInspection(inspectionId),
+    onSuccess: (_data, inspectionId) =>
+      void qc.invalidateQueries({ queryKey: ['photo-inspection', inspectionId] }),
+  })
+}
+
+export function useFactOverride() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      inspectionId: string
+      overrides: { slotId: string; payload: unknown; note?: string }[]
+    }) => submitFactOverride(input.inspectionId, input.overrides),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
+  })
+}
+
+export function useRetake() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { inspectionId: string; files: File[]; faces: string[] }) =>
+      requestRetake(input.inspectionId, input.files, input.faces),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
+  })
+}
+
+/** Слоты паспорта фактов — грузятся по требованию (модалка «Поправить факт»), не на каждый рендер отчёта. */
+export function usePhotoFacts(inspectionId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-facts', inspectionId],
+    queryFn: () => fetchPhotoFacts(inspectionId!),
+    enabled: enabled && Boolean(inspectionId),
+  })
+}
+
+/** Подписанные ссылки на кропы-доказательства, пачкой на все находки страницы; час жизни ссылки — запас на чтение отчёта. */
+export function useEvidenceCropUrls(paths: string[]) {
+  const key = [...paths].sort().join('|')
+  return useQuery({
+    queryKey: ['evidence-crop-urls', key],
+    queryFn: () => fetchEvidenceCropUrls(paths),
+    enabled: paths.length > 0,
+    staleTime: 30 * 60_000,
+  })
+}
+
+export function useFindingAction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      findingId: string
+      action: 'fixed' | 'accepted_with_reason' | 'escalated'
+      reason?: string
+    }) => submitFindingAction(input.findingId, input.action, input.reason),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['photo-inspection'] }),
+  })
+}
+
+// ── Очередь юриста по находкам фотоконтроля (Задача 14) ──────────────
+
+/** `enabled` — вызывающая страница уже под `CLawyerGuard` (verified-юрист). */
+export function usePhotoReviewQueue(enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-review-queue'],
+    queryFn: fetchPhotoReviewQueue,
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useSubmitPhotoFindingReview() {
+  const qc = useQueryClient()
+  const { session } = useAuth()
+  return useMutation({
+    mutationFn: (input: { findingId: string; verdict: ReviewVerdict; commentText: string }) => {
+      if (!session) throw new Error('auth-required')
+      return submitPhotoFindingReview({ ...input, lawyerId: session.user.id })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['photo-review-queue'] })
+      void qc.invalidateQueries({ queryKey: ['photo-finding-reviews'] })
+    },
+  })
+}
+
+// ── Модерация заключений (решение владельца «б»: публикует модератор) ──
+
+/** Роль модератора живёт на `profiles.is_moderator`, флаг ставит владелец
+ * SQL-ом. Без сессии не спрашиваем — для анонима ответ всегда false. */
+export function useIsModerator() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['is-moderator', session?.user.id],
+    queryFn: fetchIsModerator,
+    enabled: Boolean(session),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** `enabled` — вызывающая страница уже под гардом модератора. */
+export function useModerationQueue(enabled: boolean) {
+  return useQuery({
+    queryKey: ['photo-moderation-queue'],
+    queryFn: fetchModerationQueue,
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useModerateReview() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { reviewId: string; decision: 'published' | 'rejected' }) =>
+      moderatePhotoFindingReview(input.reviewId, input.decision),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['photo-moderation-queue'] })
+      // публикация меняет и то, что видит владелец проверки, и очередь юриста
+      void qc.invalidateQueries({ queryKey: ['photo-finding-reviews'] })
+      void qc.invalidateQueries({ queryKey: ['photo-review-queue'] })
+    },
+  })
+}
+
+export function useSignInspection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inspectionId: string) => signInspection(inspectionId),
+    onSuccess: (_data, inspectionId) =>
+      void qc.invalidateQueries({ queryKey: ['photo-inspection', inspectionId] }),
+  })
+}
+
+/** Опубликованные заключения юриста по находкам страницы отчёта, пачкой. */
+export function useFindingReviews(findingIds: string[]) {
+  const sorted = [...findingIds].sort()
+  return useQuery({
+    queryKey: ['photo-finding-reviews', sorted],
+    queryFn: () => fetchFindingReviews(sorted),
+    enabled: sorted.length > 0,
+    staleTime: 30_000,
+  })
+}
+
+/** Имя подписавшего юриста для бейджа в отчёте (`photo_inspections.signed_by`). */
+export function useLawyerName(userId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['lawyer-name', userId],
+    queryFn: () => fetchLawyerName(userId!),
+    enabled: Boolean(userId),
+    staleTime: 5 * 60_000,
   })
 }
