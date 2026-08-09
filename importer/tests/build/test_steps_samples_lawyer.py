@@ -336,12 +336,14 @@ def test_load_default_steps_imports_steps_samples_lawyer_module_for_samples():
 # ══════════════════════════════════════════════════════════════════════════
 
 
-def test_get_web_searcher_default_live_backend_raises_only_on_call(monkeypatch):
+def test_get_web_searcher_default_live_backend_constructs_without_call(monkeypatch):
+    # Волна 2 (Задача 9): живая реализация подключена — конструирование
+    # по-прежнему не требует ключа/сети, клиент инициализируется лениво
+    # только при реальном вызове .search(...) (см. test_websearch_live.py
+    # для поведения самого поиска на фейковом клиенте).
     monkeypatch.delenv("WEBSEARCH_BACKEND", raising=False)
     searcher = get_web_searcher()  # не падает на конструирование
     assert isinstance(searcher, WebSearcher)
-    with pytest.raises(NotImplementedError):
-        searcher.search("что угодно")
 
 
 def test_get_web_searcher_unknown_backend_raises_value_error(monkeypatch):
