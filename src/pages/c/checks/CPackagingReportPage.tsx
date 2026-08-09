@@ -520,7 +520,9 @@ function NotCheckableRow({ group }: { group: ReasonGroup<PhotoNotCheckableRow> }
       <p className="text-sm">
         {group.reason}
         {group.count > 1 && (
-          <span className="ml-1.5 text-xs font-medium text-muted-foreground">× {group.count}</span>
+          <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+            {t.countTimes(group.count)}
+          </span>
         )}
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
@@ -579,7 +581,7 @@ function RetakeGroup({
         {grouped.map((g) => (
           <li key={g.reason} className="text-xs text-muted-foreground">
             {g.reason}
-            {g.count > 1 && <span className="ml-1 font-medium">× {g.count}</span>}
+            {g.count > 1 && <span className="ml-1 font-medium">{t.countTimes(g.count)}</span>}
           </li>
         ))}
       </ul>
