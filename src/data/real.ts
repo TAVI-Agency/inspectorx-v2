@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import type { Json } from '@/lib/database.types'
 import { ru } from '@/i18n/ru'
 import { PHARMACY_SERVICE_ID } from './cross-links'
-import { CIGARETTES_PRODUCT_ID } from './mock/fixtures'
+import { MILK_PRODUCT_ID } from './mock/fixtures'
 import type { CountryCode, LifecycleStatus } from './countries'
 import {
   locked,
@@ -298,9 +298,11 @@ export async function searchProductsReal(query: string): Promise<SearchHit[]> {
   const digits = q.replace(/\D/g, '')
 
   const [aliasRes, nameRes, codeRes] = await Promise.all([
+    // is_active — на связанном products: алиас (напр. «IQOS») сам по себе
+    // не должен всплывать поиском для скрытого товара, RLS это не фильтрует.
     supabase
       .from('search_aliases')
-      .select('product_id, products(id, name_ru, hs_code, hierarchy_path)')
+      .select('product_id, products(id, name_ru, hs_code, hierarchy_path, is_active)')
       .ilike('alias', pattern)
       .not('product_id', 'is', null)
       .limit(8),
@@ -322,8 +324,8 @@ export async function searchProductsReal(query: string): Promise<SearchHit[]> {
 
   const byId = new Map<string, RawProduct>()
   for (const row of aliasRes.data ?? []) {
-    const p = row.products
-    if (p) byId.set(p.id, p)
+    const p = row.products as (RawProduct & { is_active: boolean }) | null
+    if (p && p.is_active) byId.set(p.id, p)
   }
   for (const p of [...(nameRes.data ?? []), ...(codeRes.data ?? [])]) {
     if (!byId.has(p.id)) byId.set(p.id, p)
@@ -383,10 +385,15 @@ export async function fetchPassportReal(
   productId: string,
   country: CountryCode,
 ): Promise<ProductPassport | null> {
+  // is_active=false — товар скрыт с витрины (напр. IQOS, ЗРУ-1098): прямой
+  // URL /product/:id не должен открывать карточку — maybeSingle() вернёт
+  // null, а вызывающий fetchProductBundle аккуратно отдаст null дальше
+  // (страница «Товар не найден», без похода за требованиями).
   const { data: p } = await supabase
     .from('products')
     .select('id, name_ru, hs_code, complexity_index, hierarchy_path, product_type_id')
     .eq('id', productId)
+    .eq('is_active', true)
     .maybeSingle()
   if (!p) return null
   const [aliases, codes] = await Promise.all([
@@ -475,10 +482,13 @@ export async function searchServicesReal(query: string): Promise<SearchHit[]> {
 export async function fetchServicePassportReal(
   serviceId: string,
 ): Promise<ServicePassport | null> {
+  // Тот же is_active-фильтр, что и в fetchPassportReal — прямой URL
+  // /service/:id скрытой услуги должен вести на «Услуга не найдена».
   const { data: s } = await supabase
     .from('services')
     .select('id, name_ru, oked_code, ikpu_code, admission_mode, complexity_index, authorities(name_ru)')
     .eq('id', serviceId)
+    .eq('is_active', true)
     .maybeSingle()
   if (!s) return null
   return {
@@ -492,19 +502,33 @@ export async function fetchServicePassportReal(
   }
 }
 
-/** Метрика «документов собрать»: details закрыты RLS — анониму вернётся 0 строк → null (locked) */
-export async function fetchServiceDocumentsCountReal(
+/** Метрики закрытого слоя для плиток паспорта (товары и услуги). */
+export interface DetailsMetrics {
+  documents: number
+  sanctionTexts: string[]
+}
+
+/** Метрики из details: закрыты RLS — анониму вернётся 0 строк → null (плитки
+ *  остаются под замком). Подписчику считаем документы и собираем тексты
+ *  санкций для «Макс. санкции» — замок у оплатившего это ложь интерфейса. */
+export async function fetchDetailsMetricsReal(
   requirementIds: string[],
-): Promise<number | null> {
+): Promise<DetailsMetrics | null> {
   if (requirementIds.length === 0) return null
   const { data } = await supabase
     .from('requirement_details')
-    .select('documents')
+    .select('documents, sanctions')
     .in('requirement_id', requirementIds)
   if (!data || data.length === 0) return null
   let count = 0
-  for (const row of data) count += parseDocuments(row.documents).length
-  return count
+  const sanctionTexts: string[] = []
+  for (const row of data) {
+    count += parseDocuments(row.documents).length
+    for (const s of parseSanctions(row.sanctions)) {
+      sanctionTexts.push([s.text, s.extra].filter(Boolean).join(' '))
+    }
+  }
+  return { documents: count, sanctionTexts }
 }
 
 // ── Матрица сравнения стран (Задача 32) ─────────────────────────────
@@ -1036,7 +1060,8 @@ async function resolveRequirementLinks(
     if (!info.link) {
       const scopes = r.requirement_applicability.map((a) => a.scope)
       if (needAllProducts && scopes.includes('all_products')) {
-        info.link = `/product/${CIGARETTES_PRODUCT_ID}?req=${r.id}`
+        // Сигареты скрыты с витрины (is_active=false) — фолбэк ведёт на молоко
+        info.link = `/product/${MILK_PRODUCT_ID}?req=${r.id}`
         info.targetName = ru.cabinet.lawyer.queueAllProducts
       } else if (needAllServices && scopes.includes('all_services')) {
         info.link = `/service/${PHARMACY_SERVICE_ID}?req=${r.id}`
@@ -1563,12 +1588,14 @@ export async function updateProfileReal(
 export async function submitSubscriptionRequest(input: {
   fullName: string
   contact: string
+  email: string
   company?: string
   userId?: string
 }): Promise<void> {
   const { error } = await supabase.from('subscription_requests').insert({
     full_name: input.fullName,
     contact: input.contact,
+    email: input.email,
     company: input.company || null,
     user_id: input.userId ?? null,
   })
@@ -1598,6 +1625,7 @@ export interface SubscriptionRequestRow {
   id: string
   fullName: string
   contact: string
+  email: string | null
   company: string | null
   status: string
   note: string | null
@@ -1607,13 +1635,14 @@ export interface SubscriptionRequestRow {
 export async function fetchSubscriptionRequests(): Promise<SubscriptionRequestRow[]> {
   const { data } = await supabase
     .from('subscription_requests')
-    .select('id, full_name, contact, company, status, note, created_at')
+    .select('id, full_name, contact, email, company, status, note, created_at')
     .order('created_at', { ascending: false })
     .limit(100)
   return (data ?? []).map((r) => ({
     id: r.id,
     fullName: r.full_name,
     contact: r.contact,
+    email: r.email,
     company: r.company,
     status: r.status,
     note: r.note,
