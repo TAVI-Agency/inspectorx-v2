@@ -7,7 +7,7 @@
  * Компоненты сюда не заходят напрямую — только через `src/data/hooks.ts`.
  */
 import { supabase } from '@/lib/supabase'
-import { prepareImageForUpload } from '@/lib/image'
+import { preparePhotoForUpload } from '@/lib/image'
 import { ru } from '@/i18n/ru'
 import type { Database } from '@/lib/database.types'
 import type { ReviewVerdict } from './types'
@@ -228,17 +228,16 @@ export async function uploadAndRequestInspection(input: {
   if (!auth.user) throw new Error('not_authenticated')
   const uid = auth.user.id
   const bucket = input.sourceKind === 'master_pdf' ? 'packaging-artwork' : 'packaging-photos'
-  const ext = input.sourceKind === 'master_pdf' ? 'pdf' : 'jpg'
   const paths: string[] = []
   const buffers: ArrayBuffer[] = []
   for (let i = 0; i < input.files.length; i += 1) {
-    const blob =
+    const { blob, ext, contentType } =
       input.sourceKind === 'photo'
-        ? await prepareImageForUpload(input.files[i])
-        : input.files[i]
+        ? await preparePhotoForUpload(input.files[i])
+        : { blob: input.files[i], ext: 'pdf', contentType: 'application/pdf' }
     const buffer = await blob.arrayBuffer()
     const path = objectPath(uid, await sha256Hex(buffer), ext)
-    const { error } = await supabase.storage.from(bucket).upload(path, blob)
+    const { error } = await supabase.storage.from(bucket).upload(path, blob, { contentType })
     if (error && !isDuplicateUploadError(error)) throw error
     paths.push(path)
     buffers.push(buffer)
@@ -423,10 +422,12 @@ export async function requestRetake(
   const paths: string[] = []
   const buffers: ArrayBuffer[] = []
   for (let i = 0; i < files.length; i += 1) {
-    const blob = await prepareImageForUpload(files[i])
+    const { blob, ext, contentType } = await preparePhotoForUpload(files[i])
     const buffer = await blob.arrayBuffer()
-    const path = objectPath(uid, await sha256Hex(buffer), 'jpg')
-    const { error } = await supabase.storage.from('packaging-photos').upload(path, blob)
+    const path = objectPath(uid, await sha256Hex(buffer), ext)
+    const { error } = await supabase.storage
+      .from('packaging-photos')
+      .upload(path, blob, { contentType })
     if (error && !isDuplicateUploadError(error)) throw error
     paths.push(path)
     buffers.push(buffer)
