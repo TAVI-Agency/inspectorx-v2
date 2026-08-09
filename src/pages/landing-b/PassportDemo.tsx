@@ -4,167 +4,149 @@ import { ArrowRight, ChevronRight, ExternalLink, Lock } from 'lucide-react'
 import { CATEGORY_LABEL, type RequirementCategory } from '@/data/taxonomy'
 
 /**
- * Живой «Паспорт товара» — витрина реальных данных v1.
- * Всё содержимое взято из миграции 20260711130000_v1_content:
- * товар ТН ВЭД 2404 11 000 1 (стики, alias «IQOS»), реальные счётчики
- * требований по операциям, реальные названия этапов и требований.
+ * Живой «Паспорт услуги» — витрина реальных данных.
+ * Всё содержимое — из опубликованных карточек услуги «Розничная аптека»
+ * (ОКЭД 47.73): реальные названия требований, этапы жизни бизнеса и счётчики.
  */
 
 interface DemoReq {
   title: string
   cat: RequirementCategory
 }
-interface DemoStage {
-  index: number // sort_order этапа из lifecycle_stages
+interface DemoGroup {
+  index: number
   name: string
   reqs: DemoReq[]
 }
 interface DemoView {
-  stages: DemoStage[]
+  groups: DemoGroup[]
   shown: number // сколько требований показано в демо
 }
 
-type OpKey = 'product' | 'realization' | 'import' | 'export'
-type TransportKey = 'avto' | 'train'
+type StageKey = 'start' | 'premises' | 'operations' | 'inspections' | 'changes' | 'closure'
 
-const OPS: { key: OpKey; label: string; count: number }[] = [
-  { key: 'product', label: 'Продукт', count: 51 },
-  { key: 'realization', label: 'Реализация', count: 7 },
-  { key: 'import', label: 'Импорт', count: 75 },
-  { key: 'export', label: 'Экспорт', count: 32 },
+const STAGES: { key: StageKey; label: string; count: number }[] = [
+  { key: 'start', label: 'Старт и допуск', count: 5 },
+  { key: 'premises', label: 'Помещение и запуск', count: 5 },
+  { key: 'operations', label: 'Текущая работа', count: 14 },
+  { key: 'inspections', label: 'Проверки', count: 4 },
+  { key: 'changes', label: 'Изменения и продление', count: 3 },
+  { key: 'closure', label: 'Прекращение', count: 4 },
 ]
 
-const VIEWS: Record<'product' | 'realization' | 'import.avto' | 'import.train' | 'export', DemoView> = {
-  product: {
-    shown: 6,
-    stages: [
+const VIEWS: Record<StageKey, DemoView> = {
+  start: {
+    shown: 4,
+    groups: [
       {
         index: 1,
-        name: 'Технические требования и безопасность',
+        name: 'Лицензирование аптеки',
         reqs: [
-          { title: 'Обязательное соответствие регламентам', cat: 'tbt' },
-          { title: 'Запрещенные ингредиенты в производстве', cat: 'tbt' },
+          { title: 'Получить лицензию на розничную реализацию лекарственных средств', cat: 'licensing' },
+          { title: 'Назначить заведующего аптекой с высшим фармацевтическим образованием', cat: 'licensing' },
         ],
       },
       {
-        index: 4,
-        name: 'Маркировка и защита прав потребителей',
+        index: 2,
+        name: 'Допуск к деятельности',
         reqs: [
-          { title: 'Медицинское предупреждение', cat: 'marking' },
-          { title: 'Информация о производителе и импортере', cat: 'marking' },
-        ],
-      },
-      {
-        index: 6,
-        name: 'Оценка соответствия, декларация и сертификация',
-        reqs: [
-          { title: 'Декларация или сертификация', cat: 'tbt' },
-          { title: 'Отбор образцов продукции', cat: 'tbt' },
+          { title: 'Проверить, какой режим допуска нужен вашему виду деятельности', cat: 'licensing' },
+          { title: 'Проверить персонал по реестру недобросовестных фармацевтических работников', cat: 'licensing' },
         ],
       },
     ],
   },
-  realization: {
+  premises: {
+    shown: 3,
+    groups: [
+      {
+        index: 1,
+        name: 'Санитарные нормы помещения',
+        reqs: [
+          { title: 'Привести помещение аптеки в соответствие с СанПиН', cat: 'sps' },
+          { title: 'Организовать хранение лекарств по санитарным правилам', cat: 'sps' },
+        ],
+      },
+      {
+        index: 2,
+        name: 'Касса и приём платежей',
+        reqs: [
+          { title: 'Установить онлайн-кассу с контролем рецептурного отпуска и платёжный терминал', cat: 'fiscal' },
+        ],
+      },
+    ],
+  },
+  operations: {
+    shown: 5,
+    groups: [
+      {
+        index: 1,
+        name: 'Маркировка лекарств',
+        reqs: [{ title: 'Продавать только маркированные лекарства (Asl Belgisi)', cat: 'marking' }],
+      },
+      {
+        index: 2,
+        name: 'Санитария и хранение',
+        reqs: [
+          { title: 'Проводить обязательные медицинские осмотры персонала', cat: 'sps' },
+          { title: 'Списывать и уничтожать просроченные лекарства', cat: 'sps' },
+        ],
+      },
+      {
+        index: 3,
+        name: 'Цены и учёт',
+        reqs: [
+          { title: 'Соблюдать предельные наценки на рецептурные лекарства', cat: 'fiscal' },
+          { title: 'Указывать верный код ИКПУ в каждом чеке', cat: 'fiscal' },
+        ],
+      },
+    ],
+  },
+  inspections: {
     shown: 2,
-    stages: [
+    groups: [
       {
-        index: 33,
-        name: 'Требования для выпуска в обращение',
-        reqs: [{ title: 'Средство цифровой маркировки', cat: 'marking' }],
-      },
-      { index: 34, name: 'Ценообразование', reqs: [] },
-      {
-        index: 36,
-        name: 'Правила розничной торговли',
-        reqs: [{ title: 'Возрастное ограничение', cat: 'licensing' }],
-      },
-    ],
-  },
-  'import.avto': {
-    shown: 4,
-    stages: [
-      {
-        index: 7,
-        name: 'Регистрация импортного контракта',
-        reqs: [{ title: 'Зарегистрировать внешнеторговый контракт в ЕЭИСВО', cat: 'currency' }],
-      },
-      {
-        index: 9,
-        name: 'Пересечение границы',
-        reqs: [{ title: 'Заполнить импортную таможенную декларацию', cat: 'customs' }],
-      },
-      {
-        index: 12,
-        name: 'Санитарно-эпидемиологическое заключение',
+        index: 1,
+        name: 'Проверки ведомств',
         reqs: [
-          { title: 'Доставить образцы продукции в лабораторию', cat: 'sps' },
-          { title: 'Получить санитарно-эпидемиологическое заключение', cat: 'sps' },
+          { title: 'Проходить проверки фарминспекции Агентства', cat: 'licensing' },
+          { title: 'Проходить проверки Санэпидкомитета', cat: 'sps' },
         ],
       },
     ],
   },
-  'import.train': {
-    shown: 4,
-    stages: [
+  changes: {
+    shown: 2,
+    groups: [
       {
-        index: 15,
-        name: 'Подготовка к доставке груза ж/д транспортом',
-        reqs: [{ title: 'Заключить онлайн соглашение с ТехПД и договор с РЖУ', cat: 'customs' }],
-      },
-      {
-        index: 20,
-        name: 'Помещение груза на таможенный склад',
+        index: 1,
+        name: 'Продление и переоформление',
         reqs: [
-          { title: 'Заключить договор с таможенным складом', cat: 'customs' },
-          { title: 'Внести предоплату за услуги таможенного склада', cat: 'currency' },
+          { title: 'Продлевать лицензию по истечении срока действия', cat: 'licensing' },
+          { title: 'Переоформить лицензию при смене адреса или руководителя', cat: 'licensing' },
         ],
-      },
-      {
-        index: 21,
-        name: 'Организация возврата пустых вагонов',
-        reqs: [{ title: 'Организовать возврат порожных вагонов', cat: 'customs' }],
       },
     ],
   },
-  export: {
-    shown: 4,
-    stages: [
+  closure: {
+    shown: 2,
+    groups: [
       {
-        index: 23,
-        name: 'Получение авианакладной',
+        index: 1,
+        name: 'Закрытие аптеки',
         reqs: [
-          { title: 'Заключить договор с агентом по продаже авиационных грузовых перевозок', cat: 'customs' },
-        ],
-      },
-      {
-        index: 25,
-        name: 'Договор с аэропортом на обработку груза',
-        reqs: [{ title: 'Запросить допуск на грузовой склад аэропорта', cat: 'customs' }],
-      },
-      {
-        index: 27,
-        name: 'Таможенное оформление',
-        reqs: [
-          { title: 'Заполнить грузовую таможенную декларацию', cat: 'customs' },
-          { title: 'Получить разрешение таможни на выпуск груза', cat: 'customs' },
+          { title: 'Уведомить лицензиара о прекращении деятельности', cat: 'licensing' },
+          { title: 'Распорядиться остатками лекарств при закрытии по правилам', cat: 'licensing' },
         ],
       },
     ],
   },
 }
 
-const TRANSPORTS_BY_OP: Partial<Record<OpKey, { key: TransportKey; label: string; count: number }[]>> = {
-  import: [
-    { key: 'avto', label: 'Авто · 36', count: 36 },
-    { key: 'train', label: 'Поезд · 39', count: 39 },
-  ],
-}
-
-const AUTOPLAY_ORDER: OpKey[] = ['product', 'realization', 'import', 'export']
+const AUTOPLAY_ORDER: StageKey[] = ['start', 'premises', 'operations', 'inspections', 'changes', 'closure']
 
 export function PassportDemo() {
-  const [op, setOp] = useState<OpKey>('product')
-  const [transport, setTransport] = useState<TransportKey>('avto')
+  const [stage, setStage] = useState<StageKey>('start')
   const [openReq, setOpenReq] = useState<string | null>(null)
   const [engaged, setEngaged] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -175,17 +157,15 @@ export function PassportDemo() {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const id = window.setInterval(() => {
       if (document.hidden) return
-      setOp((prev) => AUTOPLAY_ORDER[(AUTOPLAY_ORDER.indexOf(prev) + 1) % AUTOPLAY_ORDER.length])
+      setStage((prev) => AUTOPLAY_ORDER[(AUTOPLAY_ORDER.indexOf(prev) + 1) % AUTOPLAY_ORDER.length])
     }, 4200)
     return () => window.clearInterval(id)
   }, [engaged])
 
   const engage = () => setEngaged(true)
 
-  const viewKey = op === 'import' ? (`import.${transport}` as const) : op
-  const view = VIEWS[viewKey]
-  const opMeta = OPS.find((o) => o.key === op)!
-  const transports = TRANSPORTS_BY_OP[op]
+  const view = VIEWS[stage]
+  const stageMeta = STAGES.find((s) => s.key === stage)!
 
   let reqIndex = 0
 
@@ -193,72 +173,47 @@ export function PassportDemo() {
     <div className="lb-passport" ref={rootRef} onPointerDown={engage} onPointerEnter={engage} onKeyDown={engage}>
       <div className="lb-passport-head">
         <div>
-          <div className="lb-passport-kicker">Паспорт товара · пример из базы</div>
-          <h3 className="lb-passport-title">Табачные стики для нагревания (IQOS)</h3>
+          <div className="lb-passport-kicker">Паспорт услуги · пример из базы</div>
+          <h3 className="lb-passport-title">Розничная аптека</h3>
         </div>
-        <span className="lb-passport-code">ТН ВЭД 2404 11 000 1</span>
+        <span className="lb-passport-code">ОКЭД 47.73</span>
       </div>
 
       <div className="lb-passport-body">
-        <div className="lb-ops" role="tablist" aria-label="Операции">
-          <div className="lb-ops-label">Операция</div>
-          {OPS.map((o) => (
+        <div className="lb-ops" role="tablist" aria-label="Этапы жизни бизнеса">
+          <div className="lb-ops-label">Этап</div>
+          {STAGES.map((s) => (
             <button
-              key={o.key}
+              key={s.key}
               role="tab"
-              aria-selected={op === o.key}
+              aria-selected={stage === s.key}
               className="lb-op"
               onClick={() => {
                 engage()
-                setOp(o.key)
+                setStage(s.key)
                 setOpenReq(null)
               }}
             >
-              {o.label}
-              <span className="lb-op-count">{o.count}</span>
+              {s.label}
+              <span className="lb-op-count">{s.count}</span>
             </button>
           ))}
-          <div className="lb-ops-foot">Также в базе: реэкспорт — 16 и реимпорт — 22 требования.</div>
+          <div className="lb-ops-foot">Такой же маршрут — у услуги «Кафе» (ОКЭД 56.10).</div>
         </div>
 
         <div className="lb-stage-pane">
-          {transports && (
-            <div className="lb-transports" role="tablist" aria-label="Вид транспорта">
-              {transports.map((t) => (
-                <button
-                  key={t.key}
-                  role="tab"
-                  aria-selected={transport === t.key}
-                  className="lb-transport"
-                  onClick={() => {
-                    engage()
-                    setTransport(t.key)
-                    setOpenReq(null)
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div key={viewKey} className="lb-route">
+          <div key={stage} className="lb-route">
             <span className="lb-thread" aria-hidden="true" />
-            {view.stages.map((stage) => (
-              <div className="lb-stage" key={stage.index}>
+            {view.groups.map((group) => (
+              <div className="lb-stage" key={group.index}>
                 <div className="lb-stage-name lb-anim-in" style={{ '--d': reqIndex * 60 } as React.CSSProperties}>
                   <span className="lb-station" style={{ '--d': reqIndex * 60 } as React.CSSProperties}>
-                    {String(stage.index).padStart(2, '0')}
+                    {String(group.index).padStart(2, '0')}
                   </span>
-                  {stage.name}
+                  {group.name}
                 </div>
-                {stage.reqs.length === 0 && (
-                  <div className="lb-stage-empty lb-anim-in" style={{ '--d': (reqIndex += 1) * 60 } as React.CSSProperties}>
-                    <Lock size={13} aria-hidden /> Требования этапа — в полном паспорте в каталоге
-                  </div>
-                )}
-                {stage.reqs.map((req) => {
-                  const id = `${viewKey}:${req.title}`
+                {group.reqs.map((req) => {
+                  const id = `${stage}:${req.title}`
                   const open = openReq === id
                   reqIndex += 1
                   return (
@@ -305,7 +260,10 @@ export function PassportDemo() {
                           <div className="lb-detail-cite">
                             <div className="lb-detail-item">
                               <h4>Цитата закона</h4>
-                              <p>Дословный фрагмент акта — с пунктом и работающей ссылкой. Пример из базы:</p>
+                              <p>
+                                Дословный фрагмент акта — с пунктом и работающей ссылкой на lex.uz. Так выглядит
+                                готовая карточка (пример по другому товару из базы, уже проверенному):
+                              </p>
                             </div>
                             <a
                               className="lb-cite-ref"
@@ -330,10 +288,10 @@ export function PassportDemo() {
 
       <div className="lb-passport-foot">
         <span>
-          Показано {view.shown} из {opMeta.count} требований операции «{opMeta.label.toLowerCase()}»
+          Показано {view.shown} из {stageMeta.count} требований этапа «{stageMeta.label.toLowerCase()}»
         </span>
-        <Link to="/catalog">
-          Открыть полный паспорт в каталоге
+        <Link to="/service/47d1ce01-8c19-1ba7-7e5f-8b4681a68a29">
+          Открыть полный паспорт услуги
           <ArrowRight size={15} aria-hidden />
         </Link>
       </div>

@@ -42,7 +42,8 @@ import {
   fetchPassportReal,
   fetchRequirementsReal,
   fetchReviewStatsReal,
-  fetchServiceDocumentsCountReal,
+  fetchDetailsMetricsReal,
+  type DetailsMetrics,
   fetchServicePassportReal,
   fetchServiceRequirementsReal,
   fetchTelemetryReal,
@@ -116,20 +117,12 @@ export async function search(query: string, kind: SearchKind): Promise<SearchHit
   return hits.slice(0, 8)
 }
 
-/** Примеры в реестре: 2 товара + 2 услуги. Счётчики статичны для витрины
- *  (177 = published-строки сигарет после фильтра мусора/дублей переноса v1). */
+/** Примеры в реестре: 1 товар + 2 услуги. Счётчики статичны для витрины.
+ *  Товар «Стики IQOS» скрыт с витрины (оборот нагреваемого табака запрещён
+ *  ЗРУ-1098, см. миграцию 20260817110000_hide_iqos_product.sql) — из списка
+ *  примеров убран, но CIGARETTES_PRODUCT_ID остаётся в коде: он всё ещё
+ *  нужен для оверлея изменений и портфеля реальных подписчиков. */
 export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
-  {
-    id: CIGARETTES_PRODUCT_ID,
-    kind: 'product',
-    displayName: 'Стики IQOS',
-    officialName:
-      'продукция, содержащая «гомогенизированный» или «восстановленный» табак',
-    code: '2404110001',
-    codeKind: 'hs',
-    categoryName: 'Табак и промышленные заменители табака',
-    requirementsCount: 177,
-  },
   {
     id: MILK_PRODUCT_ID,
     kind: 'product',
@@ -247,14 +240,21 @@ function extractMaxFine(text: string | undefined): Fine | null {
   return best
 }
 
+/** Макс. штраф по любому набору текстов: открытые sanction_summary уровня 0
+ *  и (подписчику) тексты санкций из закрытого слоя details. */
+function maxFineFromTexts(texts: Array<string | undefined>): Fine | null {
+  let max: Fine | null = null
+  for (const t of texts) {
+    const fine = extractMaxFine(t)
+    if (fine && (!max || fine.amount > max.amount)) max = fine
+  }
+  return max
+}
+
 /** Макс. санкция из ОТКРЫТЫХ строк уровня 0 — то, что аноним и так видит.
  *  Закрывать метрику, когда суммы напечатаны в списке, — ложь интерфейса. */
 function maxSanctionFromRows(rows: RequirementRow[], country: CountryCode): string | null {
-  let max: Fine | null = null
-  for (const r of rows) {
-    const fine = extractMaxFine(r.sanctionSummary)
-    if (fine && (!max || fine.amount > max.amount)) max = fine
-  }
+  const max = maxFineFromTexts(rows.map((r) => r.sanctionSummary))
   return max ? formatFine(max, country) : null
 }
 
@@ -262,19 +262,28 @@ function metricsFor(
   productId: string,
   rows: RequirementRow[],
   ctx: DataCtx,
+  details: DetailsMetrics | null = null,
 ): SummaryMetrics {
   const subscriber = effectiveSubscriber(ctx)
   const mock = mockMetrics[productId]
+
+  // «Документов собрать»: сначала честный подсчёт из details (RLS отдаёт их
+  // только подписчику); мок-оверлей — для демо-товаров, у которых details
+  // в БД нет. Анониму — замок.
   let documents: Gated<number> = locked
-  if (subscriber && mock) documents = ok(mock.documents)
+  if (details) documents = ok(details.documents)
+  else if (subscriber && mock) documents = ok(mock.documents)
 
   // metricsFor зовётся только для УЗ-ветки бандла (previewMetrics — для KZ/AE)
-  const openMax = maxSanctionFromRows(rows, 'UZ')
-  let maxSanction: Gated<string> = openMax
-    ? ok(openMax)
-    : subscriber && mock
-      ? ok(mock.maxSanction)
-      : locked
+  const fine = maxFineFromTexts([
+    ...rows.map((r) => r.sanctionSummary),
+    ...(details?.sanctionTexts ?? []),
+  ])
+  let maxSanction: Gated<string>
+  if (fine) maxSanction = ok(formatFine(fine, 'UZ'))
+  else if (subscriber && mock) maxSanction = ok(mock.maxSanction)
+  else if (details) maxSanction = ok('—') // подписчик внутри details, сумм в данных нет — честный прочерк, не замок
+  else maxSanction = locked
 
   return {
     requirements: rows.length,
@@ -400,11 +409,14 @@ export async function fetchProductBundle(
   }
 
   const rows = applyChangeOverlay(productId, uzList.rows)
+  // Плитки «Документов собрать»/«Макс. санкция» — из закрытого слоя details:
+  // подписчику RLS отдаёт строки, анониму — нет (метрика остаётся под замком)
+  const details = await fetchDetailsMetricsReal(rows.map((r) => r.id))
   return {
     passport: { ...passport, verifiedAt: uzList.verifiedAt, countries },
     rows,
     stages: stagesFromRows(rows),
-    metrics: metricsFor(productId, rows, ctx),
+    metrics: metricsFor(productId, rows, ctx, details),
   }
 }
 
@@ -476,12 +488,20 @@ export async function fetchServiceBundle(
   const list = await fetchServiceRequirementsReal(passport.okedCode ?? null)
   const rows = list.rows
 
-  // Документы: считаем из details — RLS отдаёт их только подписчику
-  const docsCount = await fetchServiceDocumentsCountReal(rows.map((r) => r.id))
-  const documents: Gated<number> = docsCount === null ? locked : ok(docsCount)
+  // Документы и санкции: считаем из details — RLS отдаёт их только подписчику
+  const details = await fetchDetailsMetricsReal(rows.map((r) => r.id))
+  const documents: Gated<number> = details === null ? locked : ok(details.documents)
 
   // Услуги пока UZ-only (ADR-0004: многострановый пока только товарный каталог)
-  const openMax = maxSanctionFromRows(rows, 'UZ')
+  const fine = maxFineFromTexts([
+    ...rows.map((r) => r.sanctionSummary),
+    ...(details?.sanctionTexts ?? []),
+  ])
+  const maxSanction: Gated<string> = fine
+    ? ok(formatFine(fine, 'UZ'))
+    : details
+      ? ok('—') // подписчик внутри details, сумм в данных нет — прочерк, не замок
+      : locked
   return {
     passport: { ...passport, verifiedAt: list.verifiedAt },
     rows,
@@ -489,7 +509,7 @@ export async function fetchServiceBundle(
     metrics: {
       requirements: rows.length,
       documents,
-      maxSanction: openMax ? ok(openMax) : locked,
+      maxSanction,
       changes30d: 0, // конвейер изменений для услуг ещё не наполнялся
     },
   }
@@ -650,12 +670,11 @@ const PRODUCT_NAMES: Record<string, { name: string; hs: string }> = {
   [PARACETAMOL_PRODUCT_ID]: { name: 'Парацетамол', hs: '3004900002' },
 }
 
-/** Демо-портфель для кабинета без chosen_products (мок-подписчик без входа) */
-export const demoPortfolioIds = [
-  CIGARETTES_PRODUCT_ID,
-  MILK_PRODUCT_ID,
-  PARACETAMOL_PRODUCT_ID,
-]
+/** Демо-портфель для кабинета без chosen_products (мок-подписчик без входа).
+ *  Сигареты (IQOS) сюда намеренно не входят: товар скрыт с витрины
+ *  (is_active=false), демо-портфель не должен показывать анонимному
+ *  посетителю карточки/уведомления по нему. */
+export const demoPortfolioIds = [MILK_PRODUCT_ID, PARACETAMOL_PRODUCT_ID]
 
 export function buildPortfolio(productIds: string[], feed: ChangeCard[]): PortfolioItem[] {
   return productIds.map((productId) => {

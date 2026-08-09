@@ -22,7 +22,7 @@ const FAQ_ITEMS = [
   ],
   [
     'Как найти требования к своему товару?',
-    'Найдите товар в каталоге по названию или коду ТН ВЭД (например, 2404 11 000 1), выберите операцию — производство, реализация, импорт или экспорт — и получите чек-лист требований по этапам.',
+    'Найдите товар в каталоге по названию или коду ТН ВЭД (например, 0401 20 110 0 — молоко), а услугу — по коду ОКЭД (например, 47.73 — аптека), и получите чек-лист требований по этапам.',
   ],
   [
     'Откуда данные и можно ли им доверять?',
@@ -43,10 +43,10 @@ const FAQ_ITEMS = [
 ] as const
 
 const STATS = [
-  { num: '261', label: 'товар в базе' },
-  { num: '203', label: 'требования' },
-  { num: '36', label: 'этапов контроля' },
-  { num: '51', label: 'цитата закона' },
+  { num: '2', label: 'отрасли под ключ' },
+  { num: '62', label: 'требования' },
+  { num: '39', label: 'актов законодательства' },
+  { num: '7', label: 'ведомств-регуляторов' },
 ] as const
 
 function useRevealObserver() {
@@ -90,7 +90,7 @@ function Header() {
           Инспектор<b>X</b>
         </Link>
         <nav className="lb-nav" aria-label="Основная навигация">
-          <a href="#passport">Паспорт товара</a>
+          <a href="#passport">Живой пример</a>
           <a href="#how">Как это работает</a>
           <a href="#pricing">Тариф</a>
           <Link to="/login">Войти</Link>
@@ -238,11 +238,11 @@ export function LandingB() {
           <div className="lb-section-head">
             <p className="lb-eyebrow lb-reveal">Живой пример</p>
             <h2 className="lb-h2 lb-reveal" style={{ '--d': 80 } as React.CSSProperties}>
-              Паспорт товара
+              Паспорт вашего дела
             </h2>
             <p className="lb-lede lb-reveal" style={{ '--d': 160 } as React.CSSProperties}>
-              Один экран вместо десятков актов: выберите операцию — и увидите этапы
-              и требования именно для неё. Ниже реальные данные из базы, не макет.
+              Один экран вместо десятков актов: выберите этап — и увидите требования
+              именно для него. Ниже реальные данные из базы, не макет.
             </p>
           </div>
           <div className="lb-reveal" style={{ '--d': 240 } as React.CSSProperties}>
@@ -265,8 +265,8 @@ export function LandingB() {
               <div className="lb-step-num">01</div>
               <h3>Найдите товар</h3>
               <p>
-                По названию или коду ТН ВЭД — например, <code>2404 11 000 1</code>.
-                В базе уже 261 позиция.
+                По названию или коду — например, ОКЭД <code>47.73</code> для аптеки.
+                Каталог пополняется каждую неделю.
               </p>
             </article>
             <article className="lb-step lb-reveal" style={{ '--d': 120 } as React.CSSProperties}>
@@ -320,7 +320,7 @@ export function LandingB() {
               </a>
               <div className="lb-cite-meta">
                 Требование «Информация о сертификации» · этап «Маркировка и защита прав
-                потребителей» · товар ТН ВЭД 2404 11 000 1
+                потребителей» · дословно проверено по первоисточнику
               </div>
             </div>
 
@@ -352,7 +352,7 @@ export function LandingB() {
             ))}
           </div>
           <p className="lb-risk-note lb-reveal">
-            Восемь родов требований — по международной классификации UNCTAD NTM.
+            Требования сгруппированы по понятным категориям — от сертификации до маркировки.
           </p>
         </div>
       </section>
@@ -374,7 +374,7 @@ export function LandingB() {
               <ul className="lb-price-list">
                 <li>
                   <Check size={15} className="lb-check-ico" aria-hidden />
-                  Поиск по 261 товару — название или код ТН ВЭД
+                  Поиск по каталогу — название, ОКЭД или код ТН ВЭД
                 </li>
                 <li>
                   <Check size={15} className="lb-check-ico" aria-hidden />

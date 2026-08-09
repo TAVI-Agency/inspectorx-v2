@@ -17,11 +17,14 @@ interface AppModeCtx {
 const Ctx = createContext<AppModeCtx | null>(null)
 
 export function AppModeProvider({ children }: { children: ReactNode }) {
+  // В проде демо-режим всегда выключен: не читаем localStorage, иначе у старых
+  // посетителей с сохранённым ix-mock-subscriber=1 включится мок-вид подписчика.
   const [mockSubscriber, setState] = useState(
-    () => localStorage.getItem(KEY) === '1',
+    () => import.meta.env.DEV && localStorage.getItem(KEY) === '1',
   )
 
   const setMockSubscriber = useCallback((v: boolean) => {
+    if (!import.meta.env.DEV) return
     setState(v)
     localStorage.setItem(KEY, v ? '1' : '0')
   }, [])

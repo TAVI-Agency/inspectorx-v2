@@ -334,6 +334,8 @@ export const ru = {
     contactPlaceholder: '+998 __ ___ __ __ или @username',
     companyLabel: 'Компания',
     companyPlaceholder: 'Название компании (необязательно)',
+    emailLabel: 'Email',
+    emailPlaceholder: 'you@company.uz',
     submit: 'Отправить заявку',
     thanksTitle: 'Спасибо! Заявка принята.',
     thanksText:
@@ -342,6 +344,7 @@ export const ru = {
     validation: {
       nameRequired: 'Укажите имя',
       contactRequired: 'Укажите телефон или Telegram',
+      emailRequired: 'Укажите email — на него придёт приглашение',
     },
   },
 
@@ -477,22 +480,30 @@ export const ru = {
 
   auth: {
     loginTitle: 'Вход',
-    registerTitle: 'Регистрация',
+    loginSubtitle: 'Войдите, чтобы следить за изменениями по товарам.',
+    registerTitle: 'Заявка на доступ',
+    applicationSubtitle: 'Расскажите о себе — рассмотрим заявку и откроем доступ.',
     email: 'Email',
     password: 'Пароль',
     fullName: 'Имя',
     fullNamePlaceholder: 'Имя и фамилия',
     loginCta: 'Войти',
-    registerCta: 'Создать аккаунт',
-    switchToRegister: 'Нет аккаунта? Зарегистрируйтесь',
     switchToLogin: 'Уже есть аккаунт? Войдите',
     loginRequired: 'Войдите, чтобы следить за товарами',
     forgotPassword: 'Забыли пароль?',
+    // Подпись под формой входа: самостоятельной регистрации нет, только заявка
+    inviteOnly: {
+      notice: 'Доступ по приглашению.',
+      noAccess: 'Нет доступа?',
+      cta: 'Оставить заявку',
+    },
 
-    // Подтверждение почты после регистрации
-    confirmSentTitle: 'Проверьте почту',
-    confirmSentText: (email: string) =>
-      `Мы отправили письмо на ${email}. Перейдите по ссылке в письме, чтобы подтвердить адрес и войти.`,
+    // Заявка на доступ (/register) — владелец апрувит в Telegram, дальше письмо-приглашение
+    applicationSentTitle: 'Заявка отправлена',
+    applicationSentText:
+      'Мы рассмотрим заявку, откроем доступ и пришлём приглашение на почту.',
+
+    // Письма-ссылки: подсказка про папку «Спам» (переиспользуется на нескольких экранах)
     confirmSentSpamHint: 'Письма нет? Загляните в «Спам» — иногда оно попадает туда.',
     resend: 'Отправить письмо ещё раз',
     resendDone: 'Письмо отправлено повторно',
@@ -506,6 +517,13 @@ export const ru = {
     confirmErrorTitle: 'Ссылка не сработала',
     confirmErrorText:
       'Ссылка из письма устарела или уже была использована. Отправим новое письмо — укажите ваш email.',
+
+    // Приглашение по /auth/confirm#type=invite — владелец одобрил заявку, нужно задать пароль
+    inviteTitle: 'Добро пожаловать в InspectorX',
+    inviteText: 'Доступ открыт. Придумайте пароль для входа.',
+    inviteCta: 'Сохранить пароль и войти',
+    inviteDoneTitle: 'Пароль сохранён',
+    inviteDoneText: 'Открываем ваши товары…',
 
     // Восстановление пароля
     forgotTitle: 'Восстановление пароля',
@@ -1168,7 +1186,7 @@ export const ru = {
       eyebrow: 'Ранний доступ',
       title: 'Готовы навести порядок в требованиях?',
       lead: 'Оставьте контакт — свяжемся в течение рабочего дня, откроем полный доступ и поможем собрать портфель ваших товаров.',
-      reassurance: 'Вход не нужен. Просто телефон или Telegram.',
+      reassurance: 'Вход не нужен — просто оставьте контакты, свяжемся сами.',
       altLabel: 'Или напишите напрямую',
     },
   },

@@ -2774,6 +2774,7 @@ export type Database = {
           company: string | null
           contact: string
           created_at: string
+          email: string | null
           full_name: string
           handled_at: string | null
           id: string
@@ -2785,6 +2786,7 @@ export type Database = {
           company?: string | null
           contact: string
           created_at?: string
+          email?: string | null
           full_name: string
           handled_at?: string | null
           id?: string
@@ -2796,6 +2798,7 @@ export type Database = {
           company?: string | null
           contact?: string
           created_at?: string
+          email?: string | null
           full_name?: string
           handled_at?: string | null
           id?: string
@@ -3291,6 +3294,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      find_user_id_by_email: { Args: { p_email: string }; Returns: string }
       flag_stale_photo_inspections: { Args: never; Returns: number }
       ingest_change_event: {
         Args: { p_payload: Json; p_secret: string }
@@ -3312,7 +3316,10 @@ export type Database = {
         Args: { p_decision: string; p_review_id: string }
         Returns: undefined
       }
-      notify_admin_telegram: { Args: { message: string }; Returns: undefined }
+      notify_admin_telegram: {
+        Args: { message: string; reply_markup?: Json }
+        Returns: undefined
+      }
       photo_checklist: {
         Args: { p_level: string; p_markets?: string[]; p_product_id: string }
         Returns: {
