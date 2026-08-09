@@ -502,19 +502,33 @@ export async function fetchServicePassportReal(
   }
 }
 
-/** Метрика «документов собрать»: details закрыты RLS — анониму вернётся 0 строк → null (locked) */
-export async function fetchServiceDocumentsCountReal(
+/** Метрики закрытого слоя для плиток паспорта (товары и услуги). */
+export interface DetailsMetrics {
+  documents: number
+  sanctionTexts: string[]
+}
+
+/** Метрики из details: закрыты RLS — анониму вернётся 0 строк → null (плитки
+ *  остаются под замком). Подписчику считаем документы и собираем тексты
+ *  санкций для «Макс. санкции» — замок у оплатившего это ложь интерфейса. */
+export async function fetchDetailsMetricsReal(
   requirementIds: string[],
-): Promise<number | null> {
+): Promise<DetailsMetrics | null> {
   if (requirementIds.length === 0) return null
   const { data } = await supabase
     .from('requirement_details')
-    .select('documents')
+    .select('documents, sanctions')
     .in('requirement_id', requirementIds)
   if (!data || data.length === 0) return null
   let count = 0
-  for (const row of data) count += parseDocuments(row.documents).length
-  return count
+  const sanctionTexts: string[] = []
+  for (const row of data) {
+    count += parseDocuments(row.documents).length
+    for (const s of parseSanctions(row.sanctions)) {
+      sanctionTexts.push([s.text, s.extra].filter(Boolean).join(' '))
+    }
+  }
+  return { documents: count, sanctionTexts }
 }
 
 // ── Матрица сравнения стран (Задача 32) ─────────────────────────────
