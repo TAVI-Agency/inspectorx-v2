@@ -120,16 +120,18 @@ export default withVisionGuards(async function handler(
     if (dims) referenceDimensionsMm = { width_mm: dims.width_mm, height_mm: dims.height_mm }
   }
 
-  // p_reason у RPC — необязательный аргумент со значением по умолчанию null,
-  // поэтому «причины нет» передаётся не null-ом, а отсутствием ключа
-  // (JSON.stringify выкидывает undefined).
+  // p_reason у RPC — необязательный аргумент со значением по умолчанию null:
+  // «причины нет» передаём явным null-ом (JSON.stringify его не выкидывает,
+  // в отличие от undefined) — обе перегрузки finalize_photo_inspection
+  // принимают этот ключ.
   //
   // degradedMode передаётся, только когда он ЕСТЬ (typeof !== 'undefined'):
   // ключ p_degraded_mode в теле RPC — это то, что отличает вызов ПЯТИПАРАМЕТРОВОЙ
   // перегрузки finalize_photo_inspection (20260817100000_degraded_half_quota.sql,
   // половина единицы квоты при "local_only") от исходной четырёхпараметровой
-  // (Волна 1) — PostgREST резолвит перегрузку по числу именованных аргументов,
-  // и лишний ключ здесь звал бы не ту функцию.
+  // (Волна 1), у которой такого параметра нет вовсе — PostgREST резолвит
+  // перегрузку по именованным аргументам, и лишний/недостающий ключ
+  // p_degraded_mode однозначно выбирает нужную функцию.
   const finalize = (
     outcome: 'done' | 'failed',
     reason: string | null,
@@ -139,7 +141,7 @@ export default withVisionGuards(async function handler(
     db.rpc('finalize_photo_inspection', {
       p_inspection_id: inspectionId,
       p_outcome: outcome,
-      p_reason: reason ?? undefined,
+      p_reason: reason,
       p_payload: (payload ?? null) as never,
       ...(degradedMode !== undefined ? { p_degraded_mode: degradedMode } : {}),
     } as never)
