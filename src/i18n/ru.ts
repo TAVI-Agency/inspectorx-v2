@@ -791,6 +791,8 @@ export const ru = {
     sourceLabel: 'Источник',
     counterViolationsN: (n: number) => `Нарушений: ${n}`,
     counterCheckedOf: (decided: number, checked: number) => `${decided} из ${checked}`,
+    /** Счётчик схлопнутых одинаковых причин (groupByReason, report-utils.ts) — «× N» рядом с текстом. */
+    countTimes: (n: number) => `× ${n}`,
     counterNeedsHumanN: (n: number) => `Требует человека: ${n}`,
     sourceMasterPdf: (pages: number) => `${pages} стр.`,
     sourcePhotoCoverage: (have: number, of: number) => `покрытие: ${have} граней из ${of}`,
