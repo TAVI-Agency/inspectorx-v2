@@ -161,7 +161,6 @@ export function CPackagingUpload({
             type="file"
             accept="image/*,.heic,.heif"
             multiple
-            capture="environment"
             className="hidden"
             onChange={(e) => {
               addPhotos(e.target.files)
