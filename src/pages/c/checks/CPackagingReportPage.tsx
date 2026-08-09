@@ -41,9 +41,11 @@ import { cn } from '@/lib/utils'
 import {
   decidedByLabel,
   faceLabel,
+  groupByReason,
   readerCoverageSummary,
   severityLabel,
   splitFindings,
+  type ReasonGroup,
 } from './report-utils'
 import { CCard, CEyebrow, CStatTile, CountUp } from '../ui'
 import { CVerdictChip } from '../CLawyerReviews'
@@ -165,9 +167,11 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
 
   return (
     <div className="space-y-8">
-      {/* Наверху — четыре числа, без процентной оценки (план §7) */}
+      {/* Наверху — короткая сводка числами, без процентной оценки (план §7).
+          Числа те же предикаты, что и списки ниже: needsHuman — needsHumanFinding
+          (splitFindings), notCheckable — граница метода (список 3). */}
       <div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <CStatTile
             label={t.violationsLabel}
             tone={counters.violations > 0 ? 'sanction' : 'positive'}
@@ -180,7 +184,12 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
             index={1}
           />
           <CStatTile label={t.needsHumanLabel} value={<CountUp value={counters.needsHuman} />} index={2} />
-          <CStatTile label={t.sourceLabel} value={sourceKindWord} hint={sourceHint} index={3} />
+          <CStatTile
+            label={t.notCheckableLabel}
+            value={<CountUp value={lists.notCheckable.length} />}
+            index={3}
+          />
+          <CStatTile label={t.sourceLabel} value={sourceKindWord} hint={sourceHint} index={4} />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">{t.coveragePdfNote}</p>
       </div>
@@ -261,6 +270,7 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
                 revision={inspection.revision}
                 surface={g.surface}
                 findings={g.findings}
+                sourceKind={sourceKind}
               />
             ))}
           </div>
@@ -272,27 +282,28 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
         onOpenChange={setFactDialogOpen}
       />
 
-      {/* Список 3 — граница метода */}
+      {/* Список 3 — граница метода. Одинаковые причины схлопнуты в одну строку
+          со счётчиком «× N» (план фотоконтроля волны 2, Задача A, п.2). */}
       <Section title={t.reportNotCheckable} count={lists.notCheckable.length}>
         {lists.notCheckable.length === 0 ? (
           <EmptyNote />
         ) : (
           <div className="space-y-2">
-            {lists.notCheckable.map((n) => (
-              <NotCheckableRow key={n.id} row={n} />
+            {groupByReason(lists.notCheckable, (n) => n.reason).map((g) => (
+              <NotCheckableRow key={g.reason} group={g} />
             ))}
           </div>
         )}
       </Section>
 
-      {/* Список 4 — без эталона */}
+      {/* Список 4 — без эталона, та же группировка причин */}
       <Section title={t.reportNoGold} count={lists.noGold.length}>
         {lists.noGold.length === 0 ? (
           <EmptyNote />
         ) : (
           <div className="space-y-2">
-            {lists.noGold.map((n) => (
-              <NotCheckableRow key={n.id} row={n} />
+            {groupByReason(lists.noGold, (n) => n.reason).map((g) => (
+              <NotCheckableRow key={g.reason} group={g} />
             ))}
           </div>
         )}
@@ -502,12 +513,20 @@ function FindingCard({
   )
 }
 
-function NotCheckableRow({ row }: { row: PhotoNotCheckableRow }) {
+function NotCheckableRow({ group }: { group: ReasonGroup<PhotoNotCheckableRow> }) {
+  const ruleRefs = [...new Set(group.items.map((r) => r.rule_ref).filter(Boolean))]
   return (
     <CCard className="p-3.5">
-      <p className="text-sm">{row.reason}</p>
+      <p className="text-sm">
+        {group.reason}
+        {group.count > 1 && (
+          <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+            {t.countTimes(group.count)}
+          </span>
+        )}
+      </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        {t.ruleRefLabel}: {row.rule_ref || '—'}
+        {t.ruleRefLabel}: {ruleRefs.length > 0 ? ruleRefs.join(', ') : '—'}
       </p>
     </CCard>
   )
@@ -518,11 +537,13 @@ function RetakeGroup({
   revision,
   surface,
   findings,
+  sourceKind,
 }: {
   inspectionId: string
   revision: number
   surface: string
   findings: PhotoFindingRow[]
+  sourceKind: 'photo' | 'master_pdf'
 }) {
   const navigate = useNavigate()
   const retake = useRetake()
@@ -530,6 +551,8 @@ function RetakeGroup({
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const limitReached = revision >= 3
+  const isPdf = sourceKind === 'master_pdf'
+  const grouped = groupByReason(findings, (f) => f.message || f.rule_ref)
 
   async function submit(list: FileList | null) {
     if (!list || list.length === 0) return
@@ -555,39 +578,48 @@ function RetakeGroup({
         {t.missingFace(faceLabel(surface), pluralize(findings.length, ...t.unitItem))}
       </p>
       <ul className="mt-2 space-y-1">
-        {findings.map((f) => (
-          <li key={f.id} className="text-xs text-muted-foreground">
-            {f.message || f.rule_ref}
+        {grouped.map((g) => (
+          <li key={g.reason} className="text-xs text-muted-foreground">
+            {g.reason}
+            {g.count > 1 && <span className="ml-1 font-medium">{t.countTimes(g.count)}</span>}
           </li>
         ))}
       </ul>
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*,.heic,.heif"
-        multiple
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          void submit(e.target.files)
-          e.target.value = ''
-        }}
-      />
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={limitReached || retake.isPending}
-          onClick={() => inputRef.current?.click()}
-        >
-          <Camera />
-          {retake.isPending ? t.uploading : t.retakeCta}
-        </Button>
-        {limitReached && <span className="text-xs text-muted-foreground">{t.revisionLimitHint}</span>}
-      </div>
-      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+      {isPdf ? (
+        // «Доснять» — про фото-кадры; для проверки по PDF-макету досъёмки не
+        // существует, вместо кнопки — подсказка запустить новую проверку.
+        <p className="mt-3 text-xs text-muted-foreground">{t.retakeNotAvailablePdfHint}</p>
+      ) : (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*,.heic,.heif"
+            multiple
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              void submit(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={limitReached || retake.isPending}
+              onClick={() => inputRef.current?.click()}
+            >
+              <Camera />
+              {retake.isPending ? t.uploading : t.retakeCta}
+            </Button>
+            {limitReached && <span className="text-xs text-muted-foreground">{t.revisionLimitHint}</span>}
+          </div>
+          {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+        </>
+      )}
     </CCard>
   )
 }

@@ -1,30 +1,23 @@
-"""Шаг 'rule' Build-конвейера (Задача 19, ADR-0003 решение 5: «критическая
-точка» Rule-maker → Verifier).
+"""Шаг 'rule' Build-конвейера (ADR-0003 решение 5: «критическая точка»
+Rule-maker -> Verifier; реактивация — Задача 10, Волна 2 фотоконтроля,
+поправка 5 к ADR-0003).
 
-## ПРИОСТАНОВЛЕН (06.08.2026, поправка 4 к ADR-0003, план фотоконтроля §3)
+## Роль реактивирована (09.08.2026)
 
-Роль Rule-maker приостановлена до этапа 6 плана фотоконтроля: шаг — БЕЗУСЛОВНЫЙ
-no-op, ни одного вызова LLM, ни одной записи в `requirement_rules` (таблица
-объявлена deprecated). Источник правды машинных правил — YAML-пакеты
+Rule-maker был приостановлен поправкой 4 к ADR-0003 (06.08.2026) до этапа 6
+плана фотоконтроля — этот этап наступил, но роль вернулась НЕ в прежнем виде.
+Источник правды машинных правил фото-чека по-прежнему YAML-пакеты
 `config/requirements/*.yaml` в `inspectorx-vision` (решение владельца по
-развилке 5, `PHOTOCONTROL_DECISIONS.md`). На этапе 6 шаг вернётся в другой
-роли: генератор PR-кандидатов в YAML-пакет, не писатель в базу. Класс
-`RuleStep._run` и его тесты сохранены под skip как эталон поведения для
-возвращения роли. Всё, что ниже по докстрингу, описывает приостановленный
-LLM-путь.
+развилке 5, `PHOTOCONTROL_DECISIONS.md`), а не таблица `requirement_rules`
+(она остаётся deprecated, шаг 'load' в неё не пишет и раньше не писал).
 
-Rule-maker — `Classifier` (`agents.py`) в роли producer'а, тир `mid`
-(ADR-0003 решение 9: «Средний = Retriever, Vision, Rule-maker»). Он читает
-ПЕРВОИСТОЧНИК нормы — `ctx.data['norm_fragment'].content`, НЕ `summary`
-(решение контроллера задачи, `task-19-brief.md`: саммари — уже упрощение
-человеку, а машинное правило обязано опираться на исходный текст, тот же
-принцип, что заставил `SummaryStep` в `steps_norm.py` читать `norm_fragment`,
-а не наоборот) — и превращает его в JSON-массив правил вида
-`{"field": "состав", "lang": "uz", "required": true}` /
-`{"barcode": "EAN-13"}`. Невалидный вывод (не JSON, не массив, пустой
-массив, элементы — не объекты) → один ретрай с указанием ошибки → всё ещё
-невалиден → `StepResult(fail)` (тот же паттерн, что и невалидный
-`category_slug` в `steps_classify.py`).
+Новая роль шага — «машина предлагает, человек утверждает»: он превращает
+текст нормы в ЧЕРНОВИК атомарной проверки в формате vision-пакета и кладёт
+его файлом-кандидатом в `config/requirements/candidates/` репозитория
+vision, рядом со сценарной фикстурой. Ничего не мёржится автоматически ни в
+пакет vision, ни тем более в базу InspectorX — `ctx.data['rules']`
+по-прежнему ВСЕГДА `[]` (контракт с шагом 'load', Задача 26, не меняется),
+новый выход — `ctx.data['rule_candidates']` (пути к файлам-кандидатам).
 
 ## Шаг применяется не ко всем айтемам
 
@@ -44,39 +37,55 @@ Rule-maker — `Classifier` (`agents.py`) в роли producer'а, тир `mid`
 ## Verifier — критическая точка (ADR-0003 решение 5)
 
 «Кривое правило = кривой фото-чек пользователю, а не просто неточный абзац»
-(ADR-0003) → верификация здесь строже, чем у любого другого шага: не один
+(ADR-0003) -> верификация здесь строже, чем у любого другого шага: не один
 общий вердикт на весь список, а ОТДЕЛЬНЫЙ вызов `Verifier` на КАЖДОЕ
 правило (вопрос «правило точно соответствует норме?», `fragment` — само
 правило, `source` — исходный текст нормы). Правило, которое `Verifier`
 отклонил, исключается; но если исключено ХОТЯ БЫ одно правило из
 сгенерированного набора — весь `StepResult` уходит в `fail`, а не только
-список без этого правила (решение контроллера: частично проверенный набор
-— не то же самое, что подтверждённый набор целиком; консервативная
-политика — выбраковка всего набора и ретрай ЦЕЛОГО шага оркестратором, не
-публикация того, что уже подтвердилось). После `MAX_STEP_RETRIES=3`
-провалов подряд `Orchestrator` эскалирует айтем в `needs_attention` —
-обычный путь `Orchestrator._run_from` (тот же принцип, что и not_found у
-'norm' в `steps_norm.py`), шаг про эскалацию ничего не знает.
+список без этого правила (консервативная политика: частично проверенный
+набор — не то же самое, что подтверждённый набор целиком; выбраковывается
+весь набор, ретрай ЦЕЛОГО шага делает оркестратор, не публикуется то, что
+уже подтвердилось). После `MAX_STEP_RETRIES=3` провалов подряд `Orchestrator`
+эскалирует айтем в `needs_attention` — обычный путь `Orchestrator._run_from`.
 
 Все вердикты (и pass, и fail) попадают в `StepResult.verdicts` независимо
 от итогового статуса шага.
 
-## Контракт `ItemContext.data`
+## Формат кандидата
 
-Вход:
-- `category_slug` (положен шагом 'category') — если не `'marking'` (в т.ч.
-  отсутствует), контракт ниже не действует, шаг сразу возвращает skip-ok;
-- `norm_fragment` (`NormFragment`, положен шагом 'norm') — обязателен при
-  `category_slug == 'marking'`; отсутствует → `StepResult(fail)` (шаг
-  'norm' ещё не отработал, тот же паттерн, что и `SummaryStep`).
+После того как Verifier подтвердил ВСЕ правила набора, каждое проходит ещё
+и локальный линтер `validate_candidate` (мини-версия vision
+`scripts/lint_params.py` — полный линтер прогонит CI vision по каталогу
+`candidates/`); дефект линтера бракует весь набор так же, как отклонение
+Verifier'а. Прошедшее правило пишется файлом
+`<candidates_dir>/<item_id>-<index>.yaml`:
 
-Выход (только при `status == 'ok'`):
-- `rules: list[{"rule": dict, "verified": True}]` — ТОЛЬКО подтверждённые
-  правила (`verified=True` — единственное значение, которое сюда попадает:
-  до pass Verifier'а правило в `ctx.data` не появляется, а если хоть одно
-  отклонено — не появляется целиком набор). Запись в `requirement_rules`
-  (таблица БД) — НЕ здесь, а на шаге 'load' (Задача 26); этот шаг только
-  копит проверенные правила в in-memory контексте прогона.
+    candidate: true
+    generated_by: build-pipeline/rule-step
+    item_id: <ctx.item.id>
+    requirement_title_ru: <ctx.item.expected_item>
+    source: {quote_ru: <norm_fragment.content[:800]>}
+    check: {id, kind, severity, group, subject, params, level, question_ru, hint_ru}
+    review: "НЕ мёржить автоматически: ревью человеком, ..."
+
+Рядом — `<item_id>-<index>-scenario.yaml`: сценарная фикстура в форме
+`tests/scenarios/*.yaml` vision (Волна 1, `product`/`pack`/`cases:
+[{check, level, question, pass, fail}]`, кейсы исполняет
+`tests/scenario_runner.py`, который этот шаг не трогает и не дублирует).
+`product`/`pack` на этом шаге конвейеру неизвестны (у `ItemContext` нет
+привязки к vision-профилю товара — только `expected_item`/`category_slug`),
+поэтому фикстура несёт явные TODO-плейсхолдеры: их заполняет человек при
+переносе кандидата в реальный пакет, тем же движением, что мёржит сам файл
+кандидата.
+
+## Опциональный PR
+
+`RULE_CANDIDATE_PR=1` в окружении (и наличие `gh` в PATH) — после того как
+файлы кандидата уже записаны на диск, шаг пробует открыть PR в
+`inspectorx-vision` (только создание ветки/коммита/PR, БЕЗ мёржа). Любая
+ошибка `git`/`gh` не валит шаг — кандидат уже сохранён — а попадает
+предупреждением в `ctx.data['rule_pr_warning']`.
 
 ## Почему шаг ловит исключения сам
 
@@ -91,13 +100,18 @@ Rule-maker — `Classifier` (`agents.py`) в роли producer'а, тир `mid`
 
 Тот же паттерн отсрочки, что и `steps_norm.py`/`steps_classify.py`:
 `_default_llm_runner` падает `NotImplementedError` только при РЕАЛЬНОМ
-вызове модели, не при импорте/регистрации шага. Живое подключение —
-Задача 27.
+вызове модели, не при импорте/регистрации шага.
 """
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 from importer.build.agents import (
     Classifier,
@@ -122,26 +136,42 @@ MARKING_CATEGORY_SLUG = "marking"
 RULE_PROFILE = Profile(
     name="rule",
     system_prompt=(
-        "Ты превращаешь текст нормы права о маркировке/упаковке в "
-        "машинно-проверяемые правила для фото-чека этикетки — компактные "
-        'JSON-объекты вида {"field": "состав", "lang": "uz", "required": true} '
-        'или {"barcode": "EAN-13"}. Правил может быть несколько — по одному '
-        "на каждое проверяемое условие нормы. Ничего не придумывай от себя: "
-        "каждое правило обязано напрямую следовать из текста нормы."
+        "Ты превращаешь текст нормы права о маркировке/упаковке в ЧЕРНОВИК "
+        "атомарной машинной проверки для фото-чека (формат пакетов inspectorx-vision). "
+        'Каждое правило — объект: {"kind": "presence|absence|text_semantic|geometry", '
+        '"severity": "critical|major|minor|info", "subject": str, "params": object, '
+        '"question_ru": str, "hint_ru": str}. Правил может быть несколько — по одному '
+        "на каждое проверяемое условие. Ничего не придумывай: каждое правило обязано "
+        "напрямую следовать из текста нормы."
     ),
     response_schema={
         "type": "object",
-        "properties": {
-            "rules": {
-                "type": "array",
-                "minItems": 1,
-                "items": {"type": "object"},
-            }
-        },
+        "properties": {"rules": {"type": "array", "minItems": 1, "items": {"type": "object"}}},
         "required": ["rules"],
     },
     tier="mid",
 )
+
+CHECK_KINDS = {"presence", "absence", "text_semantic", "geometry"}
+SEVERITIES = {"critical", "major", "minor", "info"}
+DEFAULT_CANDIDATES_DIR = "/Users/abduraxmonturdiyev/inspectorx-vision/config/requirements/candidates"
+
+
+def validate_candidate(check: dict) -> list[str]:
+    """Локальный линтер кандидата — дефекты ловятся ДО того, как начнут
+    стоить ревью-часов (мини-версия vision `scripts/lint_params.py`; полный
+    линтер прогонит CI vision по каталогу `candidates/`). Возвращает список
+    проблем (пустой — кандидат чист)."""
+    problems = []
+    if check.get("kind") not in CHECK_KINDS:
+        problems.append(f"kind вне словаря: {check.get('kind')!r}")
+    if check.get("severity") not in SEVERITIES:
+        problems.append(f"severity вне словаря: {check.get('severity')!r}")
+    if not isinstance(check.get("params"), dict):
+        problems.append("params отсутствует или не объект")
+    if not check.get("question_ru"):
+        problems.append("нет question_ru")
+    return problems
 
 
 def _rules_from_maker_output(data: object) -> list[dict] | None:
@@ -177,15 +207,6 @@ class RuleStep:
         self._maker = Classifier(llm, self._models, tracer=tracer)
 
     def __call__(self, ctx: ItemContext) -> StepResult:
-        # Приостановка Rule-maker (см. заголовок докстринга модуля):
-        # безусловный no-op для ЛЮБОЙ категории, включая 'marking'.
-        ctx.data["rules"] = []
-        ctx.data["skipped_rule_step"] = True
-        return StepResult(status="ok")
-
-    def _suspended_llm_path(self, ctx: ItemContext) -> StepResult:
-        """Приостановленный LLM-путь шага (бывший `__call__`). Не вызывается;
-        сохранён как эталон для возвращения роли на этапе 6."""
         category_slug = ctx.data.get("category_slug")
         if category_slug != MARKING_CATEGORY_SLUG:
             ctx.data["rules"] = []
@@ -244,10 +265,10 @@ class RuleStep:
                 # Исключение здесь НЕ должно долетать до внешнего
                 # try/except в __call__ — тот вернул бы fail с ПУСТЫМИ
                 # verdicts, стерев уже собранные к этому моменту вердикты
-                # предыдущих правил (фикс-раунд ревью Задачи 19: докстринг
-                # обещает «все вердикты попадают в StepResult.verdicts
-                # независимо от статуса» — это обязано быть правдой и при
-                # обрыве цикла на середине, не только при штатном fail).
+                # предыдущих правил (докстринг обещает «все вердикты
+                # попадают в StepResult.verdicts независимо от статуса» —
+                # это обязано быть правдой и при обрыве цикла на середине,
+                # не только при штатном fail).
                 return StepResult(
                     status="fail",
                     verdicts=verdicts,
@@ -273,8 +294,135 @@ class RuleStep:
                 ),
             )
 
-        ctx.data["rules"] = verified_rules
+        return self._write_candidates(ctx, norm_fragment, verified_rules, verdicts)
+
+    def _write_candidates(
+        self,
+        ctx: ItemContext,
+        norm_fragment: NormFragment,
+        verified_rules: list[dict],
+        verdicts: list[Verdict],
+    ) -> StepResult:
+        candidates_dir = Path(os.environ.get("IXV_CANDIDATES_DIR", DEFAULT_CANDIDATES_DIR))
+        candidates_dir.mkdir(parents=True, exist_ok=True)
+        paths: list[str] = []
+        for index, entry in enumerate(verified_rules, start=1):
+            check = dict(entry["rule"])
+            problems = validate_candidate(check)
+            if problems:
+                # Та же консервативная политика, что и у отклонения
+                # Verifier'ом: дефект в ОДНОМ кандидате бракует весь набор,
+                # а не только его — уже записанные на диск файлы этого же
+                # набора здесь ещё не создавались (линтер идёт до write),
+                # так что мусор кандидатом не становится.
+                return StepResult(
+                    status="fail", verdicts=verdicts,
+                    error="шаг 'rule': кандидат не прошёл линтер: " + "; ".join(problems),
+                )
+            check.setdefault("id", f"candidate.{ctx.item.id}.{index}")
+            check.setdefault("group", "candidate")
+            check.setdefault("level", "consumer")
+            doc = {
+                "candidate": True,
+                "generated_by": "build-pipeline/rule-step",
+                "item_id": str(ctx.item.id),
+                "requirement_title_ru": ctx.item.expected_item,
+                "source": {"quote_ru": norm_fragment.content[:800]},
+                "check": check,
+                "review": "НЕ мёржить автоматически: ревью человеком, сценарная фикстура "
+                          "(tests/scenarios/) — до переноса в пакет",
+            }
+            path = candidates_dir / f"{ctx.item.id}-{index}.yaml"
+            path.write_text(
+                yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8"
+            )
+            fixture_path = candidates_dir / f"{ctx.item.id}-{index}-scenario.yaml"
+            fixture_path.write_text(
+                yaml.safe_dump(
+                    self._scenario_fixture(ctx, check), allow_unicode=True, sort_keys=False
+                ),
+                encoding="utf-8",
+            )
+            paths.append(str(path))
+
+        ctx.data["rules"] = []  # в requirement_rules по-прежнему НИЧЕГО не едет
+        ctx.data["rule_candidates"] = paths
+        self._maybe_open_pr(candidates_dir, ctx)
         return StepResult(status="ok", verdicts=verdicts)
+
+    @staticmethod
+    def _scenario_fixture(ctx: ItemContext, check: dict) -> dict:
+        """Сценарная фикстура — ВМЕСТЕ с кандидатом (валидация «до
+        предложения»): pass-набор фактов (искомая формулировка есть) и
+        fail-набор (грань прочитана, формулировки нет). Ключи `cases/check/
+        level/question/pass/fail/facts/text/reader` — как в
+        `tests/scenarios/*.yaml` vision (Волна 1), кейсы исполняет
+        `tests/scenario_runner.py`. `product`/`pack` этому шагу неизвестны
+        (нет привязки item -> vision-профиль) — заполняются человеком при
+        переносе кандидата в пакет."""
+        hints = check.get("params", {}).get("pattern_hints") or ["<формулировка>"]
+        return {
+            "product": "TODO-заполнить-при-переносе-в-пакет",
+            "pack": "TODO-заполнить-при-переносе-в-пакет",
+            "candidate_check_id": check["id"],
+            "item_id": str(ctx.item.id),
+            "cases": [
+                {
+                    "check": check["id"],
+                    "level": check.get("level", "consumer"),
+                    "question": check.get("question_ru", ""),
+                    "pass": {
+                        "expect": "pass",
+                        "facts": {
+                            "text": {"verbatim": hints[0]},
+                            "reader": {"faces": 1, "words": [hints[0]]},
+                        },
+                    },
+                    "fail": {
+                        "expect": "fail",
+                        "facts": {
+                            "text": {"found": "no"},
+                            "reader": {"faces": 1, "words": ["нейтральный-текст"]},
+                        },
+                    },
+                }
+            ],
+        }
+
+    @staticmethod
+    def _maybe_open_pr(candidates_dir: Path, ctx: ItemContext) -> None:
+        """`RULE_CANDIDATE_PR=1` — открыть PR кандидата через `gh` (только
+        создание, без мёржа). Кандидат-файл уже на диске к моменту вызова,
+        поэтому ЛЮБАЯ ошибка здесь — только предупреждение в `ctx.data`, не
+        провал шага (см. докстринг модуля)."""
+        if os.environ.get("RULE_CANDIDATE_PR") != "1":
+            return
+        if shutil.which("gh") is None:
+            ctx.data["rule_pr_warning"] = "шаг 'rule': RULE_CANDIDATE_PR=1, но 'gh' не найден в PATH"
+            return
+        vision_repo = candidates_dir.parents[2] if len(candidates_dir.parents) >= 2 else candidates_dir
+        branch = f"rule-candidate-{ctx.item.id}"
+        title = f"rule-candidate: {ctx.item.expected_item}"
+        try:
+            subprocess.run(
+                ["git", "-C", str(vision_repo), "checkout", "-b", branch],
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(vision_repo), "add", "config/requirements/candidates"],
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(vision_repo), "commit", "-m", title],
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ["gh", "pr", "create", "--title", title,
+                 "--body", "машина предлагает — человек утверждает"],
+                cwd=str(vision_repo), check=True, capture_output=True, text=True,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            ctx.data["rule_pr_warning"] = f"шаг 'rule': не удалось открыть PR кандидата: {exc}"
 
     def _make_rules(self, text: str, profile: Profile) -> list[dict] | None:
         try:
