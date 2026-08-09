@@ -252,6 +252,31 @@ function ReportBody({ bundle }: { bundle: InspectionBundle }) {
         )}
       </Section>
 
+      {/* Секция «Выполнено» (задача E, план фотоконтроля волны 2): раньше pass-находки
+          только считались в сводке «Проверено N из K», ни одной карточки с
+          кропом-доказательством не было видно, если нарушений 0. Тот же компонент
+          карточки, что у нарушений. N === 0 — секции нет вовсе (не пустой заголовок);
+          N ≤ 10 — раскрыта по умолчанию, иначе свёрнута в <details>. */}
+      {lists.passed.length > 0 && (
+        <details open={lists.passed.length <= 10}>
+          <summary className="flex cursor-pointer items-baseline justify-between">
+            <h2 className="font-display text-lg font-medium tracking-tight">{t.reportPassed}</h2>
+            <span className="text-xs font-medium text-muted-foreground">{lists.passed.length}</span>
+          </summary>
+          <div className="mt-3 space-y-3">
+            {lists.passed.map((f) => (
+              <FindingCard
+                key={f.id}
+                finding={f}
+                productId={inspection.product_id}
+                cropUrls={cropUrls.data}
+                reviews={findingReviews.data?.filter((r) => r.findingId === f.id)}
+              />
+            ))}
+          </div>
+        </details>
+      )}
+
       {/* Список 2 — требует досъёмки или человека, по граням */}
       <Section title={t.reportNeedsHuman} count={lists.needsHuman.length}>
         {lists.needsHuman.length === 0 ? (
