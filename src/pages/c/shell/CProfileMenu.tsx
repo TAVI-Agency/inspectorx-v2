@@ -203,17 +203,19 @@ export function CProfileMenu({
                 ))}
               </span>
             </div>
-            {/* Демо-режим (бывшее dev-меню) */}
-            <label
-              className="flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-[13px]"
-              title={ru.dev.mockSubscriberHint}
-            >
-              <Wrench className="size-4 text-muted-foreground" />
-              {t.demoMode}
-              <span className="ml-auto">
-                <Switch size="sm" checked={mockSubscriber} onCheckedChange={setMockSubscriber} />
-              </span>
-            </label>
+            {/* Демо-режим (бывшее dev-меню) — только в dev-сборке, на проде не рендерится */}
+            {import.meta.env.DEV && (
+              <label
+                className="flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-[13px]"
+                title={ru.dev.mockSubscriberHint}
+              >
+                <Wrench className="size-4 text-muted-foreground" />
+                {t.demoMode}
+                <span className="ml-auto">
+                  <Switch size="sm" checked={mockSubscriber} onCheckedChange={setMockSubscriber} />
+                </span>
+              </label>
+            )}
           </div>
 
           <div className="border-t border-border p-1.5">
