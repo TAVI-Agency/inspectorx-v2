@@ -116,20 +116,12 @@ export async function search(query: string, kind: SearchKind): Promise<SearchHit
   return hits.slice(0, 8)
 }
 
-/** Примеры в реестре: 2 товара + 2 услуги. Счётчики статичны для витрины
- *  (177 = published-строки сигарет после фильтра мусора/дублей переноса v1). */
+/** Примеры в реестре: 1 товар + 2 услуги. Счётчики статичны для витрины.
+ *  Товар «Стики IQOS» скрыт с витрины (оборот нагреваемого табака запрещён
+ *  ЗРУ-1098, см. миграцию 20260817110000_hide_iqos_product.sql) — из списка
+ *  примеров убран, но CIGARETTES_PRODUCT_ID остаётся в коде: он всё ещё
+ *  нужен для оверлея изменений и портфеля реальных подписчиков. */
 export const exampleHits: (SearchHit & { requirementsCount: number })[] = [
-  {
-    id: CIGARETTES_PRODUCT_ID,
-    kind: 'product',
-    displayName: 'Стики IQOS',
-    officialName:
-      'продукция, содержащая «гомогенизированный» или «восстановленный» табак',
-    code: '2404110001',
-    codeKind: 'hs',
-    categoryName: 'Табак и промышленные заменители табака',
-    requirementsCount: 177,
-  },
   {
     id: MILK_PRODUCT_ID,
     kind: 'product',
@@ -650,12 +642,11 @@ const PRODUCT_NAMES: Record<string, { name: string; hs: string }> = {
   [PARACETAMOL_PRODUCT_ID]: { name: 'Парацетамол', hs: '3004900002' },
 }
 
-/** Демо-портфель для кабинета без chosen_products (мок-подписчик без входа) */
-export const demoPortfolioIds = [
-  CIGARETTES_PRODUCT_ID,
-  MILK_PRODUCT_ID,
-  PARACETAMOL_PRODUCT_ID,
-]
+/** Демо-портфель для кабинета без chosen_products (мок-подписчик без входа).
+ *  Сигареты (IQOS) сюда намеренно не входят: товар скрыт с витрины
+ *  (is_active=false), демо-портфель не должен показывать анонимному
+ *  посетителю карточки/уведомления по нему. */
+export const demoPortfolioIds = [MILK_PRODUCT_ID, PARACETAMOL_PRODUCT_ID]
 
 export function buildPortfolio(productIds: string[], feed: ChangeCard[]): PortfolioItem[] {
   return productIds.map((productId) => {

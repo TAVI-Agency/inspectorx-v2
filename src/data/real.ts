@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import type { Json } from '@/lib/database.types'
 import { ru } from '@/i18n/ru'
 import { PHARMACY_SERVICE_ID } from './cross-links'
-import { CIGARETTES_PRODUCT_ID } from './mock/fixtures'
+import { MILK_PRODUCT_ID } from './mock/fixtures'
 import type { CountryCode, LifecycleStatus } from './countries'
 import {
   locked,
@@ -298,9 +298,11 @@ export async function searchProductsReal(query: string): Promise<SearchHit[]> {
   const digits = q.replace(/\D/g, '')
 
   const [aliasRes, nameRes, codeRes] = await Promise.all([
+    // is_active — на связанном products: алиас (напр. «IQOS») сам по себе
+    // не должен всплывать поиском для скрытого товара, RLS это не фильтрует.
     supabase
       .from('search_aliases')
-      .select('product_id, products(id, name_ru, hs_code, hierarchy_path)')
+      .select('product_id, products(id, name_ru, hs_code, hierarchy_path, is_active)')
       .ilike('alias', pattern)
       .not('product_id', 'is', null)
       .limit(8),
@@ -322,8 +324,8 @@ export async function searchProductsReal(query: string): Promise<SearchHit[]> {
 
   const byId = new Map<string, RawProduct>()
   for (const row of aliasRes.data ?? []) {
-    const p = row.products
-    if (p) byId.set(p.id, p)
+    const p = row.products as (RawProduct & { is_active: boolean }) | null
+    if (p && p.is_active) byId.set(p.id, p)
   }
   for (const p of [...(nameRes.data ?? []), ...(codeRes.data ?? [])]) {
     if (!byId.has(p.id)) byId.set(p.id, p)
@@ -383,10 +385,15 @@ export async function fetchPassportReal(
   productId: string,
   country: CountryCode,
 ): Promise<ProductPassport | null> {
+  // is_active=false — товар скрыт с витрины (напр. IQOS, ЗРУ-1098): прямой
+  // URL /product/:id не должен открывать карточку — maybeSingle() вернёт
+  // null, а вызывающий fetchProductBundle аккуратно отдаст null дальше
+  // (страница «Товар не найден», без похода за требованиями).
   const { data: p } = await supabase
     .from('products')
     .select('id, name_ru, hs_code, complexity_index, hierarchy_path, product_type_id')
     .eq('id', productId)
+    .eq('is_active', true)
     .maybeSingle()
   if (!p) return null
   const [aliases, codes] = await Promise.all([
@@ -475,10 +482,13 @@ export async function searchServicesReal(query: string): Promise<SearchHit[]> {
 export async function fetchServicePassportReal(
   serviceId: string,
 ): Promise<ServicePassport | null> {
+  // Тот же is_active-фильтр, что и в fetchPassportReal — прямой URL
+  // /service/:id скрытой услуги должен вести на «Услуга не найдена».
   const { data: s } = await supabase
     .from('services')
     .select('id, name_ru, oked_code, ikpu_code, admission_mode, complexity_index, authorities(name_ru)')
     .eq('id', serviceId)
+    .eq('is_active', true)
     .maybeSingle()
   if (!s) return null
   return {
@@ -1036,7 +1046,8 @@ async function resolveRequirementLinks(
     if (!info.link) {
       const scopes = r.requirement_applicability.map((a) => a.scope)
       if (needAllProducts && scopes.includes('all_products')) {
-        info.link = `/product/${CIGARETTES_PRODUCT_ID}?req=${r.id}`
+        // Сигареты скрыты с витрины (is_active=false) — фолбэк ведёт на молоко
+        info.link = `/product/${MILK_PRODUCT_ID}?req=${r.id}`
         info.targetName = ru.cabinet.lawyer.queueAllProducts
       } else if (needAllServices && scopes.includes('all_services')) {
         info.link = `/service/${PHARMACY_SERVICE_ID}?req=${r.id}`
