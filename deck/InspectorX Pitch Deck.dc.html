@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Wix+Madefor+Display:wght@400;500;600;700;800&amp;family=Golos+Text:wght@400;500;600;700;800&amp;family=Manrope:wght@400;500;600;700;800&amp;family=Unbounded:wght@400;500;600;700;800&amp;family=Onest:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=IBM+Plex+Mono:wght@400;500;700&amp;family=Roboto+Mono:wght@400;500;700&amp;family=PT+Mono&amp;display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#0A1930;}
+a{color:#40B299;text-decoration:none;} a:hover{color:#5FD4BC;}
+@keyframes fadeUp{from{opacity:0;translate:0 26px;}to{opacity:1;translate:0 0;}}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+@keyframes sweep{to{transform:rotate(360deg);}}
+@keyframes dashFlow{to{stroke-dashoffset:-48;}}
+@keyframes travel{0%{left:-1%;opacity:0;}6%{opacity:1;}92%{opacity:1;}100%{left:101%;opacity:0;}}
+@keyframes pulse{0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.15);}}
+@keyframes blink{50%{opacity:.25;}}
+</style>
+</helmet>
+<x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1920" height="1080" hint-size="100%,100%" data-uneditable="">
+
+<!-- ═══ 01 ТИТУЛ ═══ -->
+<section data-label="Титул" data-screen-label="01 Титул" data-speaker-notes="InspectorX: все требования закона к товару на одной странице. Заявка на трек Инкубация." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1400px 900px at 50% 120%, #16345F 0%, #0D2140 50%, #0A1930 100%);">
+  <svg width="1400" height="1400" viewBox="0 0 1400 1400" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;">
+    <circle cx="700" cy="700" r="330" fill="none" stroke="rgba(64,178,153,.16)" stroke-width="1.5"></circle>
+    <circle cx="700" cy="700" r="450" fill="none" stroke="rgba(36,111,163,.22)" stroke-width="1.5"></circle>
+    <circle cx="700" cy="700" r="570" fill="none" stroke="rgba(143,169,199,.10)" stroke-width="1.5" stroke-dasharray="3 14"></circle>
+    <circle cx="700" cy="700" r="690" fill="none" stroke="rgba(64,178,153,.07)" stroke-width="1.5"></circle>
+  </svg>
+  <div data-loop="1" style="position:absolute;left:50%;top:50%;width:1380px;height:1380px;margin:-690px 0 0 -690px;border-radius:50%;background:conic-gradient(from 0deg, transparent 0% 82%, rgba(64,178,153,.09) 94%, transparent 100%);animation:sweep 14s linear infinite;pointer-events:none;"></div>
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;text-align:center;">
+    <div data-anim="fadeUp .8s cubic-bezier(.2,.7,.2,1) both" style="margin-bottom:44px;position:relative;">
+      <div style="position:absolute;left:50%;top:50%;width:220px;height:220px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle, rgba(64,178,153,.28) 0%, transparent 70%);"></div>
+      <svg width="128" height="140" viewBox="0 0 64 70" style="position:relative;display:block;">
+        <path d="M32 3 L59 13 V33 C59 50 47 61 32 67 C17 61 5 50 5 33 V13 Z" fill="rgba(17,41,80,.6)" stroke="#40B299" stroke-width="2.2"></path>
+        <line x1="22" y1="25" x2="42" y2="45" stroke="#F2F6FA" stroke-width="4.5" stroke-linecap="round"></line>
+        <line x1="42" y1="25" x2="22" y2="45" stroke="#40B299" stroke-width="4.5" stroke-linecap="round"></line>
+      </svg>
+    </div>
+    <div data-anim="fadeUp .8s .12s cubic-bezier(.2,.7,.2,1) both" style="font-size:132px;font-weight:800;letter-spacing:-0.03em;line-height:1;">Inspector<span style="color:#40B299;">X</span></div>
+    <div data-anim="fadeUp .8s .26s cubic-bezier(.2,.7,.2,1) both" style="margin-top:48px;font-size:40px;font-weight:600;line-height:1.3;max-width:1050px;">Все требования закона к вашему товару.<br>На одной странице.</div>
+    <div data-anim="fadeUp .8s .4s cubic-bezier(.2,.7,.2,1) both" style="margin-top:30px;font-size:25px;color:#8FA9C7;font-weight:400;">Что делать · к какому сроку · какими документами — и что будет, если не сделать</div>
+  </div>
+  <div data-anim="fadeIn 1s .6s both" style="position:absolute;bottom:52px;left:0;right:0;display:flex;justify-content:center;gap:40px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.14em;color:#5C7BA6;">
+    <span>inspectorx.uz</span><span style="color:#3E5C86;">·</span><span>PRESIDENT TECH AWARD 2026</span><span style="color:#3E5C86;">·</span><span>INCUBATION TRACK</span>
+  </div>
+</section>
+
+<!-- ═══ 02 ПРОБЛЕМА ═══ -->
+<section data-label="Проблема" data-screen-label="02 Проблема" data-speaker-notes="474 900 предприятий, 85% малые без юристов. Требования разбросаны по десяткам НПА, узнают постфактум. Штрафы, конфискация, с 2023 — уголовная ответственность." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 85% 15%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <svg width="1000" height="1000" viewBox="0 0 1000 1000" style="position:absolute;right:-330px;top:-330px;opacity:.6;pointer-events:none;">
+    <circle cx="500" cy="500" r="260" fill="none" stroke="rgba(36,111,163,.2)" stroke-width="1.5"></circle>
+    <circle cx="500" cy="500" r="380" fill="none" stroke="rgba(143,169,199,.09)" stroke-width="1.5" stroke-dasharray="3 14"></circle>
+  </svg>
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    01 · ПРОБЛЕМА
+  </div>
+  <div style="position:absolute;top:150px;left:110px;width:830px;">
+    <div data-anim="fadeUp .7s both" style="font-size:60px;font-weight:800;line-height:1.12;letter-spacing:-0.02em;">Бизнес не знает, каким требованиям должен соответствовать его товар</div>
+    <div data-anim="fadeUp .7s .15s both" style="margin-top:56px;">
+      <div style="font-size:128px;font-weight:800;line-height:1;color:#40B299;letter-spacing:-0.02em;"><span data-count="474900" data-fmt="space">474 900</span></div>
+      <div style="margin-top:10px;font-size:27px;color:#B8CBE0;">действующих предприятий в Узбекистане</div>
+    </div>
+    <div data-anim="fadeUp .7s .3s both" style="margin-top:40px;display:flex;align-items:baseline;gap:22px;">
+      <div style="font-size:76px;font-weight:800;line-height:1;color:#2E9FAD;"><span data-count="85" data-suf="%">85%</span></div>
+      <div style="font-size:27px;color:#B8CBE0;max-width:480px;line-height:1.35;">малый бизнес — без юристов в штате</div>
+    </div>
+    <div style="margin-top:36px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.1em;color:#52709A;">НАЦКОМСТАТ РУз · 01.01.2026</div>
+  </div>
+  <div style="position:absolute;top:170px;right:80px;width:760px;height:640px;">
+    <svg width="760" height="640" viewBox="0 0 760 640" style="position:absolute;inset:0;">
+      <line x1="380" y1="330" x2="160" y2="105" stroke="rgba(143,169,199,.3)" stroke-width="1.5" stroke-dasharray="5 8" data-loop="1" style="animation:dashFlow 2.4s linear infinite;"></line>
+      <line x1="380" y1="330" x2="580" y2="80" stroke="rgba(143,169,199,.3)" stroke-width="1.5" stroke-dasharray="5 8" data-loop="1" style="animation:dashFlow 3.1s linear infinite;"></line>
+      <line x1="380" y1="330" x2="665" y2="255" stroke="rgba(143,169,199,.3)" stroke-width="1.5" stroke-dasharray="5 8" data-loop="1" style="animation:dashFlow 2.7s linear infinite;"></line>
+      <line x1="380" y1="330" x2="620" y2="500" stroke="rgba(143,169,199,.3)" stroke-width="1.5" stroke-dasharray="5 8" data-loop="1" style="animation:dashFlow 3.4s linear infinite;"></line>
+      <line x1="380" y1="330" x2="150" y2="480" stroke="rgba(143,169,199,.3)" stroke-width="1.5" stroke-dasharray="5 8" data-loop="1" style="animation:dashFlow 2.9s linear infinite;"></line>
+      <line x1="380" y1="330" x2="90" y2="290" stroke="rgba(143,169,199,.3)" stroke-width="1.5" stroke-dasharray="5 8" data-loop="1" style="animation:dashFlow 3.6s linear infinite;"></line>
+      <circle cx="380" cy="330" r="60" fill="rgba(64,178,153,.1)" stroke="#40B299" stroke-width="2"></circle>
+      <circle cx="380" cy="316" r="11" fill="#F2F6FA"></circle>
+      <path d="M358 362 C358 344 402 344 402 362" fill="#F2F6FA"></path>
+    </svg>
+    <div style="position:absolute;left:322px;top:400px;width:120px;text-align:center;font-size:22px;color:#B8CBE0;line-height:1.3;">один предприниматель</div>
+    <div data-anim="fadeUp .6s .2s both" style="position:absolute;left:60px;top:70px;transform:rotate(-5deg);background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.25);border-radius:12px;padding:14px 24px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:21px;color:#C9D8EA;">Сертификация</div>
+    <div data-anim="fadeUp .6s .3s both" style="position:absolute;left:490px;top:44px;transform:rotate(4deg);background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.25);border-radius:12px;padding:14px 24px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:21px;color:#C9D8EA;">Техрегламенты</div>
+    <div data-anim="fadeUp .6s .4s both" style="position:absolute;left:590px;top:222px;transform:rotate(-3deg);background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.25);border-radius:12px;padding:14px 24px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:21px;color:#C9D8EA;">Маркировка</div>
+    <div data-anim="fadeUp .6s .5s both" style="position:absolute;left:540px;top:472px;transform:rotate(5deg);background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.25);border-radius:12px;padding:14px 24px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:21px;color:#C9D8EA;">Таможня</div>
+    <div data-anim="fadeUp .6s .6s both" style="position:absolute;left:60px;top:452px;transform:rotate(-4deg);background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.25);border-radius:12px;padding:14px 24px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:21px;color:#C9D8EA;">СанПиНы</div>
+    <div data-anim="fadeUp .6s .7s both" style="position:absolute;left:0px;top:258px;transform:rotate(3deg);background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.25);border-radius:12px;padding:14px 24px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:21px;color:#C9D8EA;">Метрология</div>
+    <div style="position:absolute;left:120px;top:568px;right:40px;text-align:center;font-size:23px;color:#8FA9C7;">…десятки НПА на один товар — узнают постфактум: проверка, таможня, блокировка партии</div>
+  </div>
+  <div data-anim="fadeUp .7s .5s both" style="position:absolute;bottom:96px;left:110px;display:flex;gap:16px;align-items:center;">
+    <div style="width:4px;height:56px;background:#40B299;border-radius:2px;"></div>
+    <div style="font-size:28px;font-weight:600;line-height:1.3;">Цена ошибки: штрафы · конфискация товара · <span style="color:#40B299;">уголовная ответственность</span></div>
+  </div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">02 / 11</div>
+</section>
+
+<!-- ═══ 03 РЕШЕНИЕ ═══ -->
+<section data-label="Решение" data-screen-label="03 Решение" data-speaker-notes="Как навигатор: не карта законов, а маршрут. Поиск по товару, чек-лист, цитаты из первоисточников, календарь дедлайнов." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 15% 85%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <svg width="900" height="900" viewBox="0 0 900 900" style="position:absolute;left:-300px;bottom:-300px;opacity:.55;pointer-events:none;">
+    <circle cx="450" cy="450" r="230" fill="none" stroke="rgba(64,178,153,.14)" stroke-width="1.5"></circle>
+    <circle cx="450" cy="450" r="340" fill="none" stroke="rgba(143,169,199,.09)" stroke-width="1.5" stroke-dasharray="3 14"></circle>
+  </svg>
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    02 · РЕШЕНИЕ
+  </div>
+  <div style="position:absolute;top:158px;left:110px;width:750px;">
+    <div data-anim="fadeUp .7s both" style="font-size:60px;font-weight:800;line-height:1.12;letter-spacing:-0.02em;">Введи товар — получи <span style="color:#40B299;">маршрут соответствия</span></div>
+    <div data-anim="fadeUp .7s .12s both" style="margin-top:22px;font-size:28px;color:#8FA9C7;line-height:1.4;">Как навигатор: не «вот карта законов», а «вот твой маршрут»</div>
+    <div style="margin-top:52px;position:relative;padding-left:44px;">
+      <div style="position:absolute;left:11px;top:14px;bottom:14px;width:3px;background:linear-gradient(180deg,#40B299,#2E9FAD);border-radius:2px;"></div>
+      <div data-anim="fadeUp .6s .25s both" style="position:relative;margin-bottom:38px;">
+        <div style="position:absolute;left:-44px;top:4px;width:25px;height:25px;border-radius:50%;background:#0C1F3D;border:3px solid #40B299;"></div>
+        <div style="font-size:29px;font-weight:700;">Поиск по названию или коду</div>
+        <div style="margin-top:4px;font-size:24px;color:#8FA9C7;">ТН ВЭД / ИКПУ</div>
+      </div>
+      <div data-anim="fadeUp .6s .37s both" style="position:relative;margin-bottom:38px;">
+        <div style="position:absolute;left:-44px;top:4px;width:25px;height:25px;border-radius:50%;background:#0C1F3D;border:3px solid #40B299;"></div>
+        <div style="font-size:29px;font-weight:700;">Полный чек-лист требований</div>
+        <div style="margin-top:4px;font-size:24px;color:#8FA9C7;">что сделать · к какому сроку · какие документы</div>
+      </div>
+      <div data-anim="fadeUp .6s .49s both" style="position:relative;margin-bottom:38px;">
+        <div style="position:absolute;left:-44px;top:4px;width:25px;height:25px;border-radius:50%;background:#0C1F3D;border:3px solid #40B299;"></div>
+        <div style="font-size:29px;font-weight:700;">Каждое требование — с первоисточником</div>
+        <div style="margin-top:4px;font-size:24px;color:#8FA9C7;">цитата из закона + ссылка на НПА</div>
+      </div>
+      <div data-anim="fadeUp .6s .61s both" style="position:relative;">
+        <div style="position:absolute;left:-44px;top:4px;width:25px;height:25px;border-radius:50%;background:#40B299;border:3px solid #40B299;box-shadow:0 0 18px rgba(64,178,153,.6);"></div>
+        <div style="font-size:29px;font-weight:700;">Календарь дедлайнов</div>
+        <div style="margin-top:4px;font-size:24px;color:#8FA9C7;">вступления в силу · переходные периоды · синхронизация .ics</div>
+      </div>
+    </div>
+  </div>
+  <div data-anim="fadeUp .8s .3s both" style="position:absolute;top:170px;right:100px;width:800px;">
+    <div style="border-radius:18px;overflow:hidden;border:1px solid rgba(143,169,199,.28);box-shadow:0 40px 100px rgba(0,0,0,.5), 0 0 80px rgba(64,178,153,.12);background:#0E2444;">
+      <div style="display:flex;align-items:center;gap:10px;padding:16px 22px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(143,169,199,.18);">
+        <div style="width:13px;height:13px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="width:13px;height:13px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="width:13px;height:13px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="margin-left:18px;flex:1;background:rgba(10,25,48,.7);border-radius:8px;padding:8px 18px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;color:#8FA9C7;">inspectorx.uz/products/…</div>
+      </div>
+      <div style="height:600px;">
+        <image-slot id="shot-product-card" shape="rect" placeholder="Скриншот: карточка товара с чек-листом требований (пример «Сигареты»)"></image-slot>
+      </div>
+    </div>
+  </div>
+  <div style="position:absolute;bottom:44px;left:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">INSPECTORX</div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">03 / 11</div>
+</section>
+
+<!-- ═══ 04 AI-ЯДРО ═══ -->
+<section data-label="AI-ядро" data-screen-label="04 AI-ядро" data-speaker-notes="Контент-фабрика: LegalX база, AI-конвейер 14 шагов с верификацией, юрист утверждает, мониторинг 24/7. Требования не устаревают." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1600px 1000px at 50% -20%, #16345F 0%, #0C1F3D 55%, #0A1930 100%);">
+  <div style="position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(143,169,199,.04) 0 1px, transparent 1px 160px); pointer-events: none; left: -6px; top: -24px"></div>
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    03 · AI-ЯДРО
+  </div>
+  <div data-anim="fadeUp .7s both" style="position:absolute;top:126px;left:110px;font-size:56px;font-weight:800;letter-spacing:-0.02em;">Контент-фабрика на AI-агентах&nbsp;<span style="color: rgb(64, 178, 153);"></span></div>
+  <div style="position:absolute;top:280px;left:70px;right:70px;height:560px;">
+    <svg style="position:absolute;left:0;top:270px;width:100%;height:4px;overflow:visible;" viewBox="0 0 1780 4" preserveAspectRatio="none">
+      <line x1="0" y1="2" x2="1780" y2="2" stroke="rgba(64,178,153,.25)" stroke-width="3"></line>
+      <line x1="0" y1="2" x2="1780" y2="2" stroke="#40B299" stroke-width="3" stroke-dasharray="14 22" data-loop="1" style="animation:dashFlow 1.6s linear infinite;"></line>
+    </svg>
+    <div data-loop="1" style="position:absolute;top:265px;width:14px;height:14px;border-radius:50%;background:#40B299;box-shadow:0 0 16px rgba(64,178,153,.9);animation:travel 5s linear infinite;"></div>
+    <div data-loop="1" style="position:absolute;top:265px;width:14px;height:14px;border-radius:50%;background:#2E9FAD;box-shadow:0 0 16px rgba(46,159,173,.9);animation:travel 5s 1.7s linear infinite;"></div>
+    <div data-loop="1" style="position:absolute;top:265px;width:14px;height:14px;border-radius:50%;background:#40B299;box-shadow:0 0 16px rgba(64,178,153,.9);animation:travel 5s 3.4s linear infinite;"></div>
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; left: -3px; top: -39px">
+      <div data-anim="fadeUp .6s .15s both" style="width:300px;background:rgba(17,41,80,.85);border:1px solid rgba(36,111,163,.5);border-radius:20px;padding:30px 30px 26px;backdrop-filter:blur(6px);">
+        <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.2em;color:#5C7BA6;">ШАГ 01</div>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:5px;">
+          <div style="height:12px;border-radius:6px;background:rgba(36,111,163,.55);"></div>
+          <div style="height:12px;border-radius:6px;background:rgba(36,111,163,.4);"></div>
+          <div style="height:12px;border-radius:6px;background:rgba(36,111,163,.25);"></div>
+        </div>
+        <div style="margin-top:18px;font-size:31px;font-weight:800;">LegalX</div>
+        <div style="margin-top:8px;font-size:22px;color:#8FA9C7;line-height:1.35;">собственная база законодательства УЗ: законы · подзаконные акты · версии</div>
+      </div>
+      <div data-anim="fadeUp .6s .3s both" style="width:400px;background:linear-gradient(160deg, rgba(64,178,153,.14), rgba(17,41,80,.9));border:1.5px solid rgba(64,178,153,.6);border-radius:22px;padding:32px 34px 28px;box-shadow:0 0 60px rgba(64,178,153,.18);backdrop-filter:blur(6px);">
+        <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.2em;color:#40B299;">ШАГ 02 · BUILD</div>
+        <div style="display:flex;align-items:baseline;gap:16px;margin-top:8px;">
+          <div style="font-size:96px;font-weight:800;line-height:1;color:#40B299;"><span data-count="14">14</span></div>
+          <div style="font-size:26px;font-weight:600;line-height:1.2;">шагов<br>конвейера</div>
+        </div>
+        <div style="margin-top:16px;font-size:29px;font-weight:800;">AI-агенты строят карту требований</div>
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
+          <div style="border:1px solid rgba(64,178,153,.5);border-radius:20px;padding:6px 16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;color:#9FE0D1;">независимая верификация</div>
+          <div style="border:1px solid rgba(64,178,153,.5);border-radius:20px;padding:6px 16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;color:#9FE0D1;">golden-set QA</div>
+        </div>
+      </div>
+      <div data-anim="fadeUp .6s .45s both" style="width:300px;background:rgba(17,41,80,.85);border:1px solid rgba(143,169,199,.35);border-radius:20px;padding:30px 30px 26px;backdrop-filter:blur(6px);">
+        <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.2em;color:#5C7BA6;">ШАГ 03</div>
+        <div style="margin-top:14px;width:52px;height:52px;border-radius:50%;background:rgba(242,246,250,.1);border:2px solid #C9D8EA;display:flex;align-items:center;justify-content:center;">
+          <svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="9" r="5" fill="none" stroke="#C9D8EA" stroke-width="2"></circle><path d="M3 24 C3 16 23 16 23 24" fill="none" stroke="#C9D8EA" stroke-width="2"></path></svg>
+        </div>
+        <div style="margin-top:16px;font-size:31px;font-weight:800;">Юрист-владелец</div>
+        <div style="margin-top:8px;font-size:22px;color:#8FA9C7;line-height:1.35;">утверждает карту до публикации — human-in-the-loop</div>
+      </div>
+      <div data-anim="fadeUp .6s .6s both" style="width:360px;background:rgba(17,41,80,.85);border:1px solid rgba(46,159,173,.55);border-radius:20px;padding:30px 30px 26px;backdrop-filter:blur(6px);">
+        <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.2em;color:#2E9FAD;">ШАГ 04 · ВСЕГДА</div>
+        <div style="margin-top:6px;font-size:78px;font-weight:800;line-height:1;color:#2E9FAD;">24/7</div>
+        <div style="margin-top:12px;font-size:29px;font-weight:800;">Мониторинг изменений</div>
+        <div style="margin-top:12px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;line-height:1.7;color:#8FC8D2;">Δ закона → оценка влияния<br>→ флаг на карточке<br>→ уведомление клиенту</div>
+      </div>
+      <div data-anim="fadeUp .6s .75s both" style="width:220px;display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <div data-loop="1" style="width:120px;height:120px;border-radius:50%;background:radial-gradient(circle, rgba(64,178,153,.3), rgba(17,41,80,.9));border:2px solid #40B299;display:flex;align-items:center;justify-content:center;animation:pulse 3s ease-in-out infinite;">
+          <svg width="48" height="52" viewBox="0 0 64 70"><path d="M32 3 L59 13 V33 C59 50 47 61 32 67 C17 61 5 50 5 33 V13 Z" fill="none" stroke="#40B299" stroke-width="3"></path><path d="M20 34 L29 43 L45 25" fill="none" stroke="#F2F6FA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+        <div style="font-size:28px;font-weight:800;">Клиент</div>
+        <div style="font-size:21px;color:#8FA9C7;text-align:center;line-height:1.35;">знает требования раньше проверяющего</div>
+      </div>
+    </div>
+  </div>
+  <div data-anim="fadeUp .7s .85s both" style="position:absolute;bottom:88px;left:110px;right:110px;display:flex;align-items:center;gap:20px;justify-content:center;">
+    <svg width="18" height="18" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    <div style="font-size:31px;font-weight:700;">Требования <span style="color:#40B299;">не устаревают</span> — система сама узнаёт об изменениях закона и предупреждает бизнес</div>
+  </div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">04 / 11</div>
+</section>
+
+<!-- ═══ 05 ПРОДУКТ ═══ -->
+<section data-label="Продукт" data-screen-label="05 Продукт" data-speaker-notes="MVP в проде на реальных данных: каталог, сравнение стран, кабинет с уведомлениями, пейволл на RLS. QR на inspectorx.uz." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 50% 115%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    04 · ПРОДУКТ
+  </div>
+  <div style="position:absolute;top:118px;left:110px;display:flex;align-items:center;gap:28px;">
+    <div data-anim="fadeUp .7s both" style="font-size:56px;font-weight:800;letter-spacing:-0.02em;">MVP уже в проде — <a href="https://inspectorx.uz" style="color:#40B299;">inspectorx.uz</a></div>
+    <div data-anim="fadeUp .7s .1s both" style="display:flex;align-items:center;gap:10px;border:1.5px solid rgba(64,178,153,.6);border-radius:24px;padding:8px 20px;">
+      <div data-loop="1" style="width:12px;height:12px;border-radius:50%;background:#40B299;box-shadow:0 0 12px rgba(64,178,153,.9);animation:blink 1.6s ease-in-out infinite;"></div>
+      <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.16em;color:#40B299;">LIVE</div>
+    </div>
+  </div>
+  <div style="position:absolute;top:236px;left:0;right:0;height:560px;">
+    <div data-anim="fadeUp .8s .35s both" style="position:absolute;left:120px;top:70px;width:430px;transform:rotate(-2deg);border-radius:14px;overflow:hidden;border:1px solid rgba(143,169,199,.25);box-shadow:0 30px 70px rgba(0,0,0,.5);background:#0E2444;">
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(143,169,199,.15);">
+        <div style="width:10px;height:10px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="width:10px;height:10px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="margin-left:12px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:17px;color:#5C7BA6;">лендинг</div>
+      </div>
+      <div style="height:330px;"><image-slot id="shot-landing" shape="rect" placeholder="Скриншот: лендинг"></image-slot></div>
+    </div>
+    <div data-anim="fadeUp .8s .2s both" style="position:absolute;left:50%;top:0;transform:translateX(-50%);width:640px;border-radius:16px;overflow:hidden;border:1px solid rgba(64,178,153,.4);box-shadow:0 40px 90px rgba(0,0,0,.55), 0 0 70px rgba(64,178,153,.12);background:#0E2444;z-index:2;">
+      <div style="display:flex;align-items:center;gap:8px;padding:13px 18px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(143,169,199,.15);">
+        <div style="width:11px;height:11px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="width:11px;height:11px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="margin-left:12px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:17px;color:#5C7BA6;">карточка товара · чек-лист</div>
+      </div>
+      <div style="height:430px;"><image-slot id="shot-card" shape="rect" placeholder="Скриншот: карточка товара с требованиями"></image-slot></div>
+    </div>
+    <div data-anim="fadeUp .8s .5s both" style="position:absolute;right:120px;top:80px;width:430px;transform:rotate(2deg);border-radius:14px;overflow:hidden;border:1px solid rgba(143,169,199,.25);box-shadow:0 30px 70px rgba(0,0,0,.5);background:#0E2444;">
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(143,169,199,.15);">
+        <div style="width:10px;height:10px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="width:10px;height:10px;border-radius:50%;background:rgba(143,169,199,.4);"></div>
+        <div style="margin-left:12px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:17px;color:#5C7BA6;">сравнение стран UZ / KZ / AE</div>
+      </div>
+      <div style="height:330px;"><image-slot id="shot-compare" shape="rect" placeholder="Скриншот: матрица сравнения стран"></image-slot></div>
+    </div>
+  </div>
+  <div data-anim="fadeUp .7s .6s both" style="position:absolute;bottom:92px;left:110px;display:flex;gap:14px;flex-wrap:wrap;max-width:1400px;">
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.22);border-radius:26px;padding:12px 26px;font-size:24px;color:#C9D8EA;">Живой каталог на реальных данных</div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(143,169,199,.22);border-radius:26px;padding:12px 26px;font-size:24px;color:#C9D8EA;">Кабинет: подписки · уведомления · дедлайны</div>
+    
+  </div>
+  <div data-anim="fadeIn .8s .7s both" style="position:absolute;bottom:84px;right:110px;display:flex;align-items:center;gap:18px;">
+    <div style="width:110px;height:110px;border-radius:12px;overflow:hidden;border:1px solid rgba(143,169,199,.3);background:#0E2444;">
+      <image-slot id="qr-code" shape="rect" placeholder="QR"></image-slot>
+    </div>
+    <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;color:#8FA9C7;line-height:1.5;">QR →<br>inspectorx.uz</div>
+  </div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;display:none;">05 / 11</div>
+  <div style="position:absolute;bottom:44px;left:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">05 / 11 · INSPECTORX</div>
+</section>
+
+<!-- ═══ 06 РЫНОК ═══ -->
+<section data-label="Рынок" data-screen-label="06 Рынок" data-speaker-notes="Каждый товарный бизнес — клиент. Ядро: импортёры, производители, ритейл, e-commerce. Драйверы: регуляторика, цифровизация проверок, импорт. Расширение UZ-KZ-AE уже в архитектуре." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 80% 110%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <svg width="900" height="900" viewBox="0 0 900 900" style="position: absolute; opacity: .5; pointer-events: none; left: 1263px; top: 531px">
+    <circle cx="450" cy="450" r="240" fill="none" stroke="rgba(46,159,173,.16)" stroke-width="1.5"></circle>
+    <circle cx="450" cy="450" r="360" fill="none" stroke="rgba(143,169,199,.08)" stroke-width="1.5" stroke-dasharray="3 14"></circle>
+  </svg>
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    05 · РЫНОК
+  </div>
+  <div data-anim="fadeUp .7s both" style="box-sizing: border-box; position: absolute; top: 176px; left: 110px; width: 1695px; font-size: 50px; font-weight: 800; line-height: 1.14; letter-spacing: -0.02em; text-wrap: pretty; height: 64px">Каждый товарный бизнес — потенциальный клиент</div>
+  <div style="position:absolute;top:300px;left:110px;width:840px;">
+    <div data-anim="fadeUp .7s .15s both">
+      <div style="display:flex;align-items:baseline;gap:20px;">
+        <div style="font-size:78px;font-weight:800;line-height:1;color:#40B299;white-space:nowrap;"><span data-count="474900" data-fmt="space">474 900</span></div>
+        <div style="font-size:25px;color:#B8CBE0;">предприятий в УЗ</div>
+      </div>
+      <div style="box-sizing:border-box;margin-top:30px;min-height:62px;border-radius:12px;background:linear-gradient(90deg, rgba(36,111,163,.5), rgba(36,111,163,.25));border:1px solid rgba(36,111,163,.5);display:flex;align-items:center;padding:14px 26px;font-size:24px;color:#DCE7F2;line-height:1.3;">весь товарный бизнес страны</div>
+      <div style="box-sizing:border-box;margin:12px 0 0 44px;min-height:62px;width:calc(100% - 44px);border-radius:12px;background:linear-gradient(90deg, rgba(46,159,173,.55), rgba(46,159,173,.28));border:1px solid rgba(46,159,173,.6);display:flex;align-items:center;padding:14px 26px;font-size:24px;color:#DCE7F2;line-height:1.3;">ядро: импортёры · производители · ритейл · e-commerce</div>
+      <div style="box-sizing:border-box;margin:12px 0 0 88px;min-height:62px;width:calc(100% - 88px);border-radius:12px;background:linear-gradient(90deg, rgba(64,178,153,.65), rgba(64,178,153,.35));border:1px solid rgba(64,178,153,.7);display:flex;align-items:center;padding:14px 26px;font-size:24px;font-weight:600;line-height:1.3;box-shadow:0 0 40px rgba(64,178,153,.15);">первыми платят те, кого уже проверяют</div>
+    </div>
+    <div data-anim="fadeUp .7s .35s both" style="margin-top:48px;">
+      <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.2em;color:#5C7BA6;">ДРАЙВЕРЫ РОСТА</div>
+      <div style="margin-top:16px;display:flex;gap:18px;">
+        <div style="flex:1;border-left:3px solid #246FA3;padding:4px 0 4px 16px;font-size:22px;color:#C9D8EA;line-height:1.35;">рост регуляторики: техрегламенты, маркировка</div>
+        <div style="flex:1;border-left:3px solid #2E9FAD;padding:4px 0 4px 16px;font-size:22px;color:#C9D8EA;line-height:1.35;">цифровизация проверок</div>
+        <div style="flex:1;border-left:3px solid #40B299;padding:4px 0 4px 16px;font-size:22px;color:#C9D8EA;line-height:1.35;">рост импорта</div>
+      </div>
+    </div>
+  </div>
+  <div style="position:absolute;top:280px;right:110px;width:760px;height:600px;">
+    <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.2em;color:#5C7BA6;">РАСШИРЕНИЕ</div>
+    <svg width="760" height="420" viewBox="0 0 760 420" style="position:absolute;top:60px;left:0;overflow:visible;">
+      <path d="M190 260 C 280 130 400 130 470 210" fill="none" stroke="rgba(46,159,173,.6)" stroke-width="2.5" stroke-dasharray="8 10" data-loop="1" style="animation:dashFlow 2.2s linear infinite;"></path>
+      <path d="M510 210 C 590 130 680 150 700 240" fill="none" stroke="rgba(46,159,173,.45)" stroke-width="2.5" stroke-dasharray="8 10" data-loop="1" style="animation:dashFlow 2.6s linear infinite;"></path>
+      <circle cx="150" cy="290" r="86" fill="rgba(64,178,153,.14)" stroke="#40B299" stroke-width="2.5"></circle>
+      <circle cx="150" cy="290" r="106" fill="none" stroke="rgba(64,178,153,.3)" stroke-width="1.5" stroke-dasharray="3 10"></circle>
+      <circle cx="490" cy="250" r="64" fill="rgba(17,41,80,.6)" stroke="rgba(46,159,173,.8)" stroke-width="2" stroke-dasharray="7 7"></circle>
+      <circle cx="700" cy="290" r="54" fill="rgba(17,41,80,.6)" stroke="rgba(36,111,163,.8)" stroke-width="2" stroke-dasharray="7 7"></circle>
+    </svg>
+    <div data-anim="fadeUp .6s .3s both" style="position:absolute;left:96px;top:296px;width:110px;text-align:center;">
+      <div style="font-size:44px;font-weight:800;color:#40B299;">UZ</div>
+      <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;color:#9FE0D1;">сегодня</div>
+    </div>
+    <div data-anim="fadeUp .6s .45s both" style="position:absolute;left:434px;top:270px;width:110px;text-align:center;">
+      <div style="font-size:38px;font-weight:800;color:#8FC8D2;">KZ</div>
+      <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;color:#5C7BA6;">next</div>
+    </div>
+    <div data-anim="fadeUp .6s .6s both" style="position:absolute;left:648px;top:318px;width:105px;text-align:center;">
+      <div style="font-size:34px;font-weight:800;color:#7FA8CB;">AE</div>
+      <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;color:#5C7BA6;">next</div>
+    </div>
+    <div data-anim="fadeUp .7s .7s both" style="position:absolute;left:0;top:500px;right:0;font-size:24px;color:#8FA9C7;line-height:1.45;text-wrap:pretty;">Мультистрановость уже заложена в архитектуру<br><span style="color: rgb(220, 231, 242);"></span></div>
+  </div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">06 / 11</div>
+</section>
+
+<!-- ═══ 07 БИЗНЕС-МОДЕЛЬ ═══ -->
+<section data-label="Бизнес-модель" data-screen-label="07 Бизнес-модель" data-speaker-notes="B2B-подписка 490 000 сум/мес. Free-тизер как лидогенерация. Далее API и white-label." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 20% -10%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    06 · БИЗНЕС-МОДЕЛЬ
+  </div>
+  <div data-anim="fadeUp .7s both" style="position:absolute;top:126px;left:110px;font-size:56px;font-weight:800;letter-spacing:-0.02em;">Подписка B2B</div>
+  <div style="position:absolute;top:280px;left:110px;right:110px;display:flex;align-items:stretch;gap:0;">
+    <div data-anim="fadeUp .6s .15s both" style="flex:1;background:rgba(255,255,255,.03);border:1px solid rgba(143,169,199,.25);border-radius:22px;padding:44px 44px 40px;display:flex;flex-direction:column;">
+      <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.22em;color:#5C7BA6;">FREE</div>
+      <div style="margin-top:18px;font-size:44px;font-weight:800;">Тизер требований</div>
+      <div style="margin-top:16px;font-size:25px;color:#8FA9C7;line-height:1.45;">видно, что требования есть — детали за пейволлом</div>
+      <div style="margin-top:auto;padding-top:32px;display:flex;align-items:center;gap:12px;font-size:24px;color:#40B299;">
+        <div style="width:34px;height:2px;background:#40B299;"></div>лидогенерация
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 8px;"><svg width="40" height="24" viewBox="0 0 40 24"><line x1="0" y1="12" x2="30" y2="12" stroke="#40B299" stroke-width="2.5"></line><path d="M28 4 L38 12 L28 20" fill="none" stroke="#40B299" stroke-width="2.5"></path></svg></div>
+    <div data-anim="fadeUp .6s .3s both" style="flex: 1.35; background: linear-gradient(165deg, rgba(64,178,153,.13), rgba(17,41,80,.9)); border: 1.5px solid rgba(64,178,153,.65); border-radius: 24px; padding: 44px 48px 40px; box-shadow: 0 0 70px rgba(64,178,153,.16); display: flex; flex-direction: column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.22em;color:#40B299;">РАННИЙ ДОСТУП</div>
+        <div style="border:1px solid rgba(64,178,153,.6);border-radius:18px;padding:5px 16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:17px;color:#9FE0D1;">сейчас</div>
+      </div>
+      <div style="margin-top:24px;">
+        <div style="font-size:84px;font-weight:800;line-height:1;color:#40B299;letter-spacing:-0.02em;white-space:nowrap;"><span data-count="490000" data-fmt="space">490 000</span></div>
+        <div style="margin-top:12px;display:flex;align-items:baseline;gap:10px;white-space:nowrap;"><div style="font-size:27px;color:#B8CBE0;">сум / мес</div><div style="font-size:22px;color:#8FA9C7;">за компанию</div></div>
+      </div>
+      <div style="margin-top:34px;display:flex;flex-wrap:wrap;gap:12px;">
+        <div style="background:rgba(64,178,153,.12);border:1px solid rgba(64,178,153,.4);border-radius:22px;padding:9px 20px;font-size:22px;color:#DCEEE9;">полные тексты требований</div>
+        <div style="background:rgba(64,178,153,.12);border:1px solid rgba(64,178,153,.4);border-radius:22px;padding:9px 20px;font-size:22px;color:#DCEEE9;">документы</div>
+        <div style="background:rgba(64,178,153,.12);border:1px solid rgba(64,178,153,.4);border-radius:22px;padding:9px 20px;font-size:22px;color:#DCEEE9;">уведомления об изменениях</div>
+        <div style="background:rgba(64,178,153,.12);border:1px solid rgba(64,178,153,.4);border-radius:22px;padding:9px 20px;font-size:22px;color:#DCEEE9;">календарь дедлайнов</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 8px;"><svg width="40" height="24" viewBox="0 0 40 24"><line x1="0" y1="12" x2="30" y2="12" stroke="rgba(143,169,199,.6)" stroke-width="2.5" stroke-dasharray="6 6"></line><path d="M28 4 L38 12 L28 20" fill="none" stroke="rgba(143,169,199,.6)" stroke-width="2.5"></path></svg></div>
+    <div data-anim="fadeUp .6s .45s both" style="flex:1;background:rgba(255,255,255,.03);border:1px dashed rgba(143,169,199,.4);border-radius:22px;padding:44px 44px 40px;display:flex;flex-direction:column;">
+      <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.22em;color:#5C7BA6;">ДАЛЕЕ</div>
+      <div style="margin-top:18px;font-size:44px;font-weight:800;">API + white-label</div>
+      <div style="margin-top:16px;font-size:25px;color:#8FA9C7;line-height:1.55;">API — банкам, логистике, таможенным брокерам<br><br>white-label — отраслевым ассоциациям</div>
+    </div>
+  </div>
+  <div style="position:absolute;bottom:44px;left:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">INSPECTORX</div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">07 / 11</div>
+</section>
+
+<!-- ═══ 08 АЛЬТЕРНАТИВЫ ═══ -->
+<section data-label="Альтернативы" data-screen-label="08 Альтернативы" data-speaker-notes="Юрист — дорого и устаревает. Lex.uz — сырой текст. Знакомые — ненадёжно. Мы: ответ по конкретному товару плюс мониторинг." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 85% 85%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    07 · АЛЬТЕРНАТИВЫ
+  </div>
+  <div style="position:absolute;top:150px;left:110px;width:640px;">
+    <div data-anim="fadeUp .7s both" style="font-size:56px;font-weight:800;line-height:1.12;letter-spacing:-0.02em;">Не справочник законов — <span style="color:#40B299;">чек-лист действий</span></div>
+    <div style="margin-top:52px;display:flex;flex-direction:column;gap:26px;">
+      <div data-anim="fadeUp .6s .2s both">
+        <div style="font-size:29px;font-weight:700;color:#C9D8EA;">Юрист-консультант</div>
+        <div style="margin-top:4px;font-size:24px;color:#7C97B8;">дорого · долго · разовый ответ, который устаревает</div>
+      </div>
+      <div data-anim="fadeUp .6s .32s both">
+        <div style="font-size:29px;font-weight:700;color:#C9D8EA;">Lex.uz и поиск по законам</div>
+        <div style="margin-top:4px;font-size:24px;color:#7C97B8;">сырой текст НПА — не ответ «что делать моему товару»</div>
+      </div>
+      <div data-anim="fadeUp .6s .44s both">
+        <div style="font-size:29px;font-weight:700;color:#C9D8EA;">«Спросить знакомых»</div>
+        <div style="margin-top:4px;font-size:24px;color:#7C97B8;">ненадёжно — штрафы платит бизнес</div>
+      </div>
+      <div data-anim="fadeUp .7s .6s both" style="margin-top:14px;display:flex;gap:16px;align-items:center;">
+        <div style="width:4px;height:60px;background:#40B299;border-radius:2px;"></div>
+        <div style="font-size:28px;font-weight:600;line-height:1.35;">InspectorX: ответ по конкретному товару + автоматический мониторинг изменений</div>
+      </div>
+    </div>
+  </div>
+  <div style="position:absolute;top:190px;right:110px;width:850px;height:700px;">
+    <svg width="850" height="640" viewBox="0 0 850 640" style="position:absolute;inset:0;overflow:visible;">
+      <line x1="90" y1="560" x2="820" y2="560" stroke="rgba(143,169,199,.35)" stroke-width="2"></line>
+      <path d="M810 552 L824 560 L810 568" fill="none" stroke="rgba(143,169,199,.35)" stroke-width="2"></path>
+      <line x1="90" y1="560" x2="90" y2="40" stroke="rgba(143,169,199,.35)" stroke-width="2"></line>
+      <path d="M82 50 L90 36 L98 50" fill="none" stroke="rgba(143,169,199,.35)" stroke-width="2"></path>
+      <line x1="90" y1="300" x2="820" y2="300" stroke="rgba(143,169,199,.1)" stroke-width="1.5" stroke-dasharray="3 10"></line>
+      <line x1="455" y1="560" x2="455" y2="40" stroke="rgba(143,169,199,.1)" stroke-width="1.5" stroke-dasharray="3 10"></line>
+      <circle cx="200" cy="480" r="17" fill="rgba(143,169,199,.55)"></circle>
+      <circle cx="320" cy="500" r="17" fill="rgba(143,169,199,.55)"></circle>
+      <circle cx="560" cy="430" r="17" fill="rgba(36,111,163,.9)"></circle>
+      <circle cx="700" cy="120" r="30" fill="rgba(64,178,153,.25)" stroke="#40B299" stroke-width="3"></circle>
+      <circle cx="700" cy="120" r="48" fill="none" stroke="rgba(64,178,153,.35)" stroke-width="1.5" stroke-dasharray="3 9"></circle>
+      <line x1="689" y1="109" x2="711" y2="131" stroke="#F2F6FA" stroke-width="4" stroke-linecap="round"></line>
+      <line x1="711" y1="109" x2="689" y2="131" stroke="#40B299" stroke-width="4" stroke-linecap="round"></line>
+    </svg>
+    <div style="position:absolute;left:120px;top:588px;right:0;text-align:center;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.12em;color:#5C7BA6;">СЫРОЙ ТЕКСТ ЗАКОНА → ОТВЕТ ПО ТОВАРУ</div>
+    <div style="position:absolute;left:-14px;top:270px;transform:rotate(-90deg);transform-origin:center;width:400px;margin-left:-160px;text-align:center;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.12em;color:#5C7BA6;">РАЗОВЫЙ ОТВЕТ → МОНИТОРИНГ</div>
+    <div data-anim="fadeIn .6s .3s both" style="position:absolute;left:140px;top:392px;font-size:23px;color:#8FA9C7;">«знакомые»</div>
+    <div data-anim="fadeIn .6s .4s both" style="position:absolute;left:268px;top:528px;font-size:23px;color:#8FA9C7;">Lex.uz</div>
+    <div data-anim="fadeIn .6s .5s both" style="position:absolute;left:512px;top:346px;font-size:23px;color:#8FA9C7;">юрист</div>
+    <div data-anim="fadeUp .7s .65s both" style="position:absolute;left:600px;top:175px;width:220px;text-align:center;font-size:27px;font-weight:800;color:#40B299;">InspectorX</div>
+  </div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">08 / 11</div>
+</section>
+
+<!-- ═══ 09 ЭКОСИСТЕМА ═══ -->
+<section data-label="Экосистема" data-screen-label="09 Экосистема" data-speaker-notes="LegalX плюс SudX как фундамент, InspectorX как витрина. Интерфейс скопировать легко, пайплайн — нет." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 50% -15%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <svg width="1000" height="1000" viewBox="0 0 1000 1000" style="position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);opacity:.45;pointer-events:none;">
+    <circle cx="500" cy="500" r="300" fill="none" stroke="rgba(64,178,153,.13)" stroke-width="1.5"></circle>
+    <circle cx="500" cy="500" r="420" fill="none" stroke="rgba(143,169,199,.08)" stroke-width="1.5" stroke-dasharray="3 14"></circle>
+  </svg>
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    08 · ЗАЩИЩЁННОСТЬ
+  </div>
+  <div data-anim="fadeUp .7s both" style="position:absolute;top:126px;left:110px;font-size:56px;font-weight:800;letter-spacing:-0.02em;">Три продукта — один барьер для копирования</div>
+  <div style="position:absolute;top:280px;left:50%;transform:translateX(-50%);width:1100px;">
+    <div data-anim="fadeUp .7s .4s both" style="margin:0 auto;width:620px;background:linear-gradient(165deg, rgba(64,178,153,.15), rgba(17,41,80,.92));border:1.5px solid rgba(64,178,153,.65);border-radius:24px;padding:38px 46px;box-shadow:0 0 70px rgba(64,178,153,.16);text-align:center;position:relative;z-index:2;">
+      <div style="font-size:46px;font-weight:800;">Inspector<span style="color:#40B299;">X</span></div>
+      <div style="margin-top:10px;font-size:26px;color:#B8CBE0;">витрина «что делать бизнесу» — поверх обоих</div>
+    </div>
+    <svg width="1100" height="90" viewBox="0 0 1100 90" style="display:block;margin:-6px auto 0;overflow:visible;">
+      <path d="M300 90 C 300 40 480 60 520 8" fill="none" stroke="rgba(64,178,153,.55)" stroke-width="2.5" stroke-dasharray="8 10" data-loop="1" style="animation:dashFlow 2.4s linear infinite;"></path>
+      <path d="M800 90 C 800 40 620 60 580 8" fill="none" stroke="rgba(46,159,173,.55)" stroke-width="2.5" stroke-dasharray="8 10" data-loop="1" style="animation:dashFlow 2.4s linear infinite;"></path>
+    </svg>
+    <div style="display:flex;gap:60px;justify-content:center;margin-top:0;">
+      <div data-anim="fadeUp .6s .15s both" style="width:460px;background:rgba(17,41,80,.85);border:1px solid rgba(36,111,163,.55);border-radius:20px;padding:34px 40px;">
+        <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.2em;color:#5C7BA6;">ФУНДАМЕНТ 01</div>
+        <div style="margin-top:10px;font-size:38px;font-weight:800;">LegalX</div>
+        <div style="margin-top:8px;font-size:24px;color:#8FA9C7;line-height:1.4;">база законодательства с версионированием актов</div>
+      </div>
+      <div data-anim="fadeUp .6s .27s both" style="width:460px;background:rgba(17,41,80,.85);border:1px solid rgba(46,159,173,.55);border-radius:20px;padding:34px 40px;">
+        <div style="font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.2em;color:#5C7BA6;">ФУНДАМЕНТ 02</div>
+        <div style="margin-top:10px;font-size:38px;font-weight:800;">SudX</div>
+        <div style="margin-top:8px;font-size:24px;color:#8FA9C7;line-height:1.4;">судебная практика — как нормы применяют на деле</div>
+      </div>
+    </div>
+  </div>
+  <div data-anim="fadeUp .7s .6s both" style="position:absolute;bottom:96px;left:0;right:0;text-align:center;font-size:31px;font-weight:700;line-height:1.4;">Скопировать интерфейс — легко.<br><span style="color:#40B299;">Скопировать пайплайн «законы → верифицированные требования → мониторинг» — нет.</span></div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">09 / 11</div>
+</section>
+
+<!-- ═══ 10 КОМАНДА ═══ -->
+<section data-label="Команда" data-screen-label="10 Команда" data-speaker-notes="Двое co-founders. AI-first: конвейер контента автоматизирован агентами — двое делают работу отдела." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1300px 850px at 15% 15%, #14305A 0%, #0C1F3D 55%, #0A1930 100%);">
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    09 · КОМАНДА
+  </div>
+  <div data-anim="fadeUp .7s both" style="position:absolute;top:126px;left:110px;font-size:56px;font-weight:800;letter-spacing:-0.02em;">Двое — с производительностью отдела</div>
+  <div style="position:absolute;top:300px;left:110px;display:flex;gap:56px;">
+    <div data-anim="fadeUp .7s .15s both" style="box-sizing:border-box;width:520px;background:rgba(17,41,80,.8);border:1px solid rgba(143,169,199,.28);border-radius:24px;padding:44px;">
+      <div style="width:172px;height:172px;">
+        <image-slot id="photo-ceo" shape="circle" style="width:172px;height:172px;" placeholder="Фото CEO"></image-slot>
+      </div>
+      <div style="margin-top: 28px; font-size: 37px; font-weight: 800; color: #F2F6FA">Азизбек Хусанов</div>
+      <div style="margin-top:8px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.12em;color:#40B299;">CO-FOUNDER · CEO</div>
+      <div style="margin-top:16px;font-size:25px;color:#B8CBE0;line-height:1.45;">Стратегия · бизнес-модель · партнёрства</div>
+      <div style="margin-top:12px;font-size:22px;color:#52709A;">[1–2 строки бэкграунда]</div>
+    </div>
+    <div data-anim="fadeUp .7s .3s both" style="box-sizing:border-box;width:520px;background:rgba(17,41,80,.8);border:1px solid rgba(143,169,199,.28);border-radius:24px;padding:44px;">
+      <div style="width:172px;height:172px;">
+        <image-slot id="photo-cto" shape="circle" style="width:172px;height:172px;" placeholder="Фото CTO"></image-slot>
+      </div>
+      <div style="margin-top:28px;font-size:37px;font-weight:800;">Абдурахмон Турдиев</div>
+      <div style="margin-top:8px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.12em;color:#40B299;">CO-FOUNDER · CTO / PRODUCT</div>
+      <div style="margin-top:16px;font-size:25px;color:#B8CBE0;line-height:1.45;">Продукт целиком: архитектура · AI-конвейер</div>
+      <div style="margin-top:12px;font-size:22px;color:#52709A;">[1–2 строки бэкграунда]</div>
+    </div>
+  </div>
+  <div data-anim="fadeUp .7s .45s both" style="box-sizing:border-box;position:absolute;top:300px;right:110px;width:480px;">
+    <div style="display:flex;align-items:baseline;gap:6px;">
+      <div style="font-size:190px;font-weight:800;line-height:.9;color:#40B299;letter-spacing:-0.03em;">2</div>
+      <div style="font-size:40px;font-weight:700;color:#8FA9C7;">человека<br><span style="font-size:30px;color:#52709A;">= отдел контента</span></div>
+    </div>
+    <div style="margin-top:36px;padding-left:24px;border-left:3px solid #40B299;font-size:28px;line-height:1.45;color:#DCE7F2;">AI-first команда: конвейер контента автоматизирован агентами — люди остаются там, где нужна экспертиза</div>
+  </div>
+  <div style="position:absolute;bottom:44px;left:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">INSPECTORX</div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">10 / 11</div>
+</section>
+
+<!-- ═══ 11 ROADMAP ═══ -->
+<section data-label="Roadmap" data-screen-label="11 Roadmap" data-speaker-notes="3 месяца: валидация с 10 платящими, фабрика на приоритетные категории, метрики к Demo Day. Грант 40К — LLM, юрист, продажи." style="position:relative;overflow:hidden;font-family:var(--fd,'Wix Madefor Display'),sans-serif;color:#F2F6FA;background:radial-gradient(1400px 900px at 50% 130%, #16345F 0%, #0D2140 50%, #0A1930 100%);">
+  <svg width="1300" height="1300" viewBox="0 0 1300 1300" style="position:absolute;left:50%;bottom:-780px;transform:translateX(-50%);opacity:.6;pointer-events:none;">
+    <circle cx="650" cy="650" r="320" fill="none" stroke="rgba(64,178,153,.16)" stroke-width="1.5"></circle>
+    <circle cx="650" cy="650" r="440" fill="none" stroke="rgba(36,111,163,.2)" stroke-width="1.5"></circle>
+    <circle cx="650" cy="650" r="560" fill="none" stroke="rgba(143,169,199,.09)" stroke-width="1.5" stroke-dasharray="3 14"></circle>
+  </svg>
+  <div style="position:absolute;top:60px;left:110px;display:flex;align-items:center;gap:16px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:20px;letter-spacing:.24em;color:#40B299;">
+    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#40B299" stroke-width="2.4"></line><line x1="14" y1="2" x2="2" y2="14" stroke="#40B299" stroke-width="2.4"></line></svg>
+    10 · ИНКУБАЦИЯ
+  </div>
+  <div data-anim="fadeUp .7s both" style="position:absolute;top:126px;left:110px;font-size:56px;font-weight:800;letter-spacing:-0.02em;">3 месяца программы</div>
+  <div style="position:absolute;top:262px;left:110px;right:110px;">
+    <div style="position:relative;height:3px;background:linear-gradient(90deg,#40B299,#2E9FAD,#246FA3);border-radius:2px;"></div>
+    <div style="display:flex;gap:56px;margin-top:-11px;">
+      <div data-anim="fadeUp .6s .15s both" style="flex:1;">
+        <div style="width:19px;height:19px;border-radius:50%;background:#40B299;box-shadow:0 0 16px rgba(64,178,153,.7);"></div>
+        <div style="margin-top:22px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.2em;color:#40B299;">МЕС 1 · ВАЛИДАЦИЯ</div>
+        <div style="margin-top:12px;font-size:27px;font-weight:700;line-height:1.35;"><span style="color:#40B299;">20+</span> интервью с импортёрами и производителями</div>
+        <div style="margin-top:8px;font-size:25px;color:#8FA9C7;">первые <span style="color:#DCE7F2;font-weight:700;">10 платящих</span> компаний</div>
+      </div>
+      <div data-anim="fadeUp .6s .3s both" style="flex:1;">
+        <div style="width:19px;height:19px;border-radius:50%;background:#2E9FAD;box-shadow:0 0 16px rgba(46,159,173,.7);"></div>
+        <div style="margin-top:22px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.2em;color:#2E9FAD;">МЕС 2 · КОНТЕНТ</div>
+        <div style="margin-top:12px;font-size:27px;font-weight:700;line-height:1.35;">запуск фабрики на приоритетные категории</div>
+        <div style="margin-top:8px;font-size:25px;color:#8FA9C7;">продукты питания · электроника · фарма</div>
+      </div>
+      <div data-anim="fadeUp .6s .45s both" style="flex:1;">
+        <div style="width:19px;height:19px;border-radius:50%;background:#246FA3;box-shadow:0 0 16px rgba(36,111,163,.7);"></div>
+        <div style="margin-top:22px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:19px;letter-spacing:.2em;color:#7FA8CB;">МЕС 3 · DEMO DAY</div>
+        <div style="margin-top:12px;font-size:27px;font-weight:700;line-height:1.35;">подтверждённый спрос · конверсия тизер → подписка</div>
+        <div style="margin-top:8px;font-size:25px;color:#8FA9C7;">LOI от отраслевых партнёров</div>
+      </div>
+    </div>
+  </div>
+  <div data-anim="fadeUp .7s .55s both" style="box-sizing:border-box;position:absolute;top:596px;left:110px;right:110px;display:flex;align-items:center;gap:40px;">
+    <div style="font-size:88px;font-weight:800;line-height:1;color:#40B299;letter-spacing:-0.02em;white-space:nowrap;"><span data-count="40000" data-pre="$" data-fmt="space">$40 000</span></div>
+    <svg width="46" height="28" viewBox="0 0 46 28" style="flex:none;"><line x1="0" y1="14" x2="34" y2="14" stroke="#40B299" stroke-width="3"></line><path d="M32 4 L44 14 L32 24" fill="none" stroke="#40B299" stroke-width="3"></path></svg>
+    <div style="flex:1;display:flex;flex-wrap:wrap;gap:12px;">
+      <div style="background:rgba(64,178,153,.1);border:1px solid rgba(64,178,153,.4);border-radius:26px;padding:12px 24px;font-size:23px;">контент-фабрика (LLM)</div>
+      <div style="background:rgba(64,178,153,.1);border:1px solid rgba(64,178,153,.4);border-radius:26px;padding:12px 24px;font-size:23px;">юрист-верификатор</div>
+      <div style="background:rgba(64,178,153,.1);border:1px solid rgba(64,178,153,.4);border-radius:26px;padding:12px 24px;font-size:23px;">первые продажи</div>
+    </div>
+  </div>
+  <div data-anim="fadeUp .8s .7s both" style="box-sizing:border-box;position:absolute;bottom:104px;left:160px;right:160px;text-align:center;font-size:38px;font-weight:800;line-height:1.32;letter-spacing:-0.01em;text-wrap:pretty;">Чтобы каждый бизнес Узбекистана знал требования закона<br><span style="color:#40B299;">до проверки, а не после</span></div>
+  <div style="position:absolute;bottom:44px;left:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">INSPECTORX.UZ</div>
+  <div style="position:absolute;bottom:44px;right:110px;font-family:var(--fm,'JetBrains Mono'),monospace;font-size:18px;letter-spacing:.18em;color:#3E5C86;">11 / 11</div>
+</section>
+
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;displayFont&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Wix Madefor Display&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;Wix Madefor Display&quot;,&quot;Golos Text&quot;,&quot;Manrope&quot;,&quot;Onest&quot;,&quot;Unbounded&quot;],&quot;section&quot;:&quot;Шрифты&quot;},&quot;monoFont&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;JetBrains Mono&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;JetBrains Mono&quot;,&quot;IBM Plex Mono&quot;,&quot;Roboto Mono&quot;,&quot;PT Mono&quot;],&quot;section&quot;:&quot;Шрифты&quot;},&quot;animations&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Движение&quot;},&quot;counters&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Движение&quot;},&quot;motion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Движение&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    this._attach = this._attach.bind(this);
+    this._poll = setInterval(this._attach, 150);
+    this._attach();
+  }
+  componentWillUnmount() {
+    clearInterval(this._poll);
+    if (this._stage && this._onSlide) this._stage.removeEventListener('slidechange', this._onSlide);
+  }
+  componentDidUpdate() { this._applyMotion(); this._applyFonts(); }
+  _applyFonts() {
+    if (!this._stage) return;
+    this._stage.style.setProperty('--fd', "'" + (this.props.displayFont ?? 'Wix Madefor Display') + "'");
+    this._stage.style.setProperty('--fm', "'" + (this.props.monoFont ?? 'JetBrains Mono') + "'");
+  }
+  _attach() {
+    if (this._stage) { clearInterval(this._poll); return; }
+    const st = document.querySelector('deck-stage');
+    if (!st) return;
+    this._stage = st;
+    clearInterval(this._poll);
+    this._onSlide = (e) => this._activate(e.detail && e.detail.slide);
+    st.addEventListener('slidechange', this._onSlide);
+    this._activate(st.querySelector('section'));
+    this._applyMotion();
+    this._applyFonts();
+  }
+  _applyMotion() {
+    const on = this.props.motion ?? true;
+    document.querySelectorAll('[data-loop]').forEach((el) => {
+      el.style.animationPlayState = on ? 'running' : 'paused';
+    });
+  }
+  _activate(slide) {
+    if (!slide) return;
+    if (this.props.animations ?? true) {
+      slide.querySelectorAll('[data-anim]').forEach((el) => {
+        el.style.animation = 'none';
+        void el.offsetWidth;
+        el.style.animation = el.getAttribute('data-anim');
+      });
+    }
+    if (this.props.counters ?? true) {
+      slide.querySelectorAll('[data-count]').forEach((el) => {
+        if (el._raf) cancelAnimationFrame(el._raf);
+        const target = parseFloat(el.getAttribute('data-count'));
+        const pre = el.getAttribute('data-pre') || '';
+        const suf = el.getAttribute('data-suf') || '';
+        const dur = 1500, t0 = performance.now();
+        const fmt = (v) => {
+          let s = Math.round(v).toString();
+          if (el.getAttribute('data-fmt') === 'space') s = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
+          return pre + s + suf;
+        };
+        const step = (t) => {
+          const p = Math.min(1, (t - t0) / dur);
+          el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
+          if (p < 1) el._raf = requestAnimationFrame(step);
+        };
+        el._raf = requestAnimationFrame(step);
+      });
+    }
+  }
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
