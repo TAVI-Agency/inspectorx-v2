@@ -24,6 +24,26 @@ describe('splitFindings', () => {
     expect(lists.noGold).toHaveLength(1)
   })
 
+  it('секция «Выполнено» (задача E) — только status === pass', () => {
+    const lists = splitFindings([f('fail'), f('pass'), f('unreadable'), f('pass')], [] as never)
+    expect(lists.passed).toHaveLength(2)
+  })
+
+  it('согласованность счётчиков: нарушения + выполнено = «Проверено» (decided)', () => {
+    // pass/fail — решённые пункты; unreadable — машина не смогла прочесть,
+    // в decided не входит (реальный источник — inspection.decided с воркера,
+    // здесь синтетика согласована с ним по построению).
+    const findings = [f('fail'), f('pass'), f('pass'), f('fail'), f('unreadable')]
+    const lists = splitFindings(findings, [] as never)
+    const counters = reportCounters({
+      inspection: { decided: 4, checked: 5 },
+      findings,
+      notCheckable: [],
+      assets: [],
+    } as never)
+    expect(lists.violations.length + lists.passed.length).toBe(counters.decided)
+  })
+
   it('список 2 — объединение unreadable и needs_human, а не только нечитаемых', () => {
     // прочитано машиной, но без уверенности — тоже «нужен человек»
     const lists = splitFindings(

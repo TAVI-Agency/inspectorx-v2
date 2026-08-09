@@ -31,6 +31,15 @@ export interface NotCheckableLike {
 export interface FindingLists<F extends FindingLike, N extends NotCheckableLike> {
   /** Список 1 — нарушения (`status === 'fail'`). */
   violations: F[]
+  /**
+   * Секция «Выполнено» — решённые пункты (`status === 'pass'`). Раньше эти
+   * находки только считались в сводке «Проверено N из K», а карточек с
+   * кропом-доказательством при 0 нарушениях не было ни одной, хотя движок их
+   * генерирует (задача E, план фотоконтроля волны 2). Тот же предикат, что и
+   * счётчик «Проверено» минус нарушения — см. тест согласованности рядом с
+   * `splitFindings` в `report-utils.test.ts`.
+   */
+  passed: F[]
   /** Список 2 — досъёмка или человек (`needsHumanFinding`: `unreadable` либо `needs_human`). */
   needsHuman: F[]
   /** Список 3 — граница метода (`photo_not_checkable`, класс не «нет эталона»). */
@@ -40,10 +49,10 @@ export interface FindingLists<F extends FindingLike, N extends NotCheckableLike>
 }
 
 /**
- * Разбор находок и строк `photo_not_checkable` на четыре списка §7, именно в
- * этом порядке. Список 2 считается тем же предикатом, что и плитка «Требует
- * человека» наверху отчёта (`needsHumanFinding` в слое данных) — числа под
- * одной подписью на одном экране обязаны совпадать.
+ * Разбор находок и строк `photo_not_checkable` на списки §7 плюс секцию
+ * «Выполнено» (задача E). Список 2 считается тем же предикатом, что и плитка
+ * «Требует человека» наверху отчёта (`needsHumanFinding` в слое данных) —
+ * числа под одной подписью на одном экране обязаны совпадать.
  */
 export function splitFindings<F extends FindingLike, N extends NotCheckableLike>(
   findings: F[],
@@ -51,6 +60,7 @@ export function splitFindings<F extends FindingLike, N extends NotCheckableLike>
 ): FindingLists<F, N> {
   return {
     violations: findings.filter((f) => f.status === 'fail'),
+    passed: findings.filter((f) => f.status === 'pass'),
     needsHuman: findings.filter(needsHumanFinding),
     notCheckable: notCheckable.filter((n) => n.class !== 'нет эталона'),
     noGold: notCheckable.filter((n) => n.class === 'нет эталона'),
