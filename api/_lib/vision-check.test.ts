@@ -362,9 +362,26 @@ describe('успешный прогон', () => {
     expect(captured.body).toEqual({ status: 'done', inspectionId: INSPECTION_ID })
     const finals = state.db.callsFor('rpc.finalize_photo_inspection')
     expect(finals).toHaveLength(1)
-    // p_reason у RPC необязателен: «причины нет» = ключа нет
+    // p_reason у RPC необязателен, но «причины нет» шлётся явным null-ом,
+    // а не отсутствием ключа (см. следующий тест — контракт аргументов RPC)
     expect(finals[0].args).toMatchObject({ p_outcome: 'done' })
-    expect((finals[0].args as { p_reason?: string }).p_reason).toBeUndefined()
+    expect((finals[0].args as { p_reason?: string | null }).p_reason).toBeNull()
+  })
+
+  it('outcome=done: в теле RPC присутствуют ОБА ключа p_degraded_mode и p_reason — иначе PostgREST не резолвит ни одну перегрузку finalize_photo_inspection (PGRST202)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, WORKER_RESULT)))
+    const captured = makeFakeResponse()
+    await check(authedRequest(), captured.res)
+    const [fin] = state.db.callsFor('rpc.finalize_photo_inspection')
+    // Фейковая база хранит args как обычный JS-объект, где ключ со значением
+    // undefined формально присутствует (Object.keys видит его) — в отличие
+    // от реального HTTP-тела, которое supabase-js собирает через
+    // JSON.stringify и которое такой ключ выкидывает. Прогоняем через
+    // JSON.stringify/parse, чтобы тест проверял именно набор ключей,
+    // долетающий до PostgREST, а не удобство фейка.
+    const bodyKeys = Object.keys(JSON.parse(JSON.stringify(fin.args)))
+    expect(bodyKeys).toContain('p_degraded_mode')
+    expect(bodyKeys).toContain('p_reason')
   })
 
   it('финализация упала — 500', async () => {
