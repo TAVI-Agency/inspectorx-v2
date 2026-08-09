@@ -201,7 +201,7 @@ def test_assemble_happy_path_uses_mid_tier():
     step(item_ctx())
 
     assert ASSEMBLE_PROFILE.tier == "mid"
-    assert llm.calls[0][1] == "gpt-5"  # models.yaml tiers.mid
+    assert llm.calls[0][1] == "claude-sonnet-5"  # models.yaml tiers.mid
 
 
 def test_assemble_empty_blocks_stay_none_not_collapsed():
