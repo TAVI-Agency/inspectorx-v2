@@ -1574,12 +1574,14 @@ export async function updateProfileReal(
 export async function submitSubscriptionRequest(input: {
   fullName: string
   contact: string
+  email: string
   company?: string
   userId?: string
 }): Promise<void> {
   const { error } = await supabase.from('subscription_requests').insert({
     full_name: input.fullName,
     contact: input.contact,
+    email: input.email,
     company: input.company || null,
     user_id: input.userId ?? null,
   })
@@ -1609,6 +1611,7 @@ export interface SubscriptionRequestRow {
   id: string
   fullName: string
   contact: string
+  email: string | null
   company: string | null
   status: string
   note: string | null
@@ -1618,13 +1621,14 @@ export interface SubscriptionRequestRow {
 export async function fetchSubscriptionRequests(): Promise<SubscriptionRequestRow[]> {
   const { data } = await supabase
     .from('subscription_requests')
-    .select('id, full_name, contact, company, status, note, created_at')
+    .select('id, full_name, contact, email, company, status, note, created_at')
     .order('created_at', { ascending: false })
     .limit(100)
   return (data ?? []).map((r) => ({
     id: r.id,
     fullName: r.full_name,
     contact: r.contact,
+    email: r.email,
     company: r.company,
     status: r.status,
     note: r.note,

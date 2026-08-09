@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/app/auth'
+import { useSubscriptionRequest } from '@/data/hooks'
 import { ru } from '@/i18n/ru'
 import { CCard } from './ui'
 
@@ -50,155 +51,228 @@ export function ResendButton({ email }: { email: string }) {
   )
 }
 
-/** Карточка «проверьте почту» после регистрации */
-function ConfirmSentCard({ email }: { email: string }) {
-  return (
-    <CCard className="c-rise w-full max-w-sm p-7 text-center">
-      <MailCheck aria-hidden className="mx-auto size-8 text-positive" />
-      <h1 className="font-display mt-4 text-xl font-medium tracking-tight">
-        {ru.auth.confirmSentTitle}
-      </h1>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-        {ru.auth.confirmSentText(email)}
-      </p>
-      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-        {ru.auth.confirmSentSpamHint}
-      </p>
-      <div className="mt-5">
-        <ResendButton email={email} />
-      </div>
-    </CCard>
-  )
-}
-
-/** Вход/регистрация дизайна C: тихая центрированная карточка */
-export function CAuthPage({ mode }: { mode: 'login' | 'register' }) {
-  const { session, signIn, signUp, loading } = useAuth()
+/** Вход: доступ только по одобренной заявке — самостоятельной регистрации нет. */
+function LoginForm() {
+  const { signIn } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  const [confirmSentTo, setConfirmSentTo] = useState<string | null>(null)
-
-  const isRegister = mode === 'register'
-
-  useEffect(() => {
-    if (!loading && session) navigate('/products', { replace: true })
-  }, [loading, session, navigate])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setPending(true)
-    if (isRegister) {
-      const result = await signUp(email.trim(), password, fullName.trim())
-      setPending(false)
-      if (result.error) setError(mapAuthError(result.error))
-      else if (result.needsConfirmation) setConfirmSentTo(email.trim())
-      else navigate('/products', { replace: true })
-    } else {
-      const result = await signIn(email.trim(), password)
-      setPending(false)
-      if (result.error) setError(mapAuthError(result.error))
-      else navigate('/products', { replace: true })
-    }
+    const result = await signIn(email.trim(), password)
+    setPending(false)
+    if (result.error) setError(mapAuthError(result.error))
+    else navigate('/products', { replace: true })
   }
 
   const notConfirmedError = error === ru.auth.errors.notConfirmed
 
   return (
-    <div className="flex justify-center px-4 py-16 sm:py-24">
-      {confirmSentTo ? (
-        <ConfirmSentCard email={confirmSentTo} />
-      ) : (
-        <CCard className="c-rise w-full max-w-sm p-7">
-          <form onSubmit={submit}>
-            <h1 className="font-display text-xl font-medium tracking-tight">
-              {isRegister ? ru.auth.registerTitle : ru.auth.loginTitle}
-            </h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              {isRegister
-                ? 'Создайте аккаунт, чтобы собрать портфель товаров.'
-                : 'Войдите, чтобы следить за изменениями по товарам.'}
-            </p>
+    <CCard className="c-rise w-full max-w-sm p-7">
+      <form onSubmit={submit}>
+        <h1 className="font-display text-xl font-medium tracking-tight">{ru.auth.loginTitle}</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+          {ru.auth.loginSubtitle}
+        </p>
 
-            <div className="mt-6 space-y-4">
-              {isRegister && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="cauth-name">{ru.auth.fullName}</Label>
-                  <Input
-                    id="cauth-name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder={ru.auth.fullNamePlaceholder}
-                    autoComplete="name"
-                    required
-                  />
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label htmlFor="cauth-email">{ru.auth.email}</Label>
-                <Input
-                  id="cauth-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.uz"
-                  autoComplete="email"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-baseline justify-between">
-                  <Label htmlFor="cauth-password">{ru.auth.password}</Label>
-                  {!isRegister && (
-                    <Link
-                      to="/forgot-password"
-                      className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    >
-                      {ru.auth.forgotPassword}
-                    </Link>
-                  )}
-                </div>
-                <Input
-                  id="cauth-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={isRegister ? 'new-password' : 'current-password'}
-                  minLength={6}
-                  required
-                />
-              </div>
+        <div className="mt-6 space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="cauth-email">{ru.auth.email}</Label>
+            <Input
+              id="cauth-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.uz"
+              autoComplete="email"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <Label htmlFor="cauth-password">{ru.auth.password}</Label>
+              <Link
+                to="/forgot-password"
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                {ru.auth.forgotPassword}
+              </Link>
             </div>
+            <Input
+              id="cauth-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              minLength={6}
+              required
+            />
+          </div>
+        </div>
 
-            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
-            {notConfirmedError && email.trim() && (
-              <div className="mt-2">
-                <ResendButton email={email.trim()} />
-              </div>
-            )}
+        {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+        {notConfirmedError && email.trim() && (
+          <div className="mt-2">
+            <ResendButton email={email.trim()} />
+          </div>
+        )}
 
-            <Button type="submit" className="mt-6 w-full" disabled={pending}>
-              {pending ? ru.common.loading : isRegister ? ru.auth.registerCta : ru.auth.loginCta}
-            </Button>
+        <Button type="submit" className="mt-6 w-full" disabled={pending}>
+          {pending ? ru.common.loading : ru.auth.loginCta}
+        </Button>
 
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              {isRegister ? (
-                <Link to="/login" className="underline-offset-2 hover:text-foreground hover:underline">
-                  {ru.auth.switchToLogin}
-                </Link>
-              ) : (
-                <Link to="/register" className="underline-offset-2 hover:text-foreground hover:underline">
-                  {ru.auth.switchToRegister}
-                </Link>
-              )}
-            </p>
-          </form>
-        </CCard>
-      )}
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          {ru.auth.inviteOnly.notice} {ru.auth.inviteOnly.noAccess}{' '}
+          <Link to="/register" className="underline-offset-2 hover:text-foreground hover:underline">
+            {ru.auth.inviteOnly.cta}
+          </Link>
+        </p>
+      </form>
+    </CCard>
+  )
+}
+
+/** Экран после отправки заявки на доступ */
+function ApplicationSentCard() {
+  return (
+    <CCard className="c-rise w-full max-w-sm p-7 text-center">
+      <MailCheck aria-hidden className="mx-auto size-8 text-positive" />
+      <h1 className="font-display mt-4 text-xl font-medium tracking-tight">
+        {ru.auth.applicationSentTitle}
+      </h1>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        {ru.auth.applicationSentText}
+      </p>
+      <Button variant="outline" className="mt-5" nativeButton={false} render={<Link to="/catalog" />}>
+        {ru.pricing.thanksCta}
+      </Button>
+    </CCard>
+  )
+}
+
+/**
+ * /register — раньше самостоятельная регистрация, теперь заявка на доступ:
+ * владелец апрувит в Telegram (api/telegram/webhook.ts), после апрува
+ * приходит письмо-приглашение (CConfirmEmailPage, type=invite). Пароля здесь
+ * больше нет — его задают по ссылке из письма.
+ */
+function ApplicationForm() {
+  const request = useSubscriptionRequest()
+  const [fullName, setFullName] = useState('')
+  const [company, setCompany] = useState('')
+  const [contact, setContact] = useState('')
+  const [email, setEmail] = useState('')
+  const [errors, setErrors] = useState<{ name?: string; contact?: string; email?: string }>({})
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const next: typeof errors = {}
+    if (!fullName.trim()) next.name = ru.pricing.validation.nameRequired
+    if (!contact.trim()) next.contact = ru.pricing.validation.contactRequired
+    if (!email.trim()) next.email = ru.pricing.validation.emailRequired
+    setErrors(next)
+    if (Object.keys(next).length > 0) return
+    request.mutate({
+      fullName: fullName.trim(),
+      contact: contact.trim(),
+      email: email.trim(),
+      company: company.trim() || undefined,
+    })
+  }
+
+  if (request.isSuccess) return <ApplicationSentCard />
+
+  return (
+    <CCard className="c-rise w-full max-w-sm p-7">
+      <form onSubmit={submit} noValidate>
+        <h1 className="font-display text-xl font-medium tracking-tight">{ru.auth.registerTitle}</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+          {ru.auth.applicationSubtitle}
+        </p>
+
+        <div className="mt-6 space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="creq-name">{ru.auth.fullName}</Label>
+            <Input
+              id="creq-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder={ru.auth.fullNamePlaceholder}
+              autoComplete="name"
+              aria-invalid={Boolean(errors.name)}
+            />
+            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="creq-company">{ru.pricing.companyLabel}</Label>
+            <Input
+              id="creq-company"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder={ru.pricing.companyPlaceholder}
+              autoComplete="organization"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="creq-contact">{ru.pricing.contactLabel}</Label>
+            <Input
+              id="creq-contact"
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              placeholder={ru.pricing.contactPlaceholder}
+              autoComplete="tel"
+              aria-invalid={Boolean(errors.contact)}
+            />
+            {errors.contact && <p className="text-xs text-destructive">{errors.contact}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="creq-email">{ru.pricing.emailLabel}</Label>
+            <Input
+              id="creq-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={ru.pricing.emailPlaceholder}
+              autoComplete="email"
+              aria-invalid={Boolean(errors.email)}
+            />
+            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+          </div>
+        </div>
+
+        {request.isError && <p className="mt-3 text-sm text-destructive">{ru.auth.errors.generic}</p>}
+
+        <Button type="submit" className="mt-6 w-full" disabled={request.isPending}>
+          {request.isPending ? ru.common.sending : ru.pricing.submit}
+        </Button>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          <Link to="/login" className="underline-offset-2 hover:text-foreground hover:underline">
+            {ru.auth.switchToLogin}
+          </Link>
+        </p>
+      </form>
+    </CCard>
+  )
+}
+
+/** Вход/заявка на доступ дизайна C: тихая центрированная карточка */
+export function CAuthPage({ mode }: { mode: 'login' | 'register' }) {
+  const { session, loading } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!loading && session) navigate('/products', { replace: true })
+  }, [loading, session, navigate])
+
+  return (
+    <div className="flex justify-center px-4 py-16 sm:py-24">
+      {mode === 'register' ? <ApplicationForm /> : <LoginForm />}
     </div>
   )
 }

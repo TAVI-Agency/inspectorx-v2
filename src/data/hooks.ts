@@ -440,7 +440,7 @@ export function useNotificationCenter() {
 export function useSubscriptionRequest() {
   const { session } = useAuth()
   return useMutation({
-    mutationFn: (input: { fullName: string; contact: string; company?: string }) =>
+    mutationFn: (input: { fullName: string; contact: string; email: string; company?: string }) =>
       submitSubscriptionRequest({ ...input, userId: session?.user.id }),
   })
 }

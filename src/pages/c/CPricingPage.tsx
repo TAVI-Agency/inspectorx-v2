@@ -85,18 +85,21 @@ function RequestForm() {
   const [fullName, setFullName] = useState('')
   const [contact, setContact] = useState('')
   const [company, setCompany] = useState('')
-  const [errors, setErrors] = useState<{ name?: string; contact?: string }>({})
+  const [email, setEmail] = useState('')
+  const [errors, setErrors] = useState<{ name?: string; contact?: string; email?: string }>({})
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
     const next: typeof errors = {}
     if (!fullName.trim()) next.name = ru.pricing.validation.nameRequired
     if (!contact.trim()) next.contact = ru.pricing.validation.contactRequired
+    if (!email.trim()) next.email = ru.pricing.validation.emailRequired
     setErrors(next)
     if (Object.keys(next).length > 0) return
     request.mutate({
       fullName: fullName.trim(),
       contact: contact.trim(),
+      email: email.trim(),
       company: company.trim() || undefined,
     })
   }
@@ -162,6 +165,19 @@ function RequestForm() {
             placeholder={ru.pricing.companyPlaceholder}
             autoComplete="organization"
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cpr-email">{ru.pricing.emailLabel}</Label>
+          <Input
+            id="cpr-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={ru.pricing.emailPlaceholder}
+            autoComplete="email"
+            aria-invalid={Boolean(errors.email)}
+          />
+          {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
         </div>
         {request.isError && (
           <p className="text-sm text-destructive">{ru.auth.errors.generic}</p>
