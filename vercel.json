@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/vision/check.ts": { "maxDuration": 120 }
+    "api/vision/check.ts": { "maxDuration": 300 }
   },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }
