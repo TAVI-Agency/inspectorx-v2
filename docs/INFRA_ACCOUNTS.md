@@ -68,7 +68,7 @@ $25 (план) + $10 (InspectorX) + $10 (LegalX) − $10 (кредиты) = $35/
 
 | Что | Где лежит | Симптом | Что делать |
 |---|---|---|---|
-| `SUPABASE_ACCESS_TOKEN` | `.env.importer` | Management API → `403` на оба проекта; под этим токеном видны чужие организации (`turdievabdurakhmon@gmail.com's Org`, пустая `TAVI-agency2`) | Создать новый Personal Access Token **в основном аккаунте** и заменить значение |
+| `SUPABASE_ACCESS_TOKEN` | `.env.importer` | Management API → `403` на оба проекта; под этим токеном видны чужие организации (личная организация владельца, пустая `TAVI-agency2`) | Создать новый Personal Access Token **в основном аккаунте** и заменить значение |
 | `JB_SUPABASE_KEY` | `.env.importer` | REST LegalX → `401` | Взять актуальный ключ проекта LegalX (имя переменной `JB_*` историческое) |
 | Supabase CLI | вход в системе | `supabase projects list` показывает третий, посторонний аккаунт (проекты `crm_hiring`, `crm_for_hiring`, `Referral Program`) — ни InspectorX, ни LegalX | `supabase login` под основным аккаунтом |
 | Supabase MCP | конфиг агента | Требует OAuth, в неинтерактивной сессии не авторизуется | Авторизовать в интерактивной сессии |
