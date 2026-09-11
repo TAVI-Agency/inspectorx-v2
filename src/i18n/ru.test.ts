@@ -6,7 +6,7 @@ describe('ru.legal', () => {
   it('обязательные ключи раздела на месте', () => {
     const required = [
       'offerTitle', 'privacyTitle', 'contactsTitle', 'requisites',
-      'notPublished', 'backHome', 'writeUs',
+      'notPublished', 'backHome', 'writeUs', 'docsEyebrow', 'contactsEyebrow',
     ] as const
     for (const key of required) expect(ru.legal).toHaveProperty(key)
   })

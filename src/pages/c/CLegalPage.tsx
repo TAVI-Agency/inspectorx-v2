@@ -11,7 +11,7 @@ export function CLegalPage({ kind }: { kind: 'offer' | 'privacy' }) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-7 sm:px-8">
-      <CEyebrow>Документы</CEyebrow>
+      <CEyebrow>{ru.legal.docsEyebrow}</CEyebrow>
       <h1 className="font-display mt-2 text-[22px] leading-tight font-medium tracking-tight sm:text-[30px]">
         {title}
       </h1>

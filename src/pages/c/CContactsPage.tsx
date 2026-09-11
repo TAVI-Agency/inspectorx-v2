@@ -6,7 +6,7 @@ import { CCard, CEyebrow } from './ui'
 export function CContactsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-7 sm:px-8">
-      <CEyebrow>Документы</CEyebrow>
+      <CEyebrow>{ru.legal.contactsEyebrow}</CEyebrow>
       <h1 className="font-display mt-2 text-[22px] leading-tight font-medium tracking-tight sm:text-[30px]">
         {ru.legal.contactsTitle}
       </h1>
