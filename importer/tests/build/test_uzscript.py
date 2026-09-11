@@ -57,3 +57,17 @@ def test_has_uzbek_markers_and_alt_script():
 
 def test_alt_script_latin_to_cyrillic():
     assert alt_script("o'zbek") == "ўзбек"
+
+
+def test_cyrillic_to_latin_digraph_case_restoration():
+    """Одиночная кириллическая буква, дающая диграф (ш/ч/ё/ю/я/ц/щ) в
+    латинице, не должна путать «слово с заглавной первой буквой» с «слово
+    целиком в верхнем регистре» — регистр решает контекст (следующая
+    буква исходного текста), а не тривиальный `.isupper()` фрагмента из
+    одного символа."""
+    assert cyrillic_to_latin("Шартнома") == "Shartnoma"
+    assert cyrillic_to_latin("ШАРТНОМА") == "SHARTNOMA"
+    assert cyrillic_to_latin("Чўчқа") == "Choʻchqa"
+    assert cyrillic_to_latin("Ш") == "Sh"
+    assert latin_to_cyrillic("SHARTNOMA") == "ШАРТНОМА"
+    assert latin_to_cyrillic("Shartnoma") == "Шартнома"

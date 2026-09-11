@@ -72,21 +72,50 @@ _CYR_TO_LAT_TABLE = {
 }
 
 
-def _translit(text: str, table: dict[str, str]) -> str:
-    """Заменяет вхождения ключей `table` (без учёта регистра, длинные ключи
-    первыми) на значения таблицы, восстанавливая регистр совпавшего
+def _compile_pattern(table: dict[str, str]) -> re.Pattern[str] | None:
+    """Компилирует regex по ключам `table` (длинные ключи первыми, чтобы
+    диграф не терялся под своей первой буквой), без учёта регистра.
+    Вызывается один раз на таблицу при загрузке модуля — не на каждый
+    вызов `_translit`."""
+    if not table:
+        return None
+    keys = sorted(table, key=len, reverse=True)
+    return re.compile("|".join(re.escape(k) for k in keys), re.IGNORECASE)
+
+
+# Пары (таблица, прекомпилированный паттерн) — по одной на стадию замены.
+_LAT_TO_CYR_APOSTROPHE_DIGRAPHS_RE = _compile_pattern(_LAT_TO_CYR_APOSTROPHE_DIGRAPHS)
+_LAT_TO_CYR_DIGRAPHS_RE = _compile_pattern(_LAT_TO_CYR_DIGRAPHS)
+_LAT_TO_CYR_SINGLES_RE = _compile_pattern(_LAT_TO_CYR_SINGLES)
+_LAT_TO_CYR_TUTUQ_RE = _compile_pattern(_LAT_TO_CYR_TUTUQ)
+_CYR_TO_LAT_TABLE_RE = _compile_pattern(_CYR_TO_LAT_TABLE)
+
+
+def _translit(text: str, table: dict[str, str], pattern: re.Pattern[str] | None) -> str:
+    """Заменяет вхождения ключей `table` (найденные прекомпилированным
+    `pattern`) на значения таблицы, восстанавливая регистр совпавшего
     фрагмента: весь фрагмент в верхнем регистре -> `.upper()` результата;
     первая буква фрагмента заглавная -> заглавная первая буква результата;
-    иначе — результат как есть (таблица хранит нижний регистр)."""
-    if not table:
+    иначе — результат как есть (таблица хранит нижний регистр).
+
+    Особый случай — однобуквенный фрагмент, дающий многобуквенную замену
+    (кириллические диграфы `ш/ч/ё/ю/я/ц/щ` -> `sh/ch/yo/yu/ya/ts/sh`):
+    заглавность одной буквы сама по себе не говорит, набрано ли всё слово
+    капсом (-> `SH`) или это просто заглавная первая буква слова (-> `Sh`).
+    Различаем по контексту — следующей букве исходного текста: заглавная
+    буква дальше -> считаем слово капсом, иначе -> `.capitalize()`."""
+    if pattern is None:
         return text
-    keys = sorted(table, key=len, reverse=True)
-    pattern = re.compile("|".join(re.escape(k) for k in keys), re.IGNORECASE)
 
     def repl(match: re.Match[str]) -> str:
         frag = match.group(0)
         replacement = table[frag.lower()]
         if frag.isupper():
+            if len(frag) == 1 and len(replacement) > 1:
+                next_char = text[match.end():match.end() + 1]
+                if next_char.isalpha() and next_char.isupper():
+                    return replacement.upper()
+                return replacement[:1].upper() + replacement[1:]
             return replacement.upper()
         if frag[:1].isupper():
             return replacement[:1].upper() + replacement[1:]
@@ -100,10 +129,10 @@ def latin_to_cyrillic(text: str) -> str:
     сохраняя регистр. Апострофы унифицируются перед разбором (см.
     `unify_apostrophes`)."""
     text = unify_apostrophes(text)
-    text = _translit(text, _LAT_TO_CYR_APOSTROPHE_DIGRAPHS)
-    text = _translit(text, _LAT_TO_CYR_DIGRAPHS)
-    text = _translit(text, _LAT_TO_CYR_SINGLES)
-    text = _translit(text, _LAT_TO_CYR_TUTUQ)
+    text = _translit(text, _LAT_TO_CYR_APOSTROPHE_DIGRAPHS, _LAT_TO_CYR_APOSTROPHE_DIGRAPHS_RE)
+    text = _translit(text, _LAT_TO_CYR_DIGRAPHS, _LAT_TO_CYR_DIGRAPHS_RE)
+    text = _translit(text, _LAT_TO_CYR_SINGLES, _LAT_TO_CYR_SINGLES_RE)
+    text = _translit(text, _LAT_TO_CYR_TUTUQ, _LAT_TO_CYR_TUTUQ_RE)
     return text
 
 
@@ -111,7 +140,7 @@ def cyrillic_to_latin(text: str) -> str:
     """Транслитерирует узбекскую кириллицу в латиницу (алфавит 1995 г.),
     сохраняя регистр. `ў`/`ғ` дают модификаторную букву `ʻ` (U+02BB) —
     как в исходных узбекских текстах, не ASCII-апостроф."""
-    return _translit(text, _CYR_TO_LAT_TABLE)
+    return _translit(text, _CYR_TO_LAT_TABLE, _CYR_TO_LAT_TABLE_RE)
 
 
 # ── Определение скрипта ──────────────────────────────────────────────────
@@ -187,12 +216,11 @@ def has_uzbek_markers(text: str) -> bool:
 def alt_script(text: str) -> str | None:
     """Тот же текст в другом скрипте, если в нём есть узбекские маркеры
     (`has_uzbek_markers`) — иначе `None` (не узбекский текст, скрипт
-    менять незачем, например обычный русский)."""
-    unified = unify_apostrophes(text).lower()
-    has_cyrillic_markers = any(marker in unified for marker in _CYRILLIC_MARKERS)
-    has_latin_markers = "o'" in unified or "g'" in unified
-    if has_cyrillic_markers:
-        return cyrillic_to_latin(text)
-    if has_latin_markers:
+    менять незачем, например обычный русский). Направление перевода —
+    по `detect_script`: латиница -> кириллица, иначе (кириллица/mixed)
+    -> латиница."""
+    if not has_uzbek_markers(text):
+        return None
+    if detect_script(text) == "latin":
         return latin_to_cyrillic(text)
-    return None
+    return cyrillic_to_latin(text)
