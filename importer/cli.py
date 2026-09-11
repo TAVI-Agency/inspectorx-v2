@@ -37,6 +37,11 @@ from importer.monitoring.impact_mapper import (
 from importer.pipeline import run_import
 
 
+_LIVE_RUN_WARNING = (
+    "ЖИВОЙ ПРОГОН СТОИТ ДЕНЕГ: перед запуском выставь лимиты трат у провайдеров "
+    "(Волна 3, задача А5) и IMPORTER_LLM_MAX_CALLS"
+)
+
 _live_runner = None
 
 
@@ -140,16 +145,12 @@ def main(argv=None):
     p_build_eval_golden.add_argument(
         "--llm", choices=["mock", "live"], default="mock",
         help="mock (по умолчанию) — HeuristicBaselineLLM, только smoke-проверка проводки; "
-             "live — реальные вызовы моделей из models.yaml. ЖИВОЙ ПРОГОН СТОИТ ДЕНЕГ: "
-             "перед --llm live выставь лимиты трат у провайдеров (Волна 3, задача А5) и "
-             "IMPORTER_LLM_MAX_CALLS",
+             f"live — реальные вызовы моделей из models.yaml. {_LIVE_RUN_WARNING}",
     )
     p_build_eval_models = build_sub.add_parser(
         "eval-models",
-        help="сравнить НЕСКОЛЬКО наборов моделей на golden set (Задача 6): для каждого "
-             "--set гоняет eval-golden и печатает таблицу метрик рядом. ЖИВОЙ ПРОГОН СТОИТ "
-             "ДЕНЕГ: перед запуском выставь лимиты трат у провайдеров (Волна 3, задача А5) "
-             "и IMPORTER_LLM_MAX_CALLS",
+        help=f"сравнить НЕСКОЛЬКО наборов моделей на golden set (Задача 6): для каждого "
+             f"--set гоняет eval-golden и печатает таблицу метрик рядом. {_LIVE_RUN_WARNING}",
     )
     p_build_eval_models.add_argument(
         "--set", dest="sets", action="append", required=True,
@@ -346,7 +347,11 @@ def main(argv=None):
             items = load_golden_set(golden_path)
             if args.limit:
                 items = items[: args.limit]
-            sets = [parse_tier_set(spec) for spec in args.sets]
+            try:
+                sets = [parse_tier_set(spec) for spec in args.sets]
+            except ValueError as exc:
+                print(f"ошибка: {exc}")
+                raise SystemExit(1)
             # Тот же общий на процесс раннер, что и у 'eval-golden --llm live'
             # выше (единый потолок IMPORTER_LLM_MAX_CALLS на всю команду).
             print("backend=live — РЕАЛЬНЫЕ вызовы моделей для каждого набора --set")

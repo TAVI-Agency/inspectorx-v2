@@ -55,3 +55,28 @@ def test_run_model_sets_writes_report_per_set(tmp_path, monkeypatch):
     assert list(out) == ["cheap-a__mid-b__expensive-c"]
     assert calls == [{"cheap": "a", "mid": "b", "expensive": "c"}]
     assert len(list(Path(tmp_path).glob("*-cheap-a__mid-b__expensive-c.json"))) == 1
+
+
+def test_cli_eval_models_invalid_set_argument(monkeypatch, capsys):
+    """Тест на красивую ошибку при неверном аргументе --set.
+
+    `main(["build", "eval-models", "--set", "cheap=a,mid=b"])` (не хватает expensive)
+    должен вывести читаемое сообщение об ошибке и выйти с кодом 1."""
+    import importer.cli
+
+    # Замонкипатчим ix_client и SupabaseBuildStore, чтобы не создавать реальный клиент
+    def fake_ix():
+        return object()
+
+    class FakeStore:
+        pass
+
+    monkeypatch.setattr("importer.cli.ix_client", fake_ix)
+    monkeypatch.setattr("importer.cli.SupabaseBuildStore", lambda x: FakeStore())
+
+    with pytest.raises(SystemExit) as exc_info:
+        importer.cli.main(["build", "eval-models", "--set", "cheap=a,mid=b"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out.startswith("ошибка:")

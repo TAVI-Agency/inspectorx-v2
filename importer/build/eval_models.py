@@ -125,7 +125,7 @@ def run_model_sets(
     """Прогоняет `run_eval` по каждому набору тиров из `sets` (тир -> модель;
     `pricing`/`providers` берутся из `base_config` — набор меняет только
     выбор модели, не прайс и не маршрутизацию по провайдерам). Пишет JSON-
-    отчёт каждого набора в `out_dir/<YYYYMMDD-HHMM>-<slug>.json` и
+    отчёт каждого набора в `out_dir/<YYYYMMDD-HHMMSS>-<slug>.json` и
     возвращает `{slug: EvalReport.to_json_dict()}` для `compare_table`.
 
     `baseline=None` для каждого прогона — сравнение здесь между наборами
@@ -146,7 +146,7 @@ def run_model_sets(
             baseline=None,
         )
         report_dict = report.to_json_dict()
-        report_path = out_dir / f"{datetime.now(timezone.utc):%Y%m%d-%H%M}-{slug}.json"
+        report_path = out_dir / f"{datetime.now(timezone.utc):%Y%m%d-%H%M%S}-{slug}.json"
         report_path.write_text(json.dumps(report_dict, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         results[slug] = report_dict
     return results
