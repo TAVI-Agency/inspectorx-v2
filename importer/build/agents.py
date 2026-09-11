@@ -26,6 +26,7 @@ import yaml
 from importer.build.legalx import LegalXClient, NormFragment
 from importer.build.llm_client import AgentLLMClient, AgentLLMError
 from importer.build.profiles import ModelTier, Profile
+from importer.build.uzscript import alt_script
 
 if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл agents<->trace
     from importer.build.trace import Tracer
@@ -173,6 +174,22 @@ class Retriever:
                 return RetrieverResult(
                     outcome="found", fragments=fragments, queries_tried=queries_tried
                 )
+
+            if attempt == 0:
+                # Один доп. поиск другим скриптом исходного запроса (Задача
+                # 5, uzscript.py) — до LLM-переформулировок и не тратя
+                # MAX_REFORMULATIONS: смешение латиницы/кириллицы ломает
+                # ~5% ссылок на законы (см. докстринг uzscript.py), а это
+                # дешевле одного лишнего вызова LLM.
+                alt = alt_script(current_query)
+                if alt is not None:
+                    queries_tried.append(alt)
+                    alt_fragments = self._legalx.search_norms(alt, jurisdiction)
+                    if alt_fragments:
+                        return RetrieverResult(
+                            outcome="found", fragments=alt_fragments, queries_tried=queries_tried
+                        )
+
             if attempt == self.MAX_REFORMULATIONS:
                 break  # попытки исчерпаны, переформулировать больше не пробуем
 

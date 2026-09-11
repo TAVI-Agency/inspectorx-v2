@@ -98,6 +98,7 @@ from importer.build.llm_client import AgentLLMClient, AgentLLMError
 from importer.build.profiles import Profile
 from importer.build.steps_classify import CLASSIFY_PROFILE
 from importer.build.steps_scope_lifecycle import LIFECYCLE_PROFILE
+from importer.build.uzscript import has_uzbek_markers, normalize_for_match
 
 # Те же 3 датовых поля, что `steps_scope_lifecycle._LIFECYCLE_DATE_FIELDS` —
 # не импортируем приватную константу другого модуля, дублируем один tuple
@@ -204,10 +205,23 @@ _WHITESPACE_RE = re.compile(r"\s+")
 
 def normalize_act(act: str | None) -> str | None:
     """Нормализует заголовок акта до сравнимого ключа — см. докстринг
-    модуля и `_ACT_NUMBER_SIGN_RE`/`_ACT_CODE_RE` про порядок приоритета."""
+    модуля и `_ACT_NUMBER_SIGN_RE`/`_ACT_CODE_RE` про порядок приоритета.
+
+    Скрипт приводится к латинице (`normalize_for_match`, Задача 5) ТОЛЬКО
+    если в заголовке есть узбекские маркеры (`has_uzbek_markers`) — так
+    "Вазирлар Маҳкамаси қарори 290" и "Vazirlar Mahkamasi qarori 290"
+    (один узбекский акт, два скрипта) сравниваются как равные. Обычные
+    русские заголовки ("ПКМ-290", "Налоговый кодекс...") маркеров не несут
+    и транслитерации не подвергаются — иначе транслитерация в латиницу
+    была бы безусловной для любой кириллицы (включая русскую) и меняла бы
+    уже устоявшийся кириллический ключ сравнения ("пкм290" стало бы
+    "pkm290"), а "ПКМ-290" и "PKM-290" — это разные написания одной
+    аббревиатуры, а не два скрипта одного узбекского слова, совпадать не
+    должны."""
     if not act:
         return None
-    s = _LEADING_ENUM_RE.sub("", act.strip().lower())
+    normalized = normalize_for_match(act) if has_uzbek_markers(act) else act.strip().lower()
+    s = _LEADING_ENUM_RE.sub("", normalized)
     m = _ACT_NUMBER_SIGN_RE.search(s)
     if m:
         return f"№{m.group(1)}"

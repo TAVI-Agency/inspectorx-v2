@@ -135,6 +135,54 @@ def test_retriever_exhausts_two_reformulations_then_not_found():
     assert len(llm.calls) == 2
 
 
+# ── Retriever: доп. поиск другим скриптом (Задача 5, uzscript.py) ───────
+
+def test_retriever_finds_on_alt_script_without_llm():
+    """Кириллица не находит, та же фраза латиницей — находит: доп. поиск
+    другим скриптом срабатывает ДО LLM-переформулировок и не тратит их."""
+    query = "маҳсулот"  # узбекская кириллица со спецбуквой "ҳ"
+    alt = "mahsulot"  # cyrillic_to_latin(query)
+    legalx = FakeLegalX(responses=[[], [fragment()]])
+    llm = ScriptedLLM([])  # LLM не должна понадобиться
+
+    result = Retriever(legalx, llm).run(query, "UZ", norm_profile())
+
+    assert result.outcome == "found"
+    assert result.fragments == [fragment()]
+    assert result.queries_tried == [query, alt]
+    assert legalx.calls == [(query, "UZ"), (alt, "UZ")]
+    assert llm.calls == []
+
+
+def test_retriever_alt_script_miss_then_reformulates():
+    """Доп. поиск другим скриптом тоже пуст — Retriever переходит к
+    LLM-переформулировкам как обычно, не теряя ни одной из MAX_REFORMULATIONS."""
+    query = "маҳсулот"
+    alt = "mahsulot"
+    legalx = FakeLegalX(responses=[[], [], [fragment()]])
+    llm = ScriptedLLM([json.dumps({"reformulated_query": "уточнённый запрос"})])
+
+    result = Retriever(legalx, llm).run(query, "UZ", norm_profile())
+
+    assert result.outcome == "found"
+    assert result.fragments == [fragment()]
+    assert result.queries_tried == [query, alt, "уточнённый запрос"]
+    assert legalx.calls == [(query, "UZ"), (alt, "UZ"), ("уточнённый запрос", "UZ")]
+    assert len(llm.calls) == 1
+
+
+def test_retriever_no_alt_script_for_plain_query():
+    """У запроса без узбекских маркеров `alt_script` — None: доп. поиска
+    нет, поведение как до Задачи 5 (см. test_retriever_found_after_one_reformulation)."""
+    legalx = FakeLegalX(responses=[[], [fragment()]])
+    llm = ScriptedLLM([json.dumps({"reformulated_query": "уточнённый запрос"})])
+
+    result = Retriever(legalx, llm).run("исходный запрос", "UZ", norm_profile())
+
+    assert result.queries_tried == ["исходный запрос", "уточнённый запрос"]
+    assert legalx.calls == [("исходный запрос", "UZ"), ("уточнённый запрос", "UZ")]
+
+
 def test_retriever_not_found_only_after_exhausting_attempts_not_earlier():
     """Если бы Retriever сдавался раньше срока, здесь он вернул бы not_found
     уже после первого пустого поиска — но третий поиск (после второй
