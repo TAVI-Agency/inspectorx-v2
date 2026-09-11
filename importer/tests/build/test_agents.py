@@ -315,6 +315,21 @@ def test_load_models_config_has_three_tiers_with_pricing():
         assert config.pricing[tier_model]["output_per_1m_usd"] > 0
 
 
+def test_tier_env_override(tmp_path):
+    p = tmp_path / "models.yaml"
+    p.write_text("tiers:\n  cheap: a\n  mid: b\n  expensive: c\n", encoding="utf-8")
+    cfg = load_models_config(p, env={"IMPORTER_TIER_MID": "gemini-3.1-flash-lite"})
+    assert cfg.tiers == {"cheap": "a", "mid": "gemini-3.1-flash-lite", "expensive": "c"}
+    assert cfg.providers == {}
+
+
+def test_providers_section_parsed(tmp_path):
+    p = tmp_path / "models.yaml"
+    p.write_text("tiers:\n  cheap: a\n  mid: b\n  expensive: c\nproviders:\n  a: gemini\n",
+                 encoding="utf-8")
+    assert load_models_config(p, env={}).providers == {"a": "gemini"}
+
+
 # ── RunnerAgentLLM (адаптер над паттерном importer.llm) ─────────────────
 
 def test_runner_agent_llm_passes_prompt_and_model_to_runner():

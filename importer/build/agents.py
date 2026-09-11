@@ -15,6 +15,8 @@ source, profile)` — рассуждения producer-шага физическ�
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -35,19 +37,41 @@ _TIERS: tuple[ModelTier, ...] = ("cheap", "mid", "expensive")
 
 @dataclass(frozen=True)
 class ModelsConfig:
-    """Разобранный `models.yaml`: тиры -> имя модели, имя модели -> прайс."""
+    """Разобранный `models.yaml`: тиры -> имя модели, имя модели -> прайс,
+    модель -> имя провайдера (`providers`, Задача «ночь 11.09.2026»:
+    маршрутизация по провайдерам, `llm_live.py: RoutingRunner`). Модель без
+    записи в `providers` идёт через Anthropic SDK — обратная совместимость
+    с Волной 2."""
 
     tiers: dict[str, str]
     pricing: dict[str, dict[str, float]]
+    providers: dict[str, str] = field(default_factory=dict)
 
 
-def load_models_config(path: Path = _MODELS_PATH) -> ModelsConfig:
+_TIER_ENV = {
+    "cheap": "IMPORTER_TIER_CHEAP",
+    "mid": "IMPORTER_TIER_MID",
+    "expensive": "IMPORTER_TIER_EXPENSIVE",
+}
+
+
+def load_models_config(path: Path = _MODELS_PATH, *, env: Mapping[str, str] | None = None) -> ModelsConfig:
+    """`env` — оверрайды тиров (по умолчанию `os.environ`):
+    `IMPORTER_TIER_CHEAP`/`_MID`/`_EXPENSIVE` подменяют модель тира на время
+    процесса — для eval разных моделей без правки `models.yaml`. Модель-
+    оверрайд без строки в `pricing` допустима: стоимость такого вызова в
+    cost-отчёте считается по нулевому прайсу (`trace.py: cost_report`)."""
+    env = os.environ if env is None else env
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    tiers = raw["tiers"]
+    tiers = dict(raw["tiers"])
     missing = [t for t in _TIERS if t not in tiers]
     if missing:
         raise ValueError(f"models.yaml: не хватает тиров {missing} (ожидались {_TIERS})")
-    return ModelsConfig(tiers=tiers, pricing=raw.get("pricing", {}))
+    for tier, var in _TIER_ENV.items():
+        if env.get(var):
+            tiers[tier] = env[var]
+    return ModelsConfig(tiers=tiers, pricing=raw.get("pricing", {}),
+                        providers=dict(raw.get("providers") or {}))
 
 
 def verifier_model_for(producer_model: str, config: ModelsConfig | None = None) -> str:
