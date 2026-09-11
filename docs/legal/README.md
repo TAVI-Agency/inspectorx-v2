@@ -7,12 +7,16 @@
 
 | Файл | Что это | Куда пойдёт после вычитки |
 |---|---|---|
-| `offer-draft.md` | Публичная оферта на оказание услуг | https://inspectorx.uz/offer |
-| `privacy-draft.md` | Политика конфиденциальности | https://inspectorx.uz/privacy |
+| `offer-draft.md` | Публичная оферта на оказание услуг | https://inspectorx.uz/legal/offer |
+| `privacy-draft.md` | Политика конфиденциальности | https://inspectorx.uz/legal/privacy |
 
-Сейчас в подвале сайта на месте этих ссылок стоит заглушка «Оферта · Политика
-конфиденциальности — скоро» (`src/i18n/ru.ts`), см. блок D в `docs/LAUNCH_CHECKLIST.md`:
-юридический минимум — единственный настоящий блокер приёма денег.
+Страницы уже есть в коде (`src/pages/c/CLegalPage.tsx`, маршруты `/legal/offer` и
+`/legal/privacy` в `src/App.tsx`), но текст на них не опубликован: пока
+`published: false` в `src/legal/docs.ts`, страница показывает «Документ готовится»,
+а ссылки на неё в подвале не появляются (`CLayout.tsx: publishedLegalDocs()`).
+Флаг снимается вместе со снятием шапки «ЧЕРНОВИК». См. блок D в
+`docs/LAUNCH_CHECKLIST.md`: юридический минимум — единственный настоящий блокер
+приёма денег.
 
 **Правила работы с этими файлами**
 

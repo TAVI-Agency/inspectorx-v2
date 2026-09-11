@@ -158,7 +158,8 @@ scope/norm/classify/rule/sanctions/lifecycle/dedup/samples-юрист/cases/tran
 ассемблер) + coverage-отчёт (карта vs факт) + публикация по вердиктам + трейсинг
 стоимости по ролям (`pipeline.llm_calls`, `build cost`). 552 pytest, синтетический
 сквозной пилот на локальном Supabase пройден (published/merge/no_norm). До прод-запуска
-не хватает: живого LLM-ключа (раннер — заглушка `NotImplementedError` в `importer/cli.py`)
+не хватает: живого LLM-ключа (раннеры реальные — `importer/build/llm_live.py`, но без
+ключа первый же вызов модели падает `AgentLLMError: нет ANTHROPIC_API_KEY`)
 и данных LegalX по КЗ (гейт D2, задача 43 плана).
 
 Ниже — целевая пятиузловая модель релевантности/классификации из брейншторма; в

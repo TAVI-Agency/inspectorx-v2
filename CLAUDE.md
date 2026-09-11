@@ -57,7 +57,7 @@ python -m importer monitor discovery                          # 'new'-событ
 python -m importer monitor build-history --requirement <id>   # ручной бэкафилл requirement_revisions
 ```
 
-Живого LLM-ключа в контуре нет: `build map` / `build run` / `monitor process-changes` / `monitor discovery` падают `NotImplementedError` только при реальном обращении к модели (заглушки-раннеры в `importer/cli.py`); проверка проводки — тестами и синтетическим прогоном `scripts/pilot_synthetic.py`.
+Живого LLM-ключа в контуре нет: `build map` / `build run` / `monitor process-changes` / `monitor discovery` падают `AgentLLMError: нет ANTHROPIC_API_KEY` (или ошибкой ключа провайдера из `models.yaml: providers`) только при реальном обращении к модели — раннеры инициализируются лениво (`importer/build/llm_live.py`); проверка проводки — тестами и синтетическим прогоном `scripts/pilot_synthetic.py`.
 
 ### База данных
 
