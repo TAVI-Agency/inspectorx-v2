@@ -263,3 +263,28 @@ def test_question_structure():
     assert q.text == "Вопрос?"
     assert q.expected_schema == schema
     assert isinstance(q.expected_schema, dict)
+
+
+# ── MapItem.from_payload (Задача 4): карта Cartographer'а с `sources` ───
+
+
+def test_map_item_from_payload_ignores_unknown_fields():
+    """`sources` — поле карты (Задача 4), не поле MapItem: from_payload его
+    молча отбрасывает."""
+    item = MapItem.from_payload({
+        "expected_item": "x", "category_slug": "c", "rationale": "r",
+        "benchmark_countries": [], "sources": ["u"],
+    })
+
+    assert item == MapItem(expected_item="x", category_slug="c", rationale="r",
+                            benchmark_countries=[])
+    assert not hasattr(item, "sources")
+
+
+def test_map_item_from_payload_defaults_missing_optional_fields():
+    """`rationale`/`benchmark_countries` отсутствуют в payload (напр., в
+    `discovery.py` они не всегда сохранены) -> пустая строка/пустой список."""
+    item = MapItem.from_payload({"expected_item": "x", "category_slug": "c"})
+
+    assert item.rationale == ""
+    assert item.benchmark_countries == []

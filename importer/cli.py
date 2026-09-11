@@ -6,6 +6,7 @@ from pathlib import Path
 
 from importer.build.cartographer import Cartographer
 from importer.build.coverage import coverage_report, publish_ready
+from importer.build.docfetch import DocumentFetcher, SupabaseDocCache
 from importer.build.eval_golden import HeuristicBaselineLLM, load_golden_set, run_eval
 from importer.build.legalx import get_client as get_legalx_client
 from importer.build.llm_client import RunnerAgentLLM
@@ -17,7 +18,9 @@ from importer.build.orchestrator import (
     SupabaseBuildStore,
 )
 from importer.build.registry import build_step_registry
+from importer.build.research import ResearchToolkit
 from importer.build.trace import Tracer, cost_report
+from importer.build.websearch import get_web_searcher
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
@@ -106,6 +109,11 @@ def main(argv=None):
     )
     p_build_map.add_argument("--group", dest="group_ref", required=True)
     p_build_map.add_argument("--jurisdiction", required=True)
+    p_build_map.add_argument(
+        "--research", action="store_true",
+        help="разведка по реальным источникам: веб-поиск (WEBSEARCH_BACKEND) + "
+             "скачивание в pipeline.documents",
+    )
     p_build_approve = build_sub.add_parser(
         "approve-map", help="апрув draft-карты владельцем: draft -> approved (стоп-точка ①)"
     )
@@ -232,7 +240,10 @@ def main(argv=None):
                 print(f"{item.id}  [{item.last_error}] {item.expected_item[:70]}")
             print(f"\nвсего needs_attention: {len(items)}")
         elif args.build_cmd == "map":
-            cartographer = Cartographer(store, RunnerAgentLLM(_cartographer_llm_runner))
+            toolkit = None
+            if args.research:
+                toolkit = ResearchToolkit(get_web_searcher(), DocumentFetcher(cache=SupabaseDocCache(ix)))
+            cartographer = Cartographer(store, RunnerAgentLLM(_cartographer_llm_runner), toolkit=toolkit)
             try:
                 report = cartographer.build_map(args.group_ref, args.jurisdiction)
             except MapAlreadyApprovedError as exc:
@@ -243,6 +254,10 @@ def main(argv=None):
                 f"jurisdiction={report.jurisdiction} items={report.items_count} "
                 "status=draft"
             )
+            if args.research:
+                print(f"sources_used={report.sources_used}")
+                for query_or_url, reason in toolkit.skipped:
+                    print(f"  пропущено: {query_or_url} — {reason}")
             if report.candidate_categories:
                 print("кандидаты новых категорий (НЕ попали в карту, нужен апрув владельца):")
                 for c in report.candidate_categories:
