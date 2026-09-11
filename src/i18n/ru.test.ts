@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import { ru } from './ru'
 
+describe('ru.legal', () => {
+  it('обязательные ключи раздела на месте', () => {
+    const required = [
+      'offerTitle', 'privacyTitle', 'contactsTitle', 'requisites',
+      'notPublished', 'backHome', 'writeUs',
+    ] as const
+    for (const key of required) expect(ru.legal).toHaveProperty(key)
+  })
+})
+
 describe('ru.packagingCheck', () => {
   it('обязательные ключи раздела на месте', () => {
     const required = [

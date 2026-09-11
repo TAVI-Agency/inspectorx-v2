@@ -33,7 +33,6 @@ export const ru = {
     contacts: 'Контакты',
     email: 'hello@inspectorx.uz',
     telegram: 'Telegram: @inspectorx_uz',
-    legal: 'Оферта · Политика конфиденциальности — скоро',
     disclaimer:
       'InspectorX — информационный сервис, не юридическая консультация.',
     rights: '© 2026 InspectorX',
@@ -1043,6 +1042,16 @@ export const ru = {
     feedbackSend: 'Отправить',
     feedbackDone: 'Спасибо! Сообщение улетело команде.',
     feedbackError: 'Не получилось отправить. Напишите на hello@inspectorx.uz.',
+  },
+
+  legal: {
+    offerTitle: 'Публичная оферта',
+    privacyTitle: 'Политика конфиденциальности',
+    contactsTitle: 'Контакты',
+    requisites: 'Реквизиты',
+    notPublished: 'Документ готовится и будет опубликован до начала приёма платежей.',
+    backHome: 'На главную',
+    writeUs: 'Напишите нам',
   },
 
   whatsNew: {

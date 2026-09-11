@@ -4,6 +4,8 @@ import { ArrowRight, Check } from 'lucide-react'
 import { RouteCanvas } from './RouteCanvas'
 import { PassportDemo } from './PassportDemo'
 import { CATEGORY_LABEL, CATEGORY_ORDER } from '@/data/taxonomy'
+import { ru } from '@/i18n/ru'
+import { publishedLegalDocs } from '@/legal/docs'
 import './landing-b.css'
 
 /**
@@ -478,6 +480,12 @@ export function LandingB() {
               <Link to="/pricing">Тариф</Link>
               <Link to="/login">Войти</Link>
               <Link to="/register">Регистрация</Link>
+              <Link to="/contacts">{ru.legal.contactsTitle}</Link>
+              {publishedLegalDocs().map((doc) => (
+                <Link key={doc.slug} to={`/legal/${doc.slug}`}>
+                  {doc.slug === 'offer' ? ru.legal.offerTitle : ru.legal.privacyTitle}
+                </Link>
+              ))}
             </nav>
             <div>
               <a href="mailto:hello@inspectorx.uz">hello@inspectorx.uz</a>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Outlet, ScrollRestoration } from 'react-router-dom'
+import { Link, Outlet, ScrollRestoration } from 'react-router-dom'
 import { ru } from '@/i18n/ru'
+import { publishedLegalDocs } from '@/legal/docs'
 import { cn } from '@/lib/utils'
 import { CRail } from './shell/CRail'
 import { CHeader } from './shell/CHeader'
@@ -78,6 +79,18 @@ function CFooter() {
       <div className="mx-auto flex max-w-6xl flex-col gap-1.5 px-4 py-6 text-[12px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <p>{ru.footer.disclaimer}</p>
         <p className="shrink-0">
+          <Link to="/contacts" className="hover:text-foreground">
+            {ru.legal.contactsTitle}
+          </Link>
+          {publishedLegalDocs().map((doc) => (
+            <span key={doc.slug}>
+              {' · '}
+              <Link to={`/legal/${doc.slug}`} className="hover:text-foreground">
+                {doc.slug === 'offer' ? ru.legal.offerTitle : ru.legal.privacyTitle}
+              </Link>
+            </span>
+          ))}
+          {' · '}
           <a href="mailto:hello@inspectorx.uz" className="hover:text-foreground">
             {ru.footer.email}
           </a>
