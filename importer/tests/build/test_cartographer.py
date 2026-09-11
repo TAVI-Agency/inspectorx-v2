@@ -390,3 +390,52 @@ def test_plan_queries_garbage_falls_back_to_group_ref():
     assert searcher.queries == ["0401 требования UZ"]
     assert report.items_count == 1
     assert report.sources_used == 1
+
+
+def test_apply_sources_handles_null_sources_field():
+    # Когда LLM возвращает "sources": null, _apply_sources не должна падать
+    # с TypeError, а должна установить sources = []
+    store = InMemoryStore()
+    llm = ScriptedLLM([
+        '["запрос"]',  # plan_queries
+        valid_response({
+            "expected_item": "Требование",
+            "category_slug": "marking",
+            "rationale": "...",
+            "benchmark_countries": [],
+            "sources": None  # LLM случайно вернул null вместо массива
+        })
+    ])
+    kit = ResearchToolkit(
+        _Searcher({"запрос": [{"title": "T", "url": "https://lex.uz/1", "snippet": ""}]}),
+        _Fetcher({"https://lex.uz/1": _doc("https://lex.uz/1", "текст")})
+    )
+
+    # Должно не падать и успешно обработать null как пустой массив
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert report.items_count == 1
+    saved = store.load_map(report.map_id)
+    assert saved.payload[0]["sources"] == []
+
+
+def test_no_sources_when_gather_returns_empty():
+    # При toolkit, но gather() вернул 0 источников, поле sources не должно
+    # добавляться в айтемы вообще (промпт не упоминал sources блок)
+    store = InMemoryStore()
+    llm = ScriptedLLM([
+        '[]',  # plan_queries вернул пустой массив/error -> fallback запрос
+        valid_response(map_item())  # map-карта без sources в ответе
+    ])
+    kit = ResearchToolkit(
+        _Searcher({})  # нет результатов поиска
+        , _Fetcher({})
+    )
+
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert report.items_count == 1
+    assert report.sources_used == 0  # 0 собранных источников
+    saved = store.load_map(report.map_id)
+    # sources не должно быть в payload, потому что промпт не упоминал их
+    assert "sources" not in saved.payload[0]

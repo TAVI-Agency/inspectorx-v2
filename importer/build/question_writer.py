@@ -48,7 +48,7 @@ class MapItem:
             expected_item=entry["expected_item"],
             category_slug=entry["category_slug"],
             rationale=entry.get("rationale", ""),
-            benchmark_countries=list(entry.get("benchmark_countries", [])),
+            benchmark_countries=list(entry.get("benchmark_countries") or []),
         )
 
 

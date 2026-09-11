@@ -111,7 +111,7 @@ class Cartographer:
         answer = self._llm.complete(prompt, model)
         raw_items = self._parse_answer(answer)
 
-        if self._toolkit is not None:
+        if self._toolkit is not None and sources:
             known_urls = {s.url for s in sources}
             raw_items = [self._apply_sources(entry, known_urls) for entry in raw_items]
 
@@ -163,7 +163,7 @@ class Cartographer:
         всё остальное (выдумки LLM, опечатки) отбрасывается молча — это
         защита от фиктивных ссылок в карте, которая идёт владельцу на
         апрув."""
-        raw_sources = entry.get("sources", [])
+        raw_sources = entry.get("sources") or []
         filtered = [u for u in raw_sources if isinstance(u, str) and u in known_urls]
         return {**entry, "sources": filtered}
 
