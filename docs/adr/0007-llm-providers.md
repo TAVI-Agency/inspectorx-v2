@@ -38,8 +38,10 @@ ADR-0003 (решение 9) зафиксировал тиры по ролям (�
 ### Факты ресёрча 10.09.2026
 
 **Zro (https://zro.moonmath.ai/).** Оператор — MoonMath.ai (бывшая Ingonyama,
-Израиль; seed $21M в январе 2024; продукт запущен 16.07.2026 на Product Hunt —
-https://www.producthunt.com/products/zro , https://il.linkedin.com/company/moonmath-ai).
+Израиль; seed $21M в январе 2024 —
+https://www.ingonyama.com/post/ingonyama-seed-funding-announcement; продукт запущен
+16.07.2026 на Product Hunt — https://www.producthunt.com/products/zro ,
+https://il.linkedin.com/company/moonmath-ai).
 Подписка Pro $20/мес описана как «$60 of inference spend» и «~1B tokens
 expected… typical cached agent usage, not fixed allowances»; Max $60 ≈ 5B;
 usage-packs $5–100 сгорают через 90 дней; веб-поиск — $0.02/запрос через Brave
@@ -87,7 +89,8 @@ https://openrouter.ai/api/v1/models , https://docs.z.ai/guides/overview/pricing 
 и KZ в списке нет (https://brave.com/search/api/) — а именно Brave стоит за
 веб-поиском Zro. Google CSE закрыт для новых клиентов с отключением 01.01.2027
 (https://developers.google.com/custom-search/v1/overview), Bing Search API
-отключён 11.08.2025. У lex.uz публичного API нет, но есть RSS
+отключён 11.08.2025
+(https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement). У lex.uz публичного API нет, но есть RSS
 (https://lex.uz/ru/rss), в robots.txt — `Crawl-delay: 20`, версии актов
 доступны параметром `?ONDATE=`. Надёжность агентного ресёрча: у
 deep-research-агентов 3–13 % цитат сфабрикованы (arXiv 2604.03173), точность
@@ -255,6 +258,9 @@ OpenAI-совместимый адрес можно прогнать `eval-model
 Все четыре — бинарные, с рекомендацией. Ответы 11.09.2026 превращают статус ADR
 в «принято» и фиксируются правкой этого файла.
 
+Вопросов четыре (бриф предполагал три): четвёртый — про сплошную нормализацию
+скрипта — добавлен по итогам работы над `uzscript.py`.
+
 **1. Стратегия провайдеров: «провайдер = конфигурация + выбор по eval» или
 «переезжаем на Zro сразу»?**
 Рекомендация — **первое**. Zro экономит подписочные деньги ($20 флэт против
@@ -317,10 +323,10 @@ $4–30 по токенам), но берёт взамен отсутствие 
 - **`docs/INFRA_ACCOUNTS.md` получает новый раздел** — провайдеры LLM и поиска:
   чей аккаунт, какой лимит, ссылка на политику приватности и дата её проверки
   (условие решения 4).
-- **Расширение golden set становится блокирующим для решения 3.** Выбор тиров по
-  `eval-models` имеет смысл на репрезентативном наборе; текущего размера набора для
-  утверждения моделей недостаточно — расширение до 30–50 актов требует поднятой
-  локальной БД и вынесено в утренние задачи.
+- **Расширение golden set — предпосылка решения 3** (по оценке ночной сессии 11.09.2026;
+  подтвердить фаундеру). Выбор тиров по `eval-models` имеет смысл на репрезентативном
+  наборе; текущего размера набора для утверждения моделей недостаточно — расширение до
+  30–50 актов требует поднятой локальной БД и вынесено в утренние задачи.
 - **Стоимость поиска появляется в бюджете отдельной строкой** — раньше её не было:
   Serper ~$1/1K, Tavily $8/1K, плюс трафик docfetch. Для lex.uz пауза 20 с между
   запросами означает, что глубокий ресёрч по группе — это минуты, а не секунды;
@@ -339,6 +345,7 @@ $4–30 по токенам), но берёт взамен отсутствие 
 - https://zro.moonmath.ai/terms
 - https://www.producthunt.com/products/zro
 - https://il.linkedin.com/company/moonmath-ai
+- https://www.ingonyama.com/post/ingonyama-seed-funding-announcement
 
 **Качество моделей на узбекском**
 - Uzbek Legal RAG — arXiv 2608.29284 (08.2026, 504 юридических вопроса)
@@ -357,6 +364,7 @@ $4–30 по токенам), но берёт взамен отсутствие 
 - https://docs.tavily.com/documentation/api-reference/endpoint/search
 - https://brave.com/search/api/
 - https://developers.google.com/custom-search/v1/overview
+- https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement
 - https://lex.uz/ru/rss
 
 **Надёжность агентного ресёрча**
