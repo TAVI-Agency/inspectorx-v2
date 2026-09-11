@@ -56,6 +56,26 @@ _TIER_ENV = {
 }
 
 
+def assert_distinct_tier_models(tiers: Mapping[str, str], *, source: str) -> None:
+    """Три тира обязаны указывать на РАЗНЫЕ модели.
+
+    Независимость Verifier'а (ADR-0003, решение 4) держится ровно на этом:
+    `verifier_model_for` выбирает модель по ДРУГОМУ тиру, и если два тира
+    схлопнуты в одну модель (`IMPORTER_TIER_MID=X IMPORTER_TIER_EXPENSIVE=X`
+    или `--set cheap=y,mid=y,expensive=y`), producer начинает молча
+    проверять сам себя. Падать лучше на конфигурации, чем на выдаче."""
+    by_model: dict[str, list[str]] = {}
+    for tier in _TIERS:
+        by_model.setdefault(tiers[tier], []).append(tier)
+    collided = [(model, ts) for model, ts in by_model.items() if len(ts) > 1]
+    if collided:
+        pairs = "; ".join(f"{'/'.join(ts)} -> {model!r}" for model, ts in collided)
+        raise ValueError(
+            f"{source}: тиры моделей обязаны быть различны, иначе Verifier проверяет "
+            f"сам себя (ADR-0003, решение 4); совпали: {pairs}"
+        )
+
+
 def load_models_config(path: Path = _MODELS_PATH, *, env: Mapping[str, str] | None = None) -> ModelsConfig:
     """`env` — оверрайды тиров (по умолчанию `os.environ`):
     `IMPORTER_TIER_CHEAP`/`_MID`/`_EXPENSIVE` подменяют модель тира на время
@@ -71,6 +91,7 @@ def load_models_config(path: Path = _MODELS_PATH, *, env: Mapping[str, str] | No
     for tier, var in _TIER_ENV.items():
         if env.get(var):
             tiers[tier] = env[var]
+    assert_distinct_tier_models(tiers, source=f"{path.name} + оверрайды IMPORTER_TIER_*")
     return ModelsConfig(tiers=tiers, pricing=raw.get("pricing", {}),
                         providers=dict(raw.get("providers") or {}))
 
@@ -93,7 +114,17 @@ def verifier_model_for(producer_model: str, config: ModelsConfig | None = None) 
             f"в одном тире models.yaml ({config.tiers})"
         )
     verifier_tier: ModelTier = "expensive" if producer_tier in ("cheap", "mid") else "mid"
-    return config.tiers[verifier_tier]
+    verifier_model = config.tiers[verifier_tier]
+    if verifier_model == producer_model:
+        # Сюда можно попасть только с `ModelsConfig`, собранным мимо
+        # `load_models_config`/`parse_tier_set` (оба уже проверяют тиры на
+        # различимость) — последняя страховка перед выдачей модели.
+        raise ValueError(
+            f"тир {verifier_tier!r} указывает на ту же модель {producer_model!r}, что и "
+            f"producer — Verifier проверял бы сам себя (ADR-0003, решение 4); "
+            f"тиры: {config.tiers}"
+        )
+    return verifier_model
 
 
 def _parse_json_answer(answer: str, *, who: str) -> dict:

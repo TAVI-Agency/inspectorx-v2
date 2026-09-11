@@ -168,14 +168,23 @@ class _LiveWebSearcher:
     Модель просят вернуть СТРОГО JSON-массив находок — парсим текстовые блоки,
     а не внутренности tool_result (их формат — деталь провайдера). Мусорный
     ответ = пустой список: контракт WebSearcher трактует пусто как «не нашёл».
+
+    Сбой клиента (`anthropic.APIStatusError`/`APIConnectionError` и любая
+    другая ошибка SDK) — `WebSearchError`, как и у serper/tavily: её родителя
+    `AgentLLMError` ловит `ResearchToolkit.gather`, иначе один неудачный
+    запрос роняет всю разведку. `allowed_domains` — тот же клиентский
+    allowlist, что у остальных бэкендов: без него `docfetch` пошёл бы качать
+    любой URL, названный моделью.
     """
 
     MODEL = "claude-sonnet-5"   # web_search_20260209 требует Sonnet 4.6+ / Opus 4.6+ (models.yaml: tiers.mid)
     MAX_RESUMES = 2             # server-side цикл может вернуть pause_turn
 
-    def __init__(self, client=None, max_uses: int = 3) -> None:
+    def __init__(self, client=None, max_uses: int = 3, *,
+                 allowed_domains: tuple[str, ...] = ()) -> None:
         self._client = client
         self._max_uses = max_uses
+        self.allowed_domains = tuple(allowed_domains)
 
     def _ensure_client(self):
         if self._client is None:
@@ -183,6 +192,15 @@ class _LiveWebSearcher:
             import anthropic
             self._client = anthropic.Anthropic()
         return self._client
+
+    def _create(self, client, messages, tools):
+        """Вызов API с обёрткой любой ошибки клиента в `WebSearchError`
+        (типы исключений SDK — деталь провайдера, ловим широко)."""
+        try:
+            return client.messages.create(
+                model=self.MODEL, max_tokens=2048, tools=tools, messages=messages)
+        except Exception as exc:
+            raise WebSearchError(f"web_search недоступен: {exc}") from exc
 
     def search(self, query: str) -> list[SearchResult]:
         client = self._ensure_client()
@@ -194,14 +212,12 @@ class _LiveWebSearcher:
         messages = [{"role": "user", "content": prompt}]
         tools = [{"type": "web_search_20260209", "name": "web_search",
                   "max_uses": self._max_uses}]
-        resp = client.messages.create(
-            model=self.MODEL, max_tokens=2048, tools=tools, messages=messages)
+        resp = self._create(client, messages, tools)
         for _ in range(self.MAX_RESUMES):
             if resp.stop_reason != "pause_turn":
                 break
             messages = messages + [{"role": "assistant", "content": resp.content}]
-            resp = client.messages.create(
-                model=self.MODEL, max_tokens=2048, tools=tools, messages=messages)
+            resp = self._create(client, messages, tools)
         text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         start, end = text.find("["), text.rfind("]")
         if start == -1 or end <= start:
@@ -210,29 +226,31 @@ class _LiveWebSearcher:
             data = json.loads(text[start:end + 1])
         except json.JSONDecodeError:
             return []
-        return [SearchResult(title=str(r.get("title", "")), url=str(r.get("url", "")),
-                              snippet=str(r.get("snippet", "")))
-                for r in data if isinstance(r, dict) and r.get("url")]
+        results = [SearchResult(title=str(r.get("title", "")), url=str(r.get("url", "")),
+                                snippet=str(r.get("snippet", "")))
+                   for r in data if isinstance(r, dict) and r.get("url")]
+        return filter_allowed(results, self.allowed_domains)
 
 
 def get_web_searcher() -> WebSearcher:
     """Фабрика `WebSearcher`, переключается через env `WEBSEARCH_BACKEND`.
 
-    - `live` (или переменная не задана) -> `_LiveWebSearcher`,
-      `NotImplementedError` только при реальном вызове `.search(...)`.
+    - `live` (или переменная не задана) -> `_LiveWebSearcher`; ключ нужен
+      только при реальном вызове `.search(...)`, не при сборке шага.
     - `serper` -> `SerperWebSearcher`, требует `SERPER_API_KEY`.
     - `tavily` -> `TavilyWebSearcher`, требует `TAVILY_API_KEY`.
     - любое другое значение -> `ValueError`: опечатка в конфигурации лучше
       падает сразу, чем молча откатывается на живую реализацию.
 
-    `WEBSEARCH_ALLOWED_DOMAINS` (через запятую) — общий allowlist для
-    serper/tavily; `WEBSEARCH_GL`/`WEBSEARCH_HL` — локаль serper.
+    `WEBSEARCH_ALLOWED_DOMAINS` (через запятую) — общий allowlist для ВСЕХ
+    бэкендов, включая `live` (иначе `docfetch` качал бы любой URL, названный
+    моделью); `WEBSEARCH_GL`/`WEBSEARCH_HL` — локаль serper.
     """
     backend = os.environ.get("WEBSEARCH_BACKEND", "live")
-    if backend == "live":
-        return _LiveWebSearcher()
     allowed = tuple(d.strip() for d in os.environ.get("WEBSEARCH_ALLOWED_DOMAINS", "").split(",")
                      if d.strip())
+    if backend == "live":
+        return _LiveWebSearcher(allowed_domains=allowed)
     if backend == "serper":
         key = os.environ.get("SERPER_API_KEY")
         if not key:

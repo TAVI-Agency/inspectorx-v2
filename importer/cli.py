@@ -139,8 +139,9 @@ def main(argv=None):
     )
     p_build_eval_golden.add_argument(
         "--save-baseline", action="store_true",
-        help="записать текущий прогон в importer/golden/baseline.json (следующий прогон "
-             "покажет дельту против него)",
+        help="записать текущий прогон в importer/golden/baseline.json — при --llm live в "
+             "отдельный baseline-live.json (следующий прогон того же бэкенда покажет "
+             "дельту против него)",
     )
     p_build_eval_golden.add_argument(
         "--llm", choices=["mock", "live"], default="mock",
@@ -304,14 +305,9 @@ def main(argv=None):
             print(f"map={record.id} status={record.status}")
         elif args.build_cmd == "eval-golden":
             golden_path = Path("importer/golden/golden_set.yaml")
-            baseline_path = Path("importer/golden/baseline.json")
             items = load_golden_set(golden_path)
             if args.limit:
                 items = items[: args.limit]
-            baseline = (
-                json.loads(baseline_path.read_text(encoding="utf-8"))
-                if baseline_path.exists() else None
-            )
             if args.llm == "live":
                 # Живой прогон (Задача 6): общий на процесс раннер
                 # `_shared_live_runner` — один потолок IMPORTER_LLM_MAX_CALLS
@@ -328,6 +324,24 @@ def main(argv=None):
                 backend = "mock"
                 print("backend=mock (LEGALX_BACKEND) + HeuristicBaselineLLM "
                       "(живого LLM-ключа нет — числа НЕ мера качества, только smoke)")
+            # У живого прогона СВОЙ baseline-файл: числа mock-эвристики и
+            # живых моделей несопоставимы, а `--llm live --save-baseline`
+            # раньше затирал mock-baseline соседнего режима.
+            baseline_path = Path(
+                "importer/golden/baseline-live.json" if backend == "live"
+                else "importer/golden/baseline.json"
+            )
+            baseline = (
+                json.loads(baseline_path.read_text(encoding="utf-8"))
+                if baseline_path.exists() else None
+            )
+            if baseline is not None and baseline.get("backend") != backend:
+                # Страховка на случай baseline'а, снятого другим бэкендом
+                # (например, набором моделей eval-models): дельта между
+                # разными бэкендами — не дельта качества.
+                print(f"предупреждение: {baseline_path} снят на backend="
+                      f"{baseline.get('backend')!r}, текущий — {backend!r}; дельта не считается")
+                baseline = None
             report = run_eval(
                 items, legalx=get_legalx_client(), llm=llm,
                 valid_category_slugs=store.list_category_slugs(),

@@ -38,6 +38,7 @@ benchmark_countries}` (схема зафиксирована брифом Зад
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from importer.build.agents import ModelsConfig, load_models_config
@@ -141,7 +142,9 @@ class Cartographer:
         отклонение (не-JSON, не-массив, нестроковые/пустые элементы) —
         откат на единственный запрос по названию группы и юрисдикции, а не
         падение всего `build_map` (план запросов — вспомогательный шаг,
-        не основной ответ Cartographer'а)."""
+        не основной ответ Cartographer'а). Пустой массив — тоже откат:
+        формально валиден, но даёт ноль запросов, то есть молчаливую
+        разведку вхолостую."""
         prompt = (
             f"{_SYSTEM_PROMPT}\n\nГруппа: {group_ref}\nЮрисдикция: {jurisdiction}\n\n"
             "Составь до 6 поисковых запросов к официальным источникам (нормативные акты, "
@@ -153,7 +156,8 @@ class Cartographer:
             data = json.loads(answer)
         except json.JSONDecodeError:
             data = None
-        if not isinstance(data, list) or not all(isinstance(q, str) and q.strip() for q in data):
+        if (not isinstance(data, list) or not data
+                or not all(isinstance(q, str) and q.strip() for q in data)):
             return [f"{group_ref} требования {jurisdiction}"]
         return [q.strip() for q in data][: self._toolkit.max_queries]
 
@@ -172,7 +176,7 @@ class Cartographer:
         group_ref: str,
         jurisdiction: str,
         valid_slugs: set[str],
-        sources: list[ResearchSource] = (),
+        sources: Sequence[ResearchSource] = (),
     ) -> str:
         slugs_line = ", ".join(sorted(valid_slugs)) or "(список пуст)"
         schema = (

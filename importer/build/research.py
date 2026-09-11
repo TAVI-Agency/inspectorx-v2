@@ -4,16 +4,19 @@ Cartographer'а в режиме `--research` — склеивает `WebSearcher
 реальные источники» (сам план запросов и промпт с ними — забота
 `Cartographer`, этот модуль ничего не знает про LLM).
 
-Deep research — best effort: сбой одного запроса поиска (`WebSearchError`)
-или скачивания одной страницы (`DocFetchError`) не должен ронять всю
-разведку по группе — он просто пропускается и копится в `skipped`, которое
-идёт в отчёт владельцу (CLI печатает его при `build map --research`)."""
+Deep research — best effort: сбой одного запроса поиска (`AgentLLMError` —
+родитель `WebSearchError`; дефолтный бэкенд ходит через LLM и умеет падать
+и исчерпанным потолком вызовов, и отказом модели) или скачивания одной
+страницы (`DocFetchError`) не должен ронять всю разведку по группе — он
+просто пропускается и копится в `skipped`, которое идёт в отчёт владельцу
+(CLI печатает его при `build map --research`)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from importer.build.docfetch import DocFetchError, DocumentFetcher
-from importer.build.websearch import SearchResult, WebSearcher, WebSearchError
+from importer.build.llm_client import AgentLLMError
+from importer.build.websearch import SearchResult, WebSearcher
 
 
 @dataclass(frozen=True)
@@ -58,7 +61,7 @@ class ResearchToolkit:
             try:
                 for r in self._searcher.search(q):
                     seen.setdefault(r["url"], r)
-            except WebSearchError as exc:
+            except AgentLLMError as exc:
                 self.skipped.append((q, str(exc)))
 
         sources: list[ResearchSource] = []

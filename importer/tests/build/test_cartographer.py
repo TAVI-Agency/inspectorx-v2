@@ -377,6 +377,21 @@ def test_without_toolkit_behavior_unchanged():
     assert "sources" not in saved.payload[0]
 
 
+def test_plan_queries_empty_array_falls_back_to_group_ref():
+    """Пустой JSON-массив формально валиден, но даёт НОЛЬ запросов — это
+    молчаливая разведка вхолостую. Откат такой же, как на мусорный ответ:
+    один запрос по группе и юрисдикции."""
+    store = InMemoryStore()
+    llm = ScriptedLLM(["[]", valid_response(map_item())])
+    searcher = _Searcher({"0401 требования UZ": [{"title": "T", "url": "https://lex.uz/9", "snippet": ""}]})
+    kit = ResearchToolkit(searcher, _Fetcher({"https://lex.uz/9": _doc("https://lex.uz/9", "текст")}))
+
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert searcher.queries == ["0401 требования UZ"]
+    assert report.sources_used == 1
+
+
 def test_plan_queries_garbage_falls_back_to_group_ref():
     # план не JSON -> один запрос f"{group_ref} требования {jurisdiction}",
     # карта всё равно строится

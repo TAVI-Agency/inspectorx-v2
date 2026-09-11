@@ -378,6 +378,26 @@ def test_providers_section_parsed(tmp_path):
     assert load_models_config(p, env={}).providers == {"a": "gemini"}
 
 
+def test_load_models_config_rejects_tier_override_collapsing_two_tiers(tmp_path):
+    """Оверрайды, схлопывающие два тира в одну модель, обязаны падать сразу:
+    иначе `verifier_model_for` вернул бы модель producer'а и независимая
+    проверка молча превратилась бы в «producer проверяет сам себя»
+    (ADR-0003, решение 4)."""
+    p = tmp_path / "models.yaml"
+    p.write_text("tiers:\n  cheap: a\n  mid: b\n  expensive: c\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="mid"):
+        load_models_config(p, env={"IMPORTER_TIER_MID": "x", "IMPORTER_TIER_EXPENSIVE": "x"})
+
+
+def test_verifier_model_for_rejects_verifier_equal_to_producer():
+    """Страховка на выходе: даже если `ModelsConfig` собран мимо
+    `load_models_config` (например, руками из `--set` eval-models), Verifier
+    не имеет права получить ту же модель, что и producer."""
+    config = ModelsConfig(tiers={"cheap": "a", "mid": "x", "expensive": "x"}, pricing={})
+    with pytest.raises(ValueError, match="сам себя"):
+        verifier_model_for("x", config)
+
+
 # ── RunnerAgentLLM (адаптер над паттерном importer.llm) ─────────────────
 
 def test_runner_agent_llm_passes_prompt_and_model_to_runner():

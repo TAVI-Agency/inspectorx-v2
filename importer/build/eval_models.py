@@ -32,7 +32,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from importer.build.agents import ModelsConfig
+from importer.build.agents import ModelsConfig, assert_distinct_tier_models
 from importer.build.eval_golden import GoldenItem, run_eval
 from importer.build.legalx import LegalXClient
 from importer.build.llm_client import AgentLLMClient
@@ -62,7 +62,12 @@ _SLUG_UNSAFE_RE = re.compile(r"[^A-Za-z0-9.]+")
 def parse_tier_set(spec: str) -> dict[str, str]:
     """Разбирает `--set` вида `"cheap=a,mid=b,expensive=c"` в словарь тир ->
     модель. Не хватает хотя бы одного из трёх тиров (`_TIERS`) -> `ValueError`
-    с именем недостающего тира в тексте (см. тест `test_parse_tier_set_ok_and_missing`)."""
+    с именем недостающего тира в тексте (см. тест `test_parse_tier_set_ok_and_missing`).
+
+    Две одинаковые модели в наборе — тоже `ValueError`
+    (`agents.assert_distinct_tier_models`): такой набор ломает независимость
+    Verifier'а (`agents.verifier_model_for` вернул бы модель producer'а), и
+    метрики прогона были бы про другую систему, чем настоящий конвейер."""
     tiers: dict[str, str] = {}
     for pair in spec.split(","):
         pair = pair.strip()
@@ -75,6 +80,7 @@ def parse_tier_set(spec: str) -> dict[str, str]:
     missing = [t for t in _TIERS if t not in tiers]
     if missing:
         raise ValueError(f"--set {spec!r}: не хватает тиров {missing} (ожидались {_TIERS})")
+    assert_distinct_tier_models(tiers, source=f"--set {spec!r}")
     return tiers
 
 

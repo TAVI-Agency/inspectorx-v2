@@ -30,6 +30,14 @@ def test_parse_tier_set_ok_and_missing():
         parse_tier_set("cheap=a,mid=b")
 
 
+def test_parse_tier_set_rejects_same_model_in_two_tiers():
+    """Набор, в котором два тира указывают на одну модель, ломает
+    независимость Verifier'а (`agents.verifier_model_for` вернул бы модель
+    producer'а) — такой `--set` не должен доходить до прогона."""
+    with pytest.raises(ValueError, match="mid"):
+        parse_tier_set("cheap=a,mid=y,expensive=y")
+
+
 def test_slug_for_sanitizes():
     assert slug_for({"cheap": "gemini/3.1", "mid": "b", "expensive": "c"}) == "cheap-gemini-3.1__mid-b__expensive-c"
 
@@ -80,3 +88,19 @@ def test_cli_eval_models_invalid_set_argument(monkeypatch, capsys):
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
     assert captured.out.startswith("ошибка:")
+
+
+def test_cli_eval_models_duplicate_model_in_two_tiers(monkeypatch, capsys):
+    """`--set cheap=y,mid=y,expensive=y` — тот же читаемый отказ CLI
+    (`ошибка:` + код 1), что и у неполного набора: producer проверял бы
+    сам себя."""
+    import importer.cli
+
+    monkeypatch.setattr("importer.cli.ix_client", lambda: object())
+    monkeypatch.setattr("importer.cli.SupabaseBuildStore", lambda x: object())
+
+    with pytest.raises(SystemExit) as exc_info:
+        importer.cli.main(["build", "eval-models", "--set", "cheap=y,mid=y,expensive=y"])
+
+    assert exc_info.value.code == 1
+    assert capsys.readouterr().out.startswith("ошибка:")

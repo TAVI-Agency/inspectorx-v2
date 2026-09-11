@@ -32,13 +32,17 @@ from typing import Callable
 import httpx
 from dotenv import load_dotenv
 
-from importer.build.agents import load_models_config
+from importer.build.agents import ModelsConfig, load_models_config
 from importer.build.llm_client import AgentLLMError
 
 load_dotenv(".env.importer")
 
 DEFAULT_MAX_TOKENS = 8192
 DEFAULT_MAX_CALLS = 400
+
+# Контракт раннера для `RunnerAgentLLM` (`llm_client.py`): (prompt, model) ->
+# (текст ответа, реальные токены бэкенда).
+LiveRunner = Callable[[str, str], tuple[str, dict]]
 
 
 class CallBudget:
@@ -158,8 +162,7 @@ class RoutingRunner:
     у какого провайдера живёт модель; неизвестная модель идёт в `default`
     (Anthropic — обратная совместимость с Волной 2)."""
 
-    def __init__(self, runners: dict[str, Callable[[str, str], tuple[str, dict]]],
-                 default: Callable[[str, str], tuple[str, dict]],
+    def __init__(self, runners: dict[str, LiveRunner], default: LiveRunner,
                  providers: dict[str, str]) -> None:
         self._runners = runners
         self._default = default
@@ -181,15 +184,18 @@ def _env_name(provider: str) -> str:
     return provider.upper().replace("-", "_")
 
 
-def make_live_runner(config=None):
+def make_live_runner(config: ModelsConfig | None = None) -> LiveRunner:
     """Собирает маршрутизатор из models.yaml + окружения. Без секции
-    `providers` и без LLM_PROVIDER_* — ровно прежний AnthropicRunner."""
+    `providers` и без LLM_PROVIDER_* — ровно прежний AnthropicRunner.
+
+    Бюджет вызовов создаётся ОДИН и передаётся во все раннеры: потолок
+    IMPORTER_LLM_MAX_CALLS общий на процесс, а не на провайдера."""
     config = config or load_models_config()
     budget = _budget_from_env(None)
     default = AnthropicRunner(budget=budget)
     if not config.providers:
         return default
-    runners = {}
+    runners: dict[str, LiveRunner] = {}
     for name in sorted(set(config.providers.values())):
         if name == "anthropic":
             runners[name] = default

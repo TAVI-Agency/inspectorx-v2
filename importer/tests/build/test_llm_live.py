@@ -7,8 +7,11 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from importer.build.agents import load_models_config
 from importer.build.llm_client import AgentLLMError, RunnerAgentLLM
-from importer.build.llm_live import AnthropicRunner, CallBudget, OpenAICompatibleRunner, RoutingRunner
+from importer.build.llm_live import (
+    AnthropicRunner, CallBudget, OpenAICompatibleRunner, RoutingRunner, make_live_runner,
+)
 
 
 class _FakeAnthropic:
@@ -120,3 +123,53 @@ def test_routing_runner_unknown_provider_is_clear_error():
     router = RoutingRunner(runners={}, default=lambda p, m: ("d", {}), providers={"m": "nowhere"})
     with pytest.raises(AgentLLMError, match="nowhere"):
         router("q", "m")
+
+
+# ── make_live_runner: проводка models.yaml + LLM_PROVIDER_* -> раннеры ──
+
+def _models_yaml(tmp_path, providers_block: str = ""):
+    p = tmp_path / "models.yaml"
+    p.write_text("tiers:\n  cheap: a\n  mid: b\n  expensive: c\n" + providers_block,
+                 encoding="utf-8")
+    return load_models_config(p, env={})
+
+
+def test_make_live_runner_builds_provider_runner_from_env(tmp_path, monkeypatch):
+    """Модель с провайдером в models.yaml + LLM_PROVIDER_<NAME>_URL/KEY в
+    окружении -> вызов уходит в OpenAI-совместимый раннер этого провайдера,
+    а не в Anthropic."""
+    monkeypatch.setenv("LLM_PROVIDER_GEMINI_URL", "https://g/v1")
+    monkeypatch.setenv("LLM_PROVIDER_GEMINI_KEY", "k-test")
+    config = _models_yaml(tmp_path, "providers:\n  gemini-x: gemini\n")
+
+    router = make_live_runner(config)
+
+    assert isinstance(router, RoutingRunner)
+    runner = router._runners["gemini"]
+    assert isinstance(runner, OpenAICompatibleRunner)
+    assert runner._base_url == "https://g/v1"
+
+    calls = []
+    runner._client = httpx.Client(transport=_openai_transport(calls))
+    text, usage = router("вопрос", "gemini-x")
+    assert text == '{"ok": true}' and usage == {"input_tokens": 55, "output_tokens": 7}
+    assert str(calls[0].url) == "https://g/v1/chat/completions"
+    assert calls[0].headers["authorization"] == "Bearer k-test"
+
+
+def test_make_live_runner_without_providers_is_plain_anthropic(tmp_path):
+    """Без секции `providers` поведение ровно как в Волне 2 — один AnthropicRunner."""
+    assert isinstance(make_live_runner(_models_yaml(tmp_path)), AnthropicRunner)
+
+
+def test_make_live_runner_shares_one_budget_across_providers(tmp_path, monkeypatch):
+    """Потолок IMPORTER_LLM_MAX_CALLS — общий на процесс, а не на раннер."""
+    monkeypatch.setenv("LLM_PROVIDER_GEMINI_URL", "https://g/v1")
+    monkeypatch.setenv("LLM_PROVIDER_GEMINI_KEY", "k-test")
+    monkeypatch.setenv("IMPORTER_LLM_MAX_CALLS", "1")
+    router = make_live_runner(_models_yaml(tmp_path, "providers:\n  gemini-x: gemini\n"))
+    runner = router._runners["gemini"]
+    runner._client = httpx.Client(transport=_openai_transport([]))
+    router("раз", "gemini-x")
+    with pytest.raises(AgentLLMError, match="потолок"):
+        router("два", "gemini-x")

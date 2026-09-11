@@ -8,16 +8,29 @@
 20 с по его robots.txt `Crawl-delay: 20`; остальные — `default_delay`).
 Текст: HTML — BeautifulSoup без script/style/nav/header/footer; PDF — pypdf
 (текстовый слой; сканы дают пустую строку — это честный «нет текста», не
-ошибка); прочее — как текст."""
+ошибка); прочее (бинарь, архивы) — пустая строка: в `pipeline.documents`
+такому телу делать нечего, а в промпт оно всё равно не пойдёт.
+
+Любой сбой разбора тела — `DocFetchError`, а не исключение pypdf/кодека:
+`ResearchToolkit.gather` ловит только её, и битый PDF не должен ронять
+`build map --research` целиком.
+
+SSRF: URL скачивается, только если схема — http/https И все адреса хоста
+публичные (`_assert_public_url`). Редиректы обходятся ВРУЧНУЮ
+(`follow_redirects=False`, до `MAX_REDIRECTS` hop'ов) — иначе публичный
+вход стал бы мостом во внутреннюю сеть через `Location:`. Тело читается
+стримом с обрывом на `max_bytes`, а не буферизуется целиком."""
 from __future__ import annotations
 
 import hashlib
 import io
+import ipaddress
+import socket
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from time import monotonic, sleep as time_sleep
 from typing import Callable, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -27,6 +40,14 @@ USER_AGENT = "InspectorX-Research/1.0 (+https://inspectorx.uz)"
 
 # lex.uz robots.txt: Crawl-delay: 20 — остальные хосты идут через default_delay.
 DEFAULT_HOST_DELAYS: dict[str, float] = {"lex.uz": 20.0}
+
+ALLOWED_SCHEMES = ("http", "https")
+MAX_REDIRECTS = 5
+_REDIRECT_CODES = (301, 302, 303, 307, 308)
+
+# Резолвер хоста в список IP: инжектируется в `DocumentFetcher` — тестам
+# нельзя ходить в реальный DNS.
+Resolver = Callable[[str], list[str]]
 
 
 @dataclass(frozen=True)
@@ -54,7 +75,42 @@ class DocCache(Protocol):
 
 
 class DocFetchError(Exception):
-    """HTTP-ошибка, превышение max_bytes или сетевой сбой при скачивании."""
+    """HTTP-ошибка, превышение max_bytes, сетевой сбой, запрещённый адрес
+    (SSRF-проверка) или сбой разбора тела при скачивании."""
+
+
+def default_resolver(host: str) -> list[str]:
+    """Все адреса хоста через `socket.getaddrinfo` (и A, и AAAA)."""
+    return [info[4][0] for info in socket.getaddrinfo(host, None)]
+
+
+def _assert_public_url(url: str, resolver: Resolver) -> None:
+    """Пускаем дальше только http/https на ПУБЛИЧНЫЙ адрес.
+
+    URL приходит из выдачи веб-поиска, то есть в конечном счёте от LLM —
+    без этой проверки `build map --research` скачивал бы `file://`,
+    `http://169.254.169.254/` (метаданные облака) или внутренние сервисы
+    Railway по одному лишь названию модели."""
+    parts = urlsplit(url)
+    if parts.scheme not in ALLOWED_SCHEMES:
+        raise DocFetchError(f"{url}: схема {parts.scheme!r} не поддерживается (только http/https)")
+    host = parts.hostname
+    if not host:
+        raise DocFetchError(f"{url}: в URL нет хоста")
+    try:
+        addresses = resolver(host)
+    except OSError as exc:
+        raise DocFetchError(f"{url}: хост не резолвится: {exc}") from exc
+    if not addresses:
+        raise DocFetchError(f"{url}: хост не резолвится")
+    for address in addresses:
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError as exc:
+            raise DocFetchError(f"{url}: неразбираемый адрес {address!r}") from exc
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            raise DocFetchError(f"{url}: непубличный адрес {address}")
 
 
 class InMemoryDocCache:
@@ -126,8 +182,9 @@ def extract_text_pdf(data: bytes) -> str:
 class DocumentFetcher:
     """Скачивает URL с вежливостью по хостам и кэшированием.
 
-    `sleep`/`clock` инжектируются (по умолчанию — реальные `time.sleep`/
-    `time.monotonic`), в тестах — списки/лямбды без реального ожидания."""
+    `sleep`/`clock`/`resolver` инжектируются (по умолчанию — реальные
+    `time.sleep`/`time.monotonic`/`socket.getaddrinfo`), в тестах — списки и
+    лямбды: без ожидания и без похода в DNS."""
 
     def __init__(
         self,
@@ -140,6 +197,7 @@ class DocumentFetcher:
         timeout: float = 30.0,
         sleep: Callable[[float], None] = time_sleep,
         clock: Callable[[], float] = monotonic,
+        resolver: Resolver = default_resolver,
     ) -> None:
         self._cache = cache
         self._client = client or httpx.Client(timeout=timeout)
@@ -148,6 +206,7 @@ class DocumentFetcher:
         self._max_bytes = max_bytes
         self._sleep = sleep
         self._clock = clock
+        self._resolver = resolver
         self._last_hit: dict[str, float] = {}
 
     def _wait_for_host(self, host: str) -> None:
@@ -160,38 +219,59 @@ class DocumentFetcher:
                 self._sleep(delay - elapsed)
         self._last_hit[host] = self._clock()
 
+    def _download(self, url: str) -> tuple[str, str, str, bytes]:
+        """Ручной обход редиректов: (final_url, content_type, charset, тело).
+
+        Каждый hop заново проходит `_assert_public_url` — редирект с
+        публичного хоста на `10.0.0.1` должен упираться в ту же проверку,
+        что и исходный URL. Тело читается стримом и обрывается на
+        `max_bytes`, не буферизуясь целиком."""
+        target = url
+        for _ in range(MAX_REDIRECTS + 1):
+            _assert_public_url(target, self._resolver)
+            self._wait_for_host(urlsplit(target).hostname or "")
+            try:
+                with self._client.stream(
+                    "GET", target, follow_redirects=False,
+                    headers={"User-Agent": USER_AGENT},
+                ) as resp:
+                    if resp.status_code in _REDIRECT_CODES and "location" in resp.headers:
+                        target = urljoin(target, resp.headers["location"])
+                        continue
+                    if resp.status_code >= 400:
+                        raise DocFetchError(f"{url}: HTTP {resp.status_code}")
+                    content = bytearray()
+                    for chunk in resp.iter_bytes():
+                        content.extend(chunk)
+                        if len(content) > self._max_bytes:
+                            raise DocFetchError(f"{url}: превышен max_bytes={self._max_bytes}")
+                    content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+                    return str(resp.url), content_type, resp.charset_encoding or "utf-8", bytes(content)
+            except httpx.HTTPError as exc:
+                raise DocFetchError(f"{url}: сетевая ошибка: {exc}") from exc
+        raise DocFetchError(f"{url}: слишком много редиректов (> {MAX_REDIRECTS})")
+
     def fetch(self, url: str) -> FetchedDoc:
         if self._cache is not None:
             cached = self._cache.get(url)
             if cached is not None:
                 return replace(cached, from_cache=True)
 
-        host = urlsplit(url).hostname or ""
-        self._wait_for_host(host)
+        final_url, content_type, charset, content = self._download(url)
 
-        try:
-            resp = self._client.get(
-                url, follow_redirects=True, headers={"User-Agent": USER_AGENT})
-        except httpx.HTTPError as exc:
-            raise DocFetchError(f"{url}: сетевая ошибка: {exc}") from exc
-
-        if resp.status_code >= 400:
-            raise DocFetchError(f"{url}: HTTP {resp.status_code}")
-
-        content = resp.content
-        if len(content) > self._max_bytes:
-            raise DocFetchError(f"{url}: превышен max_bytes={self._max_bytes}")
-
-        content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
-        final_url = str(resp.url)
         is_pdf = content_type == "application/pdf" or final_url.lower().endswith(".pdf")
-        if is_pdf:
-            text = extract_text_pdf(content)
-            content_type = content_type or "application/pdf"
-        elif content_type in ("text/html", "application/xhtml+xml"):
-            text = extract_text_html(resp.text)
-        else:
-            text = resp.text
+        try:
+            if is_pdf:
+                text = extract_text_pdf(content)
+                content_type = content_type or "application/pdf"
+            elif content_type in ("text/html", "application/xhtml+xml"):
+                text = extract_text_html(content.decode(charset, errors="replace"))
+            else:
+                # Не HTML и не PDF — тело в `text` не кладём: бинарь в
+                # `pipeline.documents` бесполезен и только раздувает строку.
+                text = ""
+        except Exception as exc:  # pypdf/BeautifulSoup/кодек — наружу только DocFetchError
+            raise DocFetchError(f"{url}: не разобран {content_type or '?'}: {exc}") from exc
 
         doc = FetchedDoc(
             url=url,

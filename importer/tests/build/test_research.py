@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from importer.build.docfetch import DocFetchError, FetchedDoc
+from importer.build.llm_client import AgentLLMError
 from importer.build.research import ResearchSource, ResearchToolkit
 from importer.build.websearch import WebSearchError
 
@@ -88,3 +89,20 @@ def test_gather_resets_skipped_between_calls():
 
     kit.gather(["q2"])
     assert kit.skipped == []
+
+
+def test_gather_survives_any_agent_llm_error_from_search():
+    """Дефолтный live-бэкенд поиска работает через LLM и умеет падать не
+    только `WebSearchError`, но и её родителем `AgentLLMError` (исчерпан
+    потолок вызовов, отказ модели) — разведка обязана пережить и это."""
+    searcher = _Searcher({
+        "q1": AgentLLMError("потолок вызовов исчерпан: 400/400"),
+        "q2": [{"title": "T", "url": "https://lex.uz/1", "snippet": ""}],
+    })
+    fetcher = _Fetcher({"https://lex.uz/1": _doc("https://lex.uz/1", "текст")})
+    kit = ResearchToolkit(searcher, fetcher)
+
+    sources = kit.gather(["q1", "q2"])
+
+    assert [s.url for s in sources] == ["https://lex.uz/1"]
+    assert kit.skipped == [("q1", "потолок вызовов исчерпан: 400/400")]
