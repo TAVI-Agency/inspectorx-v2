@@ -135,6 +135,54 @@ def test_retriever_exhausts_two_reformulations_then_not_found():
     assert len(llm.calls) == 2
 
 
+# ── Retriever: доп. поиск другим скриптом (Задача 5, uzscript.py) ───────
+
+def test_retriever_finds_on_alt_script_without_llm():
+    """Кириллица не находит, та же фраза латиницей — находит: доп. поиск
+    другим скриптом срабатывает ДО LLM-переформулировок и не тратит их."""
+    query = "маҳсулот"  # узбекская кириллица со спецбуквой "ҳ"
+    alt = "mahsulot"  # cyrillic_to_latin(query)
+    legalx = FakeLegalX(responses=[[], [fragment()]])
+    llm = ScriptedLLM([])  # LLM не должна понадобиться
+
+    result = Retriever(legalx, llm).run(query, "UZ", norm_profile())
+
+    assert result.outcome == "found"
+    assert result.fragments == [fragment()]
+    assert result.queries_tried == [query, alt]
+    assert legalx.calls == [(query, "UZ"), (alt, "UZ")]
+    assert llm.calls == []
+
+
+def test_retriever_alt_script_miss_then_reformulates():
+    """Доп. поиск другим скриптом тоже пуст — Retriever переходит к
+    LLM-переформулировкам как обычно, не теряя ни одной из MAX_REFORMULATIONS."""
+    query = "маҳсулот"
+    alt = "mahsulot"
+    legalx = FakeLegalX(responses=[[], [], [fragment()]])
+    llm = ScriptedLLM([json.dumps({"reformulated_query": "уточнённый запрос"})])
+
+    result = Retriever(legalx, llm).run(query, "UZ", norm_profile())
+
+    assert result.outcome == "found"
+    assert result.fragments == [fragment()]
+    assert result.queries_tried == [query, alt, "уточнённый запрос"]
+    assert legalx.calls == [(query, "UZ"), (alt, "UZ"), ("уточнённый запрос", "UZ")]
+    assert len(llm.calls) == 1
+
+
+def test_retriever_no_alt_script_for_plain_query():
+    """У запроса без узбекских маркеров `alt_script` — None: доп. поиска
+    нет, поведение как до Задачи 5 (см. test_retriever_found_after_one_reformulation)."""
+    legalx = FakeLegalX(responses=[[], [fragment()]])
+    llm = ScriptedLLM([json.dumps({"reformulated_query": "уточнённый запрос"})])
+
+    result = Retriever(legalx, llm).run("исходный запрос", "UZ", norm_profile())
+
+    assert result.queries_tried == ["исходный запрос", "уточнённый запрос"]
+    assert legalx.calls == [("исходный запрос", "UZ"), ("уточнённый запрос", "UZ")]
+
+
 def test_retriever_not_found_only_after_exhausting_attempts_not_earlier():
     """Если бы Retriever сдавался раньше срока, здесь он вернул бы not_found
     уже после первого пустого поиска — но третий поиск (после второй
@@ -313,6 +361,41 @@ def test_load_models_config_has_three_tiers_with_pricing():
         assert tier_model in config.pricing
         assert config.pricing[tier_model]["input_per_1m_usd"] > 0
         assert config.pricing[tier_model]["output_per_1m_usd"] > 0
+
+
+def test_tier_env_override(tmp_path):
+    p = tmp_path / "models.yaml"
+    p.write_text("tiers:\n  cheap: a\n  mid: b\n  expensive: c\n", encoding="utf-8")
+    cfg = load_models_config(p, env={"IMPORTER_TIER_MID": "gemini-3.1-flash-lite"})
+    assert cfg.tiers == {"cheap": "a", "mid": "gemini-3.1-flash-lite", "expensive": "c"}
+    assert cfg.providers == {}
+
+
+def test_providers_section_parsed(tmp_path):
+    p = tmp_path / "models.yaml"
+    p.write_text("tiers:\n  cheap: a\n  mid: b\n  expensive: c\nproviders:\n  a: gemini\n",
+                 encoding="utf-8")
+    assert load_models_config(p, env={}).providers == {"a": "gemini"}
+
+
+def test_load_models_config_rejects_tier_override_collapsing_two_tiers(tmp_path):
+    """Оверрайды, схлопывающие два тира в одну модель, обязаны падать сразу:
+    иначе `verifier_model_for` вернул бы модель producer'а и независимая
+    проверка молча превратилась бы в «producer проверяет сам себя»
+    (ADR-0003, решение 4)."""
+    p = tmp_path / "models.yaml"
+    p.write_text("tiers:\n  cheap: a\n  mid: b\n  expensive: c\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="mid"):
+        load_models_config(p, env={"IMPORTER_TIER_MID": "x", "IMPORTER_TIER_EXPENSIVE": "x"})
+
+
+def test_verifier_model_for_rejects_verifier_equal_to_producer():
+    """Страховка на выходе: даже если `ModelsConfig` собран мимо
+    `load_models_config` (например, руками из `--set` eval-models), Verifier
+    не имеет права получить ту же модель, что и producer."""
+    config = ModelsConfig(tiers={"cheap": "a", "mid": "x", "expensive": "x"}, pricing={})
+    with pytest.raises(ValueError, match="сам себя"):
+        verifier_model_for("x", config)
 
 
 # ── RunnerAgentLLM (адаптер над паттерном importer.llm) ─────────────────

@@ -37,6 +37,20 @@ class MapItem:
     rationale: str
     benchmark_countries: list[str]
 
+    @classmethod
+    def from_payload(cls, entry: dict) -> "MapItem":
+        """Строит `MapItem` из сырого айтема payload карты (`MapRecord.payload`
+        / `pipeline.maps`). Берёт только известные поля MapItem; лишние —
+        например, `sources` карты в режиме `--research` (Задача 4) — молча
+        игнорирует. `rationale`/`benchmark_countries` необязательны в
+        payload (см. `discovery.py`) — дефолт пустая строка/пустой список."""
+        return cls(
+            expected_item=entry["expected_item"],
+            category_slug=entry["category_slug"],
+            rationale=entry.get("rationale", ""),
+            benchmark_countries=list(entry.get("benchmark_countries") or []),
+        )
+
 
 @dataclass(frozen=True)
 class Question:

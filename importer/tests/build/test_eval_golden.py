@@ -167,6 +167,21 @@ def test_normalize_act_none_or_empty_is_none():
     assert normalize_act("") is None
 
 
+# ── normalize_act: узбекский скрипт (Задача 5, importer/build/uzscript.py) ──
+
+def test_normalize_act_matches_uzbek_cyrillic_and_latin_script():
+    """Один узбекский акт, два скрипта записи — должны совпасть."""
+    assert normalize_act("Вазирлар Маҳкамаси қарори 290") == \
+           normalize_act("Vazirlar Mahkamasi qarori 290")
+
+
+def test_normalize_act_russian_acronym_cross_script_not_forced():
+    """ПКМ-290 (русская аббревиатура, без узбекских спецбукв ў/ғ/қ/ҳ) не
+    считается «тем же скриптом», что PKM-290 — это разные написания, а не
+    два скрипта одного узбекского слова (см. has_uzbek_markers)."""
+    assert normalize_act("ПКМ-290, ТР") != normalize_act("PKM-290, TR")
+
+
 def test_normalize_article_strips_dedup_suffix_and_extracts_number():
     assert normalize_article("п. 35 (37b7)") == "#35"
     assert normalize_article("п. 35 (21c9)") == "#35"
@@ -214,6 +229,23 @@ def test_source_acts_match_false_on_different_act():
 def test_source_acts_match_false_when_either_side_missing():
     assert not source_acts_match(SourceAct(None, None), SourceAct("ПКМ-290, ТР", "п. 24"))
     assert not source_acts_match(SourceAct("ПКМ-290, ТР", "п. 24"), SourceAct(None, None))
+
+
+def test_source_acts_match_uzbek_cyrillic_and_latin_script():
+    assert source_acts_match(
+        SourceAct("Вазирлар Маҳкамаси қарори 290", "24-модда"),
+        SourceAct("Vazirlar Mahkamasi qarori 290", "24-модда"),
+    )
+
+
+def test_source_acts_match_russian_acronym_script_not_forced_equal():
+    """См. `test_normalize_act_russian_acronym_cross_script_not_forced` — не
+    обязательное к совпадению: разные написания, не два скрипта одного
+    узбекского слова."""
+    assert not source_acts_match(
+        SourceAct("ПКМ-290", "п.24"),
+        SourceAct("PKM-290", "p.24"),
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════

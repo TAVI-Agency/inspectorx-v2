@@ -263,3 +263,79 @@ def test_question_structure():
     assert q.text == "Вопрос?"
     assert q.expected_schema == schema
     assert isinstance(q.expected_schema, dict)
+
+
+# ── MapItem.from_payload (Задача 4): карта Cartographer'а с `sources` ───
+
+
+def test_map_item_from_payload_ignores_unknown_fields():
+    """`sources` — поле карты (Задача 4), не поле MapItem: from_payload его
+    молча отбрасывает."""
+    item = MapItem.from_payload({
+        "expected_item": "x", "category_slug": "c", "rationale": "r",
+        "benchmark_countries": [], "sources": ["u"],
+    })
+
+    assert item == MapItem(expected_item="x", category_slug="c", rationale="r",
+                            benchmark_countries=[])
+    assert not hasattr(item, "sources")
+
+
+def test_map_item_from_payload_defaults_missing_optional_fields():
+    """`rationale`/`benchmark_countries` отсутствуют в payload (напр., в
+    `discovery.py` они не всегда сохранены) -> пустая строка/пустой список."""
+    item = MapItem.from_payload({"expected_item": "x", "category_slug": "c"})
+
+    assert item.rationale == ""
+    assert item.benchmark_countries == []
+
+
+def test_map_item_from_payload_handles_null_benchmark_countries():
+    # Когда benchmark_countries = null в payload, from_payload не должна падать
+    # с TypeError, а должна установить benchmark_countries = []
+    entry = {
+        "expected_item": "Маркировка",
+        "category_slug": "marking",
+        "rationale": "обоснование",
+        "benchmark_countries": None  # null вместо массива
+    }
+    
+    item = MapItem.from_payload(entry)
+    
+    assert item.expected_item == "Маркировка"
+    assert item.category_slug == "marking"
+    assert item.rationale == "обоснование"
+    assert item.benchmark_countries == []
+
+
+def test_map_item_from_payload_ignores_extra_fields():
+    # from_payload должна игнорировать лишние поля, такие как sources (Задача 4)
+    entry = {
+        "expected_item": "Требование",
+        "category_slug": "cert",
+        "rationale": "причина",
+        "benchmark_countries": ["KZ"],
+        "sources": ["https://lex.uz/1"]  # лишнее поле
+    }
+    
+    item = MapItem.from_payload(entry)
+    
+    assert item.expected_item == "Требование"
+    assert item.category_slug == "cert"
+    assert item.rationale == "причина"
+    assert item.benchmark_countries == ["KZ"]
+    # sources не попала в MapItem
+    assert not hasattr(item, "sources")
+
+
+def test_map_item_from_payload_missing_optional_fields():
+    # rationale и benchmark_countries опциональны, дефолт пустые
+    entry = {
+        "expected_item": "Минимальное",
+        "category_slug": "mark"
+    }
+    
+    item = MapItem.from_payload(entry)
+    
+    assert item.rationale == ""
+    assert item.benchmark_countries == []

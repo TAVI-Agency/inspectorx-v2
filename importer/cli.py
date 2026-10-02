@@ -4,9 +4,12 @@ import json
 import os
 from pathlib import Path
 
+from importer.build.agents import load_models_config
 from importer.build.cartographer import Cartographer
 from importer.build.coverage import coverage_report, publish_ready
+from importer.build.docfetch import DocumentFetcher, SupabaseDocCache
 from importer.build.eval_golden import HeuristicBaselineLLM, load_golden_set, run_eval
+from importer.build.eval_models import compare_table, parse_tier_set, run_model_sets
 from importer.build.legalx import get_client as get_legalx_client
 from importer.build.llm_client import RunnerAgentLLM
 from importer.build.llm_live import make_live_runner
@@ -17,7 +20,9 @@ from importer.build.orchestrator import (
     SupabaseBuildStore,
 )
 from importer.build.registry import build_step_registry
+from importer.build.research import ResearchToolkit
 from importer.build.trace import Tracer, cost_report
+from importer.build.websearch import get_web_searcher
 from importer.db import ix_client, jb_client
 from importer.lexuz import LexuzClient
 from importer.llm import LLM
@@ -31,6 +36,11 @@ from importer.monitoring.impact_mapper import (
 )
 from importer.pipeline import run_import
 
+
+_LIVE_RUN_WARNING = (
+    "ЖИВОЙ ПРОГОН СТОИТ ДЕНЕГ: перед запуском выставь лимиты трат у провайдеров "
+    "(Волна 3, задача А5) и IMPORTER_LLM_MAX_CALLS"
+)
 
 _live_runner = None
 
@@ -106,6 +116,11 @@ def main(argv=None):
     )
     p_build_map.add_argument("--group", dest="group_ref", required=True)
     p_build_map.add_argument("--jurisdiction", required=True)
+    p_build_map.add_argument(
+        "--research", action="store_true",
+        help="разведка по реальным источникам: веб-поиск (WEBSEARCH_BACKEND) + "
+             "скачивание в pipeline.documents",
+    )
     p_build_approve = build_sub.add_parser(
         "approve-map", help="апрув draft-карты владельцем: draft -> approved (стоп-точка ①)"
     )
@@ -124,8 +139,32 @@ def main(argv=None):
     )
     p_build_eval_golden.add_argument(
         "--save-baseline", action="store_true",
-        help="записать текущий прогон в importer/golden/baseline.json (следующий прогон "
-             "покажет дельту против него)",
+        help="записать текущий прогон в importer/golden/baseline.json — при --llm live в "
+             "отдельный baseline-live.json (следующий прогон того же бэкенда покажет "
+             "дельту против него)",
+    )
+    p_build_eval_golden.add_argument(
+        "--llm", choices=["mock", "live"], default="mock",
+        help="mock (по умолчанию) — HeuristicBaselineLLM, только smoke-проверка проводки; "
+             f"live — реальные вызовы моделей из models.yaml. {_LIVE_RUN_WARNING}",
+    )
+    p_build_eval_models = build_sub.add_parser(
+        "eval-models",
+        help=f"сравнить НЕСКОЛЬКО наборов моделей на golden set (Задача 6): для каждого "
+             f"--set гоняет eval-golden и печатает таблицу метрик рядом. {_LIVE_RUN_WARNING}",
+    )
+    p_build_eval_models.add_argument(
+        "--set", dest="sets", action="append", required=True,
+        metavar="cheap=<модель>,mid=<модель>,expensive=<модель>",
+        help="набор моделей для прогона (флаг можно повторять — один прогон на набор); "
+             "формат cheap=<модель>,mid=<модель>,expensive=<модель>",
+    )
+    p_build_eval_models.add_argument(
+        "--limit", type=int, default=None, help="прогнать только первые N айтемов golden-набора"
+    )
+    p_build_eval_models.add_argument(
+        "--out", type=Path, default=Path("importer/golden/eval-reports"),
+        help="каталог для JSON-отчётов по наборам (по умолчанию importer/golden/eval-reports)",
     )
 
     # Задача 40: мониторинг изменений (Impact-маппер + In-house lawyer +
@@ -232,7 +271,10 @@ def main(argv=None):
                 print(f"{item.id}  [{item.last_error}] {item.expected_item[:70]}")
             print(f"\nвсего needs_attention: {len(items)}")
         elif args.build_cmd == "map":
-            cartographer = Cartographer(store, RunnerAgentLLM(_cartographer_llm_runner))
+            toolkit = None
+            if args.research:
+                toolkit = ResearchToolkit(get_web_searcher(), DocumentFetcher(cache=SupabaseDocCache(ix)))
+            cartographer = Cartographer(store, RunnerAgentLLM(_cartographer_llm_runner), toolkit=toolkit)
             try:
                 report = cartographer.build_map(args.group_ref, args.jurisdiction)
             except MapAlreadyApprovedError as exc:
@@ -243,6 +285,10 @@ def main(argv=None):
                 f"jurisdiction={report.jurisdiction} items={report.items_count} "
                 "status=draft"
             )
+            if args.research:
+                print(f"sources_used={report.sources_used}")
+                for query_or_url, reason in toolkit.skipped:
+                    print(f"  пропущено: {query_or_url} — {reason}")
             if report.candidate_categories:
                 print("кандидаты новых категорий (НЕ попали в карту, нужен апрув владельца):")
                 for c in report.candidate_categories:
@@ -257,26 +303,49 @@ def main(argv=None):
         elif args.build_cmd == "reject-map":
             record = store.set_map_status(args.map_id, "rejected")
             print(f"map={record.id} status={record.status}")
-        else:  # eval-golden
+        elif args.build_cmd == "eval-golden":
             golden_path = Path("importer/golden/golden_set.yaml")
-            baseline_path = Path("importer/golden/baseline.json")
             items = load_golden_set(golden_path)
             if args.limit:
                 items = items[: args.limit]
+            if args.llm == "live":
+                # Живой прогон (Задача 6): общий на процесс раннер
+                # `_shared_live_runner` — один потолок IMPORTER_LLM_MAX_CALLS
+                # на всю команду, как и у 'build map'/'build run' выше.
+                llm = RunnerAgentLLM(_shared_live_runner)
+                backend = "live"
+                print(f"backend=live — РЕАЛЬНЫЕ вызовы моделей, tiers={load_models_config().tiers}")
+            else:
+                # Живого LLM-ключа в контуре нет (тот же принцип отсрочки, что и
+                # у 'build run'/'build map' выше) — HeuristicBaselineLLM НЕ
+                # семантика, только smoke-проверка проводки golden->агент->
+                # метрика (см. докстринг importer/build/eval_golden.py).
+                llm = HeuristicBaselineLLM()
+                backend = "mock"
+                print("backend=mock (LEGALX_BACKEND) + HeuristicBaselineLLM "
+                      "(живого LLM-ключа нет — числа НЕ мера качества, только smoke)")
+            # У живого прогона СВОЙ baseline-файл: числа mock-эвристики и
+            # живых моделей несопоставимы, а `--llm live --save-baseline`
+            # раньше затирал mock-baseline соседнего режима.
+            baseline_path = Path(
+                "importer/golden/baseline-live.json" if backend == "live"
+                else "importer/golden/baseline.json"
+            )
             baseline = (
                 json.loads(baseline_path.read_text(encoding="utf-8"))
                 if baseline_path.exists() else None
             )
-            # Живого LLM-ключа в контуре нет (тот же принцип отсрочки, что и
-            # у 'build run'/'build map' выше) — HeuristicBaselineLLM НЕ
-            # семантика, только smoke-проверка проводки golden->агент->
-            # метрика (см. докстринг importer/build/eval_golden.py).
-            print("backend=mock (LEGALX_BACKEND) + HeuristicBaselineLLM "
-                  "(живого LLM-ключа нет — числа НЕ мера качества, только smoke)")
+            if baseline is not None and baseline.get("backend") != backend:
+                # Страховка на случай baseline'а, снятого другим бэкендом
+                # (например, набором моделей eval-models): дельта между
+                # разными бэкендами — не дельта качества.
+                print(f"предупреждение: {baseline_path} снят на backend="
+                      f"{baseline.get('backend')!r}, текущий — {backend!r}; дельта не считается")
+                baseline = None
             report = run_eval(
-                items, legalx=get_legalx_client(), llm=HeuristicBaselineLLM(),
+                items, legalx=get_legalx_client(), llm=llm,
                 valid_category_slugs=store.list_category_slugs(),
-                backend="mock", baseline=baseline,
+                backend=backend, baseline=baseline,
             )
             print(report.markdown)
             print(json.dumps(report.to_json_dict(), ensure_ascii=False, indent=2))
@@ -287,6 +356,29 @@ def main(argv=None):
                     encoding="utf-8",
                 )
                 print(f"baseline сохранён -> {baseline_path}")
+        else:  # eval-models
+            golden_path = Path("importer/golden/golden_set.yaml")
+            items = load_golden_set(golden_path)
+            if args.limit:
+                items = items[: args.limit]
+            try:
+                sets = [parse_tier_set(spec) for spec in args.sets]
+            except ValueError as exc:
+                print(f"ошибка: {exc}")
+                raise SystemExit(1)
+            # Тот же общий на процесс раннер, что и у 'eval-golden --llm live'
+            # выше (единый потолок IMPORTER_LLM_MAX_CALLS на всю команду).
+            print("backend=live — РЕАЛЬНЫЕ вызовы моделей для каждого набора --set")
+            reports = run_model_sets(
+                items, sets=sets, base_config=load_models_config(),
+                legalx=get_legalx_client(), llm=RunnerAgentLLM(_shared_live_runner),
+                valid_category_slugs=store.list_category_slugs(), out_dir=args.out,
+            )
+            print(compare_table(reports))
+            for slug in reports:
+                matches = sorted(args.out.glob(f"*-{slug}.json"), key=lambda p: p.stat().st_mtime)
+                if matches:
+                    print(f"отчёт [{slug}] -> {matches[-1]}")
         return
 
     if args.cmd == "monitor":

@@ -33,7 +33,13 @@ ADR-0003, «Блок 3» — контур D, гейт качества).
 Тот же паттерн, что и `coverage.py:coverage_report`/`eval_golden.py:run_eval`:
 run-level функция агрегирует `store.list_llm_calls(run_id)` по роли и
 собирает markdown-таблицу с итогом — печатает CLI (`cli.py`), сама ничего в
-БД не пишет (в отличие от `Tracer.record`)."""
+БД не пишет (в отличие от `Tracer.record`).
+
+Модель без строки в `models.yaml: pricing` (например, `IMPORTER_TIER_*`-
+оверрайд на eval, см. `agents.py: load_models_config`) не роняет трейсинг —
+`Tracer._cost_usd` считает такой вызов по нулевому прайсу, а `cost_report`
+перечисляет такие модели в `CostReport.unpriced_models`/markdown, чтобы
+итоговая стоимость прогона не выглядела точной там, где она занижена."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -147,12 +153,17 @@ class Tracer:
         )
 
     def _cost_usd(self, model: str, input_tokens: int, output_tokens: int) -> float:
+        """Нулевой прайс, если у модели нет строки в `models.yaml: pricing`
+        — НЕ ошибка: `IMPORTER_TIER_*`-оверрайды (`agents.py:
+        load_models_config`) подставляют произвольную модель для eval без
+        правки `models.yaml`, и для такой модели прайса заведомо нет.
+        Раньше это падало `ValueError` и рвало запись в `pipeline.llm_calls`
+        прямо посреди прогона — вместо этого `cost_report` помечает такие
+        модели в `unpriced_models`, чтобы итоговая стоимость не выглядела
+        точной там, где она посчитана как 0."""
         pricing = self._models.pricing.get(model)
         if pricing is None:
-            raise ValueError(
-                f"Tracer.record: нет прайса для модели {model!r} в models.yaml "
-                f"(известные модели: {sorted(self._models.pricing)})"
-            )
+            return 0.0
         cost = (
             input_tokens * pricing["input_per_1m_usd"]
             + output_tokens * pricing["output_per_1m_usd"]
@@ -179,6 +190,7 @@ class CostReport:
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     total_cost_usd: float = 0.0
+    unpriced_models: list[str] = field(default_factory=list)
     markdown: str = ""
 
 
@@ -198,18 +210,32 @@ def _build_cost_markdown(run_id: str, rows: list[CostRoleRow], report: CostRepor
         f"| **итого** | {report.total_calls} | {report.total_input_tokens} | "
         f"{report.total_output_tokens} | {report.total_cost_usd:.5f} |"
     )
+    if report.unpriced_models:
+        lines.append("")
+        lines.append(
+            "_без прайса в models.yaml (cost_usd=0, не точная стоимость): "
+            + ", ".join(report.unpriced_models) + "_"
+        )
     return "\n".join(lines) + "\n"
 
 
-def cost_report(store, run_id: str) -> CostReport:
+def cost_report(store, run_id: str, models: ModelsConfig | None = None) -> CostReport:
     """Агрегирует `store.list_llm_calls(run_id)` по роли — вход CLI
     `build cost --run <id>` (`cli.py`). Порядок строк — первое появление
     роли в `list_llm_calls` (хронологический порядок вызовов прогона, см.
-    `SupabaseBuildStore.list_llm_calls`/`InMemoryStore.list_llm_calls`)."""
+    `SupabaseBuildStore.list_llm_calls`/`InMemoryStore.list_llm_calls`).
+
+    `models` — та же `ModelsConfig`, по которой `Tracer.record` считал
+    `cost_usd` (по умолчанию свежий `load_models_config()`); используется
+    только чтобы пометить `unpriced_models` — модели, у которых нет строки в
+    `pricing` и чей `cost_usd` в записях поэтому 0, а не реально нулевая
+    стоимость (см. `Tracer._cost_usd`)."""
+    models = models or load_models_config()
     calls = store.list_llm_calls(run_id)
 
     order: list[str] = []
     by_role: dict[str, CostRoleRow] = {}
+    unpriced_models: set[str] = set()
     for call in calls:
         role = call["role"]
         if role not in by_role:
@@ -222,6 +248,9 @@ def cost_report(store, run_id: str) -> CostReport:
         row.input_tokens += call.get("input_tokens") or 0
         row.output_tokens += call.get("output_tokens") or 0
         row.cost_usd = round(row.cost_usd + float(call.get("cost_usd") or 0), 5)
+        model = call.get("model")
+        if model and model not in models.pricing:
+            unpriced_models.add(model)
 
     rows = [by_role[role] for role in order]
     report = CostReport(
@@ -231,6 +260,7 @@ def cost_report(store, run_id: str) -> CostReport:
         total_input_tokens=sum(r.input_tokens for r in rows),
         total_output_tokens=sum(r.output_tokens for r in rows),
         total_cost_usd=round(sum(r.cost_usd for r in rows), 5),
+        unpriced_models=sorted(unpriced_models),
     )
     report.markdown = _build_cost_markdown(run_id, rows, report)
     return report

@@ -10,6 +10,8 @@ import { CPackagingCheckPage } from './pages/c/checks/CPackagingCheckPage'
 import { CPackagingReportPage } from './pages/c/checks/CPackagingReportPage'
 import { CSettingsPage } from './pages/c/CSettingsPage'
 import { CHelpPage } from './pages/c/CHelpPage'
+import { CLegalPage } from './pages/c/CLegalPage'
+import { CContactsPage } from './pages/c/CContactsPage'
 import { CProductPage } from './pages/c/CProductPage'
 import { CServicePage } from './pages/c/CServicePage'
 import { CPricingPage } from './pages/c/CPricingPage'
@@ -38,6 +40,9 @@ const router = createBrowserRouter([
       { path: '/checks/documents', element: <CCheckAnnouncePage check="documents" /> },
       { path: '/settings', element: <CSettingsPage /> },
       { path: '/help', element: <CHelpPage /> },
+      { path: '/legal/offer', element: <CLegalPage kind="offer" /> },
+      { path: '/legal/privacy', element: <CLegalPage kind="privacy" /> },
+      { path: '/contacts', element: <CContactsPage /> },
       { path: '/product/:productId', element: <CProductPage /> },
       { path: '/service/:serviceId', element: <CServicePage /> },
       { path: '/pricing', element: <CPricingPage /> },

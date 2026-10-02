@@ -14,7 +14,7 @@ from decimal import Decimal
 import pytest
 
 from importer.build.legalx import CourtCase, LegalXClient, NormFragment, get_client
-from importer.build.legalx_mock import MockLegalX
+from importer.build.legalx_mock import MockLegalX, _words
 
 
 # ── search_norms ──────────────────────────────────────────────────────────
@@ -123,3 +123,13 @@ def test_get_client_unknown_backend_raises_value_error(monkeypatch):
 def test_mock_satisfies_legalx_client_protocol():
     client: LegalXClient = MockLegalX()
     assert hasattr(client, "search_norms") and hasattr(client, "search_cases")
+
+
+# ── _words: нормализация узбекского скрипта (Задача 5) ──────────────────
+# Фикстуры norms_uz.json — только русский текст (см. докстринг модуля),
+# поэтому кросс-скриптовый сценарий проверяем на уровне самой `_words`:
+# кириллица и латиница одной узбекской фразы дают одинаковое множество слов.
+
+def test_words_same_set_for_cyrillic_and_latin_uzbek_phrase():
+    assert _words("Ўзбекистон Республикаси Вазирлар Маҳкамаси") == \
+           _words("Oʻzbekiston Respublikasi Vazirlar Mahkamasi")

@@ -19,19 +19,33 @@
   реально прогоняется Orchestrator'ом (фикс-раунд ревью Задачи 15,
   Important: раздельные дублёры BuildStore не ловили это рассинхрон).
 
+Сценарии из брифа Задачи 4 (`--research`):
+- с `toolkit` — `_plan_queries` даёт LLM отдельный вызов за планом запросов,
+  `toolkit.gather(...)` собирает источники, второй промпт несёт блок
+  «Источники», айтемы карты несут `sources` (только известные URL, выдумки
+  LLM молча отбрасываются), `CartographerReport.sources_used` — число
+  собранных источников;
+- без `toolkit` — поведение Волны 2 не меняется: один LLM-вызов, промпт без
+  «Источники»;
+- план запросов — не JSON/не список строк → откат на единственный запрос
+  `f"{group_ref} требования {jurisdiction}"`, карта всё равно строится.
+
 LLM — только инжектируемый скрипт ответов (тот же паттерн, что и
 `test_agents.py:ScriptedLLM`), никакого сетевого мокинга.
 """
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
 from importer.build.agents import Verdict, load_models_config
 from importer.build.cartographer import Cartographer, CartographerReport
+from importer.build.docfetch import FetchedDoc
 from importer.build.llm_client import AgentLLMError
 from importer.build.orchestrator import MapAlreadyApprovedError, Orchestrator
+from importer.build.research import ResearchToolkit
 from importer.build.steps import STEP_ORDER, StepResult
 from importer.tests.build.stores import InMemoryStore
 
@@ -273,3 +287,170 @@ def test_cartographer_map_can_be_approved_and_run_by_orchestrator():
     assert run_report.needs_attention == 0
     published_items = {item.expected_item for item in store.items.values() if item.status == "published"}
     assert published_items == {"акцизная марка на пачке сигарет", "ставка НДС на импорт"}
+
+
+# ── режим `--research` (Задача 4): план запросов + реальные источники ────
+
+
+class _Searcher:
+    """Фейковый `WebSearcher` — таблица query -> список находок/исключение
+    (тот же паттерн, что и `importer/tests/build/test_research.py`)."""
+
+    def __init__(self, table):
+        self.table = table
+        self.queries = []
+
+    def search(self, q):
+        self.queries.append(q)
+        if isinstance(self.table.get(q), Exception):
+            raise self.table[q]
+        return self.table.get(q, [])
+
+
+class _Fetcher:
+    """Фейковый `DocumentFetcher` — таблица url -> FetchedDoc/исключение."""
+
+    def __init__(self, docs):
+        self.docs = docs
+        self.urls = []
+
+    def fetch(self, url):
+        self.urls.append(url)
+        if isinstance(self.docs.get(url), Exception):
+            raise self.docs[url]
+        return self.docs[url]
+
+
+def _doc(url, text):
+    return FetchedDoc(url=url, final_url=url, content_type="text/html", sha256="0" * 64,
+                       text=text, fetched_at=datetime(2026, 9, 11, tzinfo=timezone.utc))
+
+
+def test_research_mode_plans_queries_and_cites_sources():
+    # первый ответ LLM — план запросов, второй — карта с sources
+    llm = ScriptedLLM([
+        json.dumps(["маркировка молока Узбекистан", "sut mahsulotlari markirovka"], ensure_ascii=False),
+        valid_response(map_item(
+            sources=["https://lex.uz/1", "https://fake.example/999"],
+        )),
+    ])
+    kit = ResearchToolkit(
+        _Searcher({
+            "маркировка молока Узбекистан": [
+                {"title": "Постановление о маркировке", "url": "https://lex.uz/1", "snippet": ""},
+            ],
+            "sut mahsulotlari markirovka": [],
+        }),
+        _Fetcher({"https://lex.uz/1": _doc("https://lex.uz/1", "текст постановления" * 50)}),
+    )
+    store = InMemoryStore()
+
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert report.items_count == 1
+    assert report.sources_used == 1
+
+    saved = store.load_map(report.map_id)
+    # выдуманный LLM url отброшен молча — sources только из реально
+    # собранных источников
+    assert saved.payload[0]["sources"] == ["https://lex.uz/1"]
+
+    assert len(llm.calls) == 2
+    map_prompt = llm.calls[1][0]
+    assert "Источники" in map_prompt
+    assert "https://lex.uz/1" in map_prompt
+
+
+def test_without_toolkit_behavior_unchanged():
+    # один LLM-вызов, никакого блока «Источники» — как в Волне 2
+    store = InMemoryStore()
+    llm = ScriptedLLM([valid_response(map_item())])
+
+    report = Cartographer(store, llm).build_map("2402", "UZ")
+
+    assert report.items_count == 1
+    assert report.sources_used == 0
+    assert len(llm.calls) == 1
+    assert "Источники" not in llm.calls[0][0]
+
+    saved = store.load_map(report.map_id)
+    assert "sources" not in saved.payload[0]
+
+
+def test_plan_queries_empty_array_falls_back_to_group_ref():
+    """Пустой JSON-массив формально валиден, но даёт НОЛЬ запросов — это
+    молчаливая разведка вхолостую. Откат такой же, как на мусорный ответ:
+    один запрос по группе и юрисдикции."""
+    store = InMemoryStore()
+    llm = ScriptedLLM(["[]", valid_response(map_item())])
+    searcher = _Searcher({"0401 требования UZ": [{"title": "T", "url": "https://lex.uz/9", "snippet": ""}]})
+    kit = ResearchToolkit(searcher, _Fetcher({"https://lex.uz/9": _doc("https://lex.uz/9", "текст")}))
+
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert searcher.queries == ["0401 требования UZ"]
+    assert report.sources_used == 1
+
+
+def test_plan_queries_garbage_falls_back_to_group_ref():
+    # план не JSON -> один запрос f"{group_ref} требования {jurisdiction}",
+    # карта всё равно строится
+    store = InMemoryStore()
+    llm = ScriptedLLM(["это не план, а болтовня", valid_response(map_item())])
+    searcher = _Searcher({"0401 требования UZ": [{"title": "T", "url": "https://lex.uz/9", "snippet": ""}]})
+    kit = ResearchToolkit(searcher, _Fetcher({"https://lex.uz/9": _doc("https://lex.uz/9", "текст")}))
+
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert searcher.queries == ["0401 требования UZ"]
+    assert report.items_count == 1
+    assert report.sources_used == 1
+
+
+def test_apply_sources_handles_null_sources_field():
+    # Когда LLM возвращает "sources": null, _apply_sources не должна падать
+    # с TypeError, а должна установить sources = []
+    store = InMemoryStore()
+    llm = ScriptedLLM([
+        '["запрос"]',  # plan_queries
+        valid_response({
+            "expected_item": "Требование",
+            "category_slug": "marking",
+            "rationale": "...",
+            "benchmark_countries": [],
+            "sources": None  # LLM случайно вернул null вместо массива
+        })
+    ])
+    kit = ResearchToolkit(
+        _Searcher({"запрос": [{"title": "T", "url": "https://lex.uz/1", "snippet": ""}]}),
+        _Fetcher({"https://lex.uz/1": _doc("https://lex.uz/1", "текст")})
+    )
+
+    # Должно не падать и успешно обработать null как пустой массив
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert report.items_count == 1
+    saved = store.load_map(report.map_id)
+    assert saved.payload[0]["sources"] == []
+
+
+def test_no_sources_when_gather_returns_empty():
+    # При toolkit, но gather() вернул 0 источников, поле sources не должно
+    # добавляться в айтемы вообще (промпт не упоминал sources блок)
+    store = InMemoryStore()
+    llm = ScriptedLLM([
+        '[]',  # plan_queries вернул пустой массив/error -> fallback запрос
+        valid_response(map_item())  # map-карта без sources в ответе
+    ])
+    kit = ResearchToolkit(
+        _Searcher({})  # нет результатов поиска
+        , _Fetcher({})
+    )
+
+    report = Cartographer(store, llm, toolkit=kit).build_map("0401", "UZ")
+
+    assert report.items_count == 1
+    assert report.sources_used == 0  # 0 собранных источников
+    saved = store.load_map(report.map_id)
+    # sources не должно быть в payload, потому что промпт не упоминал их
+    assert "sources" not in saved.payload[0]

@@ -28,6 +28,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from importer.build.legalx import CourtCase, NormFragment
+from importer.build.uzscript import normalize_for_match
 
 _FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -41,7 +42,10 @@ _JURISDICTION_FILES = {"UZ": "norms_uz.json", "KZ": "norms_kz.json"}
 
 
 def _words(text: str) -> set[str]:
-    return set(_WORD_RE.findall(text.lower()))
+    # normalize_for_match приводит текст к одному скрипту (латиница) —
+    # кириллический запрос находит латинский документ и наоборот (Задача 5,
+    # importer/build/uzscript.py).
+    return set(_WORD_RE.findall(normalize_for_match(text)))
 
 
 def _parse_date(value: str | None) -> date | None:

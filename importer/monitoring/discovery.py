@@ -143,12 +143,7 @@ def run_discovery(
         for map_record in store.list_approved_maps(event.jurisdiction):
             for raw_item in map_record.payload:
                 report.items_checked += 1
-                map_item = MapItem(
-                    expected_item=raw_item["expected_item"],
-                    category_slug=raw_item["category_slug"],
-                    rationale=raw_item.get("rationale", ""),
-                    benchmark_countries=raw_item.get("benchmark_countries", []),
-                )
+                map_item = MapItem.from_payload(raw_item)
 
                 if store.is_expected_item_already_covered(
                     map_record.id, map_item.expected_item

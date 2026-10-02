@@ -5,7 +5,9 @@
 инструмента резюмируется до MAX_RESUMES раз."""
 from types import SimpleNamespace
 
-from importer.build.websearch import _LiveWebSearcher
+import pytest
+
+from importer.build.websearch import WebSearchError, _LiveWebSearcher, get_web_searcher
 
 
 def _resp(text, stop_reason="end_turn"):
@@ -40,3 +42,41 @@ def test_pause_turn_resumed_once():
     fake = _FakeClient([_resp("", stop_reason="pause_turn"), _resp('[]')])
     assert _LiveWebSearcher(client=fake).search("query") == []
     assert len(fake.calls) == 2
+
+
+class _BoomClient:
+    """Клиент, падающий на вызове API (сетевой сбой / статус-ошибка SDK)."""
+
+    def __init__(self, exc: Exception) -> None:
+        self.messages = SimpleNamespace(create=self._create)
+        self._exc = exc
+
+    def _create(self, **kwargs):
+        raise self._exc
+
+
+def test_client_failure_becomes_web_search_error():
+    """Ошибка клиента Anthropic обязана прийти как `WebSearchError`: только
+    её (точнее, её родителя `AgentLLMError`) ловит `ResearchToolkit.gather`,
+    иначе один неудачный запрос роняет всю разведку."""
+    searcher = _LiveWebSearcher(client=_BoomClient(RuntimeError("соединение оборвалось")))
+    with pytest.raises(WebSearchError, match="соединение оборвалось"):
+        searcher.search("шаблон декларации")
+
+
+def test_allowlist_filters_live_results():
+    """Allowlist доменов обязан работать и на дефолтном бэкенде: без него
+    `docfetch` скачает любой URL, названный моделью."""
+    fake = _FakeClient([_resp(
+        '[{"title": "норма", "url": "https://lex.uz/1", "snippet": ""},'
+        ' {"title": "мусор", "url": "https://spam.example/2", "snippet": ""}]')])
+    results = _LiveWebSearcher(client=fake, allowed_domains=("lex.uz",)).search("запрос")
+    assert [r["url"] for r in results] == ["https://lex.uz/1"]
+
+
+def test_factory_passes_allowlist_to_live_backend(monkeypatch):
+    monkeypatch.setenv("WEBSEARCH_BACKEND", "live")
+    monkeypatch.setenv("WEBSEARCH_ALLOWED_DOMAINS", "lex.uz, gov.uz")
+    searcher = get_web_searcher()
+    assert isinstance(searcher, _LiveWebSearcher)
+    assert searcher.allowed_domains == ("lex.uz", "gov.uz")

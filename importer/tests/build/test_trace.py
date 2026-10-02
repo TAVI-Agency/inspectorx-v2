@@ -88,11 +88,20 @@ def test_tracer_record_passes_item_id_through():
     assert store.list_llm_calls(RUN_ID)[0]["item_id"] == "item-7"
 
 
-def test_tracer_record_unknown_model_raises():
+def test_tracer_record_unknown_model_cost_is_zero_not_raise():
+    """Модель без строки в `pricing` (например, `IMPORTER_TIER_*`-оверрайд
+    на eval, см. `agents.py: load_models_config`) — не ошибка: раньше это
+    рвало запись в `pipeline.llm_calls` посреди прогона `ValueError`,
+    теперь `cost_usd=0` и запись всё равно попадает в стор (см.
+    `cost_report`, который помечает такие модели в `unpriced_models`)."""
     store = InMemoryStore()
     tracer = Tracer(store, RUN_ID, models=TEST_MODELS)
-    with pytest.raises(ValueError):
-        tracer.record("retriever", "совершенно неизвестная модель", 10, 10)
+
+    tracer.record("retriever", "совершенно неизвестная модель", 10, 10)
+
+    call = store.list_llm_calls(RUN_ID)[0]
+    assert call["model"] == "совершенно неизвестная модель"
+    assert call["cost_usd"] == 0.0
 
 
 def test_tracer_only_writes_to_its_own_run():
@@ -331,6 +340,22 @@ def test_cost_report_only_includes_calls_of_requested_run():
     report = cost_report(store, "run-a")
 
     assert report.total_calls == 1
+
+
+def test_cost_report_flags_unpriced_models():
+    """`IMPORTER_TIER_*`-оверрайд может подставить модель без строки в
+    `pricing` — `cost_report` должен предупредить об этом в отчёте, а не
+    молча показать заниженную (нулевую) стоимость как точную."""
+    store = InMemoryStore()
+    tracer = Tracer(store, RUN_ID, models=TEST_MODELS)
+    tracer.record("retriever", "model-cheap", 1_000_000, 0)  # 1.0$, есть прайс
+    tracer.record("retriever", "gemini-3.1-flash-lite", 1_000_000, 0)  # прайса нет -> 0$
+
+    report = cost_report(store, RUN_ID, models=TEST_MODELS)
+
+    assert report.unpriced_models == ["gemini-3.1-flash-lite"]
+    assert report.total_cost_usd == pytest.approx(1.0)
+    assert "gemini-3.1-flash-lite" in report.markdown
 
 
 # ══════════════════════════════════════════════════════════════════════════

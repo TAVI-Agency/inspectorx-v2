@@ -15,6 +15,8 @@ source, profile)` — рассуждения producer-шага физическ�
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -24,6 +26,7 @@ import yaml
 from importer.build.legalx import LegalXClient, NormFragment
 from importer.build.llm_client import AgentLLMClient, AgentLLMError
 from importer.build.profiles import ModelTier, Profile
+from importer.build.uzscript import alt_script
 
 if TYPE_CHECKING:  # только тип — импорт по значению создал бы цикл agents<->trace
     from importer.build.trace import Tracer
@@ -35,19 +38,62 @@ _TIERS: tuple[ModelTier, ...] = ("cheap", "mid", "expensive")
 
 @dataclass(frozen=True)
 class ModelsConfig:
-    """Разобранный `models.yaml`: тиры -> имя модели, имя модели -> прайс."""
+    """Разобранный `models.yaml`: тиры -> имя модели, имя модели -> прайс,
+    модель -> имя провайдера (`providers`, Задача «ночь 11.09.2026»:
+    маршрутизация по провайдерам, `llm_live.py: RoutingRunner`). Модель без
+    записи в `providers` идёт через Anthropic SDK — обратная совместимость
+    с Волной 2."""
 
     tiers: dict[str, str]
     pricing: dict[str, dict[str, float]]
+    providers: dict[str, str] = field(default_factory=dict)
 
 
-def load_models_config(path: Path = _MODELS_PATH) -> ModelsConfig:
+_TIER_ENV = {
+    "cheap": "IMPORTER_TIER_CHEAP",
+    "mid": "IMPORTER_TIER_MID",
+    "expensive": "IMPORTER_TIER_EXPENSIVE",
+}
+
+
+def assert_distinct_tier_models(tiers: Mapping[str, str], *, source: str) -> None:
+    """Три тира обязаны указывать на РАЗНЫЕ модели.
+
+    Независимость Verifier'а (ADR-0003, решение 4) держится ровно на этом:
+    `verifier_model_for` выбирает модель по ДРУГОМУ тиру, и если два тира
+    схлопнуты в одну модель (`IMPORTER_TIER_MID=X IMPORTER_TIER_EXPENSIVE=X`
+    или `--set cheap=y,mid=y,expensive=y`), producer начинает молча
+    проверять сам себя. Падать лучше на конфигурации, чем на выдаче."""
+    by_model: dict[str, list[str]] = {}
+    for tier in _TIERS:
+        by_model.setdefault(tiers[tier], []).append(tier)
+    collided = [(model, ts) for model, ts in by_model.items() if len(ts) > 1]
+    if collided:
+        pairs = "; ".join(f"{'/'.join(ts)} -> {model!r}" for model, ts in collided)
+        raise ValueError(
+            f"{source}: тиры моделей обязаны быть различны, иначе Verifier проверяет "
+            f"сам себя (ADR-0003, решение 4); совпали: {pairs}"
+        )
+
+
+def load_models_config(path: Path = _MODELS_PATH, *, env: Mapping[str, str] | None = None) -> ModelsConfig:
+    """`env` — оверрайды тиров (по умолчанию `os.environ`):
+    `IMPORTER_TIER_CHEAP`/`_MID`/`_EXPENSIVE` подменяют модель тира на время
+    процесса — для eval разных моделей без правки `models.yaml`. Модель-
+    оверрайд без строки в `pricing` допустима: стоимость такого вызова в
+    cost-отчёте считается по нулевому прайсу (`trace.py: cost_report`)."""
+    env = os.environ if env is None else env
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    tiers = raw["tiers"]
+    tiers = dict(raw["tiers"])
     missing = [t for t in _TIERS if t not in tiers]
     if missing:
         raise ValueError(f"models.yaml: не хватает тиров {missing} (ожидались {_TIERS})")
-    return ModelsConfig(tiers=tiers, pricing=raw.get("pricing", {}))
+    for tier, var in _TIER_ENV.items():
+        if env.get(var):
+            tiers[tier] = env[var]
+    assert_distinct_tier_models(tiers, source=f"{path.name} + оверрайды IMPORTER_TIER_*")
+    return ModelsConfig(tiers=tiers, pricing=raw.get("pricing", {}),
+                        providers=dict(raw.get("providers") or {}))
 
 
 def verifier_model_for(producer_model: str, config: ModelsConfig | None = None) -> str:
@@ -68,7 +114,17 @@ def verifier_model_for(producer_model: str, config: ModelsConfig | None = None) 
             f"в одном тире models.yaml ({config.tiers})"
         )
     verifier_tier: ModelTier = "expensive" if producer_tier in ("cheap", "mid") else "mid"
-    return config.tiers[verifier_tier]
+    verifier_model = config.tiers[verifier_tier]
+    if verifier_model == producer_model:
+        # Сюда можно попасть только с `ModelsConfig`, собранным мимо
+        # `load_models_config`/`parse_tier_set` (оба уже проверяют тиры на
+        # различимость) — последняя страховка перед выдачей модели.
+        raise ValueError(
+            f"тир {verifier_tier!r} указывает на ту же модель {producer_model!r}, что и "
+            f"producer — Verifier проверял бы сам себя (ADR-0003, решение 4); "
+            f"тиры: {config.tiers}"
+        )
+    return verifier_model
 
 
 def _parse_json_answer(answer: str, *, who: str) -> dict:
@@ -149,6 +205,22 @@ class Retriever:
                 return RetrieverResult(
                     outcome="found", fragments=fragments, queries_tried=queries_tried
                 )
+
+            if attempt == 0:
+                # Один доп. поиск другим скриптом исходного запроса (Задача
+                # 5, uzscript.py) — до LLM-переформулировок и не тратя
+                # MAX_REFORMULATIONS: смешение латиницы/кириллицы ломает
+                # ~5% ссылок на законы (см. докстринг uzscript.py), а это
+                # дешевле одного лишнего вызова LLM.
+                alt = alt_script(current_query)
+                if alt is not None:
+                    queries_tried.append(alt)
+                    alt_fragments = self._legalx.search_norms(alt, jurisdiction)
+                    if alt_fragments:
+                        return RetrieverResult(
+                            outcome="found", fragments=alt_fragments, queries_tried=queries_tried
+                        )
+
             if attempt == self.MAX_REFORMULATIONS:
                 break  # попытки исчерпаны, переформулировать больше не пробуем
 
